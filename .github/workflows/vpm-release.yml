@@ -1,0 +1,53 @@
+# Release-only workflow for com.facemotion.editor (Phase I.3).
+# Builds the VPM-compatible package ZIP, computes the SHA-256 checksum, emits
+# release-info.json (VPM listing metadata), validates the staged package and generated
+# artifact, then attaches both to the GitHub Release for the pushed version tag.
+# Unity CI remains a required operational gate before tagging.
+
+name: VPM Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate package metadata and documentation
+        shell: pwsh
+        run: ./Tools/ci/Validate-Package.ps1
+
+      - name: Build release ZIP and checksum
+        shell: pwsh
+        run: |
+          & "${{ github.workspace }}/Tools/create-vpm-release.ps1" `
+            -PackagePath "${{ github.workspace }}/Packages/com.facemotion.editor" `
+            -OutputDir "${{ github.workspace }}/dist" `
+            -Version "${{ github.ref_name }}".TrimStart('v')
+
+      - name: Validate generated release artifact
+        shell: pwsh
+        run: ./Tools/ci/Validate-VpmArtifact.ps1
+
+      - name: Prepare release notes marker
+        shell: pwsh
+        run: |
+          $info = Get-Content "${{ github.workspace }}/dist/release-info.json" -Raw | ConvertFrom-Json
+          "Prepared $($info.archive) (SHA256 $($info.zipSHA256))."
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/com.facemotion.editor-*.zip
+            dist/release-info.json
+          generate_release_notes: true

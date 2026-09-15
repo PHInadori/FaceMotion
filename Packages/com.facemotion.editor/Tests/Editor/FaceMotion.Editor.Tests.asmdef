@@ -1,0 +1,29 @@
+{
+  "name": "FaceMotion.Editor.Tests",
+  "rootNamespace": "FaceMotion.Editor.Tests",
+  "references": [
+    "FaceMotion.Editor.Core",
+    "FaceMotion.Editor.Unity",
+    "FaceMotion.Editor.VRChat",
+    "FaceMotion.Editor.UI",
+    "VRC.SDK3A",
+    "VRC.SDKBase"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "VRCSDK3A.dll",
+    "VRCSDKBase.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://vpm.vrchat.cloud/schemas/VPMRepo.json",
+  "name": "PHInadori VPM",
+  "id": "com.phinadori.vpm",
+  "url": "https://phinadori.github.io/PHInadori-VPM/index.json",
+  "author": {
+    "name": "PHInadori",
+    "email": "phinadori@gmail.com"
+  },
+  "infoLink": {
+    "url": "https://github.com/PHInadori/FaceMotion",
+    "text": "FaceMotion"
+  },
+  "packages": {}
+}

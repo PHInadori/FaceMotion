@@ -1,0 +1,24 @@
+{
+  "name": "FaceMotion.Editor.VRChat",
+  "rootNamespace": "FaceMotion.Editor.VRChat",
+  "references": [
+    "FaceMotion.Editor.Core",
+    "FaceMotion.Editor.Unity",
+    "VRC.SDK3A",
+    "VRC.SDKBase"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "VRCSDK3A.dll",
+    "VRCSDKBase.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

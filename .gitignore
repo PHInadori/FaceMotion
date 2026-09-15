@@ -1,0 +1,30 @@
+# Unity generated and local state
+[Ll]ibrary/
+[Tt]emp/
+[Ll]ogs/
+[Oo]bj/
+[Uu]ser[Ss]ettings/
+[Tt]est[Rr]esults/
+.ci/
+ci-host/
+
+# IDE and build products
+.vs/
+.idea/
+*.csproj
+*.sln
+*.user
+*.suo
+*.opendb
+
+# Release output is generated from the package source
+dist/
+Tools/performance/*.json
+Tools/performance/*.log
+
+# Credentials and local environment files
+.env
+.env.*
+*.pem
+*.pfx
+*.key

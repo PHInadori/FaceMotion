@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package-validation:
+    name: Package validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate package metadata, schema guards, and local links
+        shell: pwsh
+        run: ./Tools/ci/Validate-Package.ps1
+
+  vpm-artifact-validation:
+    name: VPM artifact validation
+    needs: package-validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release ZIP
+        shell: pwsh
+        run: ./Tools/create-vpm-release.ps1
+      - name: Validate release ZIP and metadata
+        shell: pwsh
+        run: ./Tools/ci/Validate-VpmArtifact.ps1
+      - name: Upload validated release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpm-artifact
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
+
+  unity-editmode-tests:
+    name: Unity EditMode tests (MA installed)
+    needs: package-validation
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      VRC_TEST_PROTOCOL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create disposable MA Unity host project
+        shell: pwsh
+        run: ./Tools/ci/New-CiHostProject.ps1 -WithModularAvatar
+      - name: Run Unity 2022.3.22f1 EditMode tests
+        uses: game-ci/unity-test-runner@v4
+        with:
+          unityVersion: 2022.3.22f1
+          projectPath: ci-host/ma
+          cliVersion: v0.1.65
+          testMode: EditMode
+          coverageEnabled: false
+          artifactsPath: artifacts/editmode
+          githubToken: ""
+      - name: Summarize test results and enforce compiler policy
+        if: always()
+        shell: pwsh
+        run: ./Tools/ci/Summarize-UnityTests.ps1 -ArtifactDirectory artifacts/editmode
+      - name: Upload EditMode results and Unity log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-editmode-results
+          path: artifacts/editmode/
+          retention-days: 7
+          if-no-files-found: warn
+
+  no-ma-compile-smoke:
+    name: Unity no-MA compile smoke
+    needs: package-validation
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+      VRC_TEST_PROTOCOL: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create disposable no-MA Unity host project
+        shell: pwsh
+        run: ./Tools/ci/New-CiHostProject.ps1
+      - name: Run no-MA EditMode smoke tests
+        uses: game-ci/unity-test-runner@v4
+        with:
+          projectPath: ci-host/no-ma
+          unityVersion: 2022.3.22f1
+          cliVersion: v0.1.65
+          testMode: EditMode
+          coverageEnabled: false
+          artifactsPath: artifacts/no-ma
+          githubToken: ""
+      - name: Verify MA assemblies remain excluded and summarize results
+        if: always()
+        shell: pwsh
+        run: ./Tools/ci/Summarize-UnityTests.ps1 -ArtifactDirectory artifacts/no-ma -NoMa
+      - name: Upload no-MA results and Unity log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-no-ma-results
+          path: artifacts/no-ma/
+          retention-days: 7
+          if-no-files-found: warn

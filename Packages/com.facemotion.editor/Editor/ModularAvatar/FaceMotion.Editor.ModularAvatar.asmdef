@@ -1,0 +1,9 @@
+{
+  "name": "FaceMotion.Editor.ModularAvatar",
+  "rootNamespace": "FaceMotion.Editor.ModularAvatar",
+  "references": ["FaceMotion.Editor.Core", "FaceMotion.Editor.Unity", "FaceMotion.Editor.VRChat", "nadena.dev.modular-avatar.core", "VRC.SDK3A", "VRC.SDKBase"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": false,
+  "defineConstraints": ["FACEMOTION_MODULAR_AVATAR"],
+  "versionDefines": [{ "name": "nadena.dev.modular-avatar", "expression": "1.18.7", "define": "FACEMOTION_MODULAR_AVATAR"}]
+}

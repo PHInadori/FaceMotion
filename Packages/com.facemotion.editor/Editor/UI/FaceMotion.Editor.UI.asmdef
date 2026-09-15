@@ -1,0 +1,20 @@
+{
+  "name": "FaceMotion.Editor.UI",
+  "rootNamespace": "FaceMotion.Editor.UI",
+  "references": [
+    "FaceMotion.Editor.Core",
+    "FaceMotion.Editor.Unity",
+    "FaceMotion.Editor.VRChat"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
