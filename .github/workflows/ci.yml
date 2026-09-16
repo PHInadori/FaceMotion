@@ -65,13 +65,12 @@ jobs:
         with:
           unityVersion: 2022.3.22f1
           projectPath: ci-host/ma
-          cliVersion: v0.1.65
           testMode: EditMode
           coverageEnabled: false
           artifactsPath: artifacts/editmode
           githubToken: ""
       - name: Summarize test results and enforce compiler policy
-        if: always()
+        if: always() && hashFiles('artifacts/editmode/**') != ''
         shell: pwsh
         run: ./Tools/ci/Summarize-UnityTests.ps1 -ArtifactDirectory artifacts/editmode
       - name: Upload EditMode results and Unity log
@@ -104,13 +103,12 @@ jobs:
         with:
           projectPath: ci-host/no-ma
           unityVersion: 2022.3.22f1
-          cliVersion: v0.1.65
           testMode: EditMode
           coverageEnabled: false
           artifactsPath: artifacts/no-ma
           githubToken: ""
       - name: Verify MA assemblies remain excluded and summarize results
-        if: always()
+        if: always() && hashFiles('artifacts/no-ma/**') != ''
         shell: pwsh
         run: ./Tools/ci/Summarize-UnityTests.ps1 -ArtifactDirectory artifacts/no-ma -NoMa
       - name: Upload no-MA results and Unity log

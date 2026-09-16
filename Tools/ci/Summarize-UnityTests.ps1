@@ -8,6 +8,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ArtifactDirectory = [System.IO.Path]::GetFullPath($ArtifactDirectory)
+if (-not (Test-Path -LiteralPath $ArtifactDirectory -PathType Container)) {
+    throw "Unity test artifacts are unavailable at '$ArtifactDirectory'. The Unity test runner failed before producing results; inspect the preceding runner step."
+}
 $result = $null
 $xml = $null
 if ($ResultsPath) {
