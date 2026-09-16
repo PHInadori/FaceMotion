@@ -11,6 +11,7 @@ FaceMotion の基本文書は日本語中心です。UI の technical identifier
 - [Export](Export.md) - AnimationClip export の制約と overwrite
 - [VRChat Integration](VRChat-Integration.md) - Direct Integration と安全性
 - [Modular Avatar](Modular-Avatar.md) - 任意 MA backend の workflow
+- [Diagnostics](Diagnostics.md) - 診断コード、action level、選択ボタンの安全規則
 - [Troubleshooting](Troubleshooting.md) - よくある問題と diagnostic category
 - [Compatibility](Compatibility.md) - 保存データと互換性の利用者向け contract
 

@@ -38,7 +38,11 @@ namespace FaceMotion.Editor.UI.Localization
             { "diagnostics", "診断" }, { "noIssues", "問題はありません。" }, { "refresh", "更新" }, { "fix", "修正方法" },
             { "xLocal", "X (ローカル)" }, { "yLocal", "Y (ローカル)" }, { "zLocal", "Z (ローカル)" },
             { "hold", "保持" }, { "linear", "線形" }, { "easeIn", "イーズイン" }, { "easeOut", "イーズアウト" }, { "easeInOut", "イーズイン/アウト" }, { "smooth", "スムーズ" },
-            { "diagnosticFallback", "詳細: {0}" }, { "diagnosticUnknown", "詳細は診断コードを参照してください。" }, { "diagnosticFixUnknown", "診断コードを確認し、入力または設定を見直してください。" }
+            { "diagnosticFallback", "詳細: {0}" }, { "diagnosticUnknown", "詳細は診断コードを参照してください。" }, { "diagnosticFixUnknown", "診断コードを確認し、入力または設定を見直してください。" },
+            { "actionRequired", "解決が必要" }, { "actionRecommended", "推奨" }, { "actionInfo", "情報" },
+            { "severityError", "エラー" }, { "severityWarning", "警告" }, { "severityInfo", "情報" },
+            { "select", "選択" }, { "copyCode", "コードをコピー" }, { "copied", "コピーしました" },
+            { "cause", "原因" }, { "impact", "影響" }, { "resolution", "対処方法" }, { "caution", "注意" }, { "context", "対象" }, { "category", "分類" }, { "details", "詳細" }, { "severity", "重大度" }, { "actionLevel", "対応レベル" }, { "technicalDetails", "技術詳細" }, { "rawDiagnosticMessage", "生成元メッセージ" }, { "contextId", "ContextId" }, { "diagnosticCode", "診断コード" }
             , { "project", "プロジェクト" }, { "openProjectDialog", "FaceMotion プロジェクトを開く" }, { "newProject", "新規プロジェクト" }, { "asset", "アセット" }, { "animations", "アニメーション" }, { "noProject", "（プロジェクトなし）" },
             { "selectAvatar", "アバターを選択" }, { "active", "使用中" }, { "unnamed", "（名前なし）" }, { "bindings", "バインディング" }, { "selectDescriptor", "VRC AvatarDescriptor を選択してください。" }, { "avatarIndexChanged", "アバターインデックスが変更されました。再構築を推奨します。" }, { "noDescriptor", "現在のシーンに VRCAvatarDescriptor が見つかりません。" }, { "clear", "クリア" }, { "ok", "OK" },
             { "duplicate", "複製" }, { "deleteAnimation", "アニメーションを削除" }, { "deleteAnimationConfirm", "\"{0}\" を削除しますか？" }, { "newAnimation", "+ 新規アニメーション" }, { "selected", "選択中" }, { "none", "（なし）" }, { "rename", "名前を変更" }, { "cancel", "キャンセル" }, { "timelineSettings", "タイムライン設定" }, { "duration", "長さ" }, { "frameRate", "フレームレート" }, { "loop", "ループ" },
@@ -71,6 +75,10 @@ namespace FaceMotion.Editor.UI.Localization
             { "xLocal", "X (local)" }, { "yLocal", "Y (local)" }, { "zLocal", "Z (local)" },
             { "hold", "Hold" }, { "linear", "Linear" }, { "easeIn", "Ease In" }, { "easeOut", "Ease Out" }, { "easeInOut", "Ease In-Out" }, { "smooth", "Smooth" },
             { "diagnosticFallback", "Details: {0}" }, { "diagnosticUnknown", "See the diagnostic code for details." }, { "diagnosticFixUnknown", "Review the diagnostic code, input, and configuration." }
+            , { "actionRequired", "Required" }, { "actionRecommended", "Recommended" }, { "actionInfo", "Info" },
+            { "severityError", "Error" }, { "severityWarning", "Warning" }, { "severityInfo", "Info" },
+            { "select", "Select" }, { "copyCode", "Copy code" }, { "copied", "Copied" },
+            { "cause", "Cause" }, { "impact", "Impact" }, { "resolution", "Resolution" }, { "caution", "Caution" }, { "context", "Target" }, { "category", "Category" }, { "details", "Details" }, { "severity", "Severity" }, { "actionLevel", "Action" }, { "technicalDetails", "Technical details" }, { "rawDiagnosticMessage", "Raw diagnostic message" }, { "contextId", "ContextId" }, { "diagnosticCode", "Code" }
             , { "project", "Project" }, { "openProjectDialog", "Open FaceMotion Project" }, { "newProject", "New Project" }, { "asset", "Asset" }, { "animations", "Animations" }, { "noProject", "(no project)" },
             { "selectAvatar", "Select Avatar" }, { "active", "Active" }, { "unnamed", "(unnamed)" }, { "bindings", "Bindings" }, { "selectDescriptor", "Select a VRC AvatarDescriptor." }, { "avatarIndexChanged", "Avatar index changed; rebuild recommended." }, { "noDescriptor", "No VRCAvatarDescriptor found in the current scene." }, { "clear", "Clear" }, { "ok", "OK" },
             { "duplicate", "Dup" }, { "deleteAnimation", "Delete Animation" }, { "deleteAnimationConfirm", "Delete \"{0}\"?" }, { "newAnimation", "+ New Animation" }, { "selected", "Selected" }, { "none", "(none)" }, { "rename", "Rename" }, { "cancel", "Cancel" }, { "timelineSettings", "Timeline Settings" }, { "duration", "Duration" }, { "frameRate", "Frame Rate" }, { "loop", "Loop" },

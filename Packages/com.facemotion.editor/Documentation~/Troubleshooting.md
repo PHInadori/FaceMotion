@@ -25,6 +25,8 @@
 
 ## Diagnostic categories
 
+診断コードの意味、action level の決まり方、選択ボタンの安全性は [Diagnostics](Diagnostics.md) を参照してください。
+
 - `FM-G-*`: Direct Integration の plan/apply safety（例: `FM-G-WRITE-DEFAULTS`）
 - `FM-H-MA-*`: Modular Avatar backend の optional dependency または integration safety
 - `FM-MIG-*`: 保存データ schema / migration。future schema は安全のため block されます。

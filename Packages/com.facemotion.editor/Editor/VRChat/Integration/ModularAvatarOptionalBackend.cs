@@ -44,19 +44,19 @@ namespace FaceMotion.Editor.VRChat.Integration
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (!availability.PackageMetadataAvailable)
             {
-                diagnostics.Add(Error("FM-H-MA-METADATA-UNAVAILABLE", "Unity package metadata could not be read.", "Refresh the Package Manager metadata and try again."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarMetadataUnavailable, "Unity package metadata could not be read.", "Refresh the Package Manager metadata and try again."));
             }
             else if (!availability.PackageInstalled)
             {
-                diagnostics.Add(Error("FM-H-MA-NOT-INSTALLED", "Modular Avatar is not installed.", "Install Modular Avatar through the VRChat package workflow, then reopen this window."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarNotInstalled, "Modular Avatar is not installed.", "Install Modular Avatar through the VRChat package workflow, then reopen this window."));
             }
             else if (!availability.HasPackageVersion)
             {
-                diagnostics.Add(Error("FM-H-MA-VERSION-UNAVAILABLE", "Modular Avatar was found, but Unity did not report its package version.", "Refresh the Package Manager metadata and try again."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarVersionUnavailable, "Modular Avatar was found, but Unity did not report its package version.", "Refresh the Package Manager metadata and try again."));
             }
             else
             {
-                diagnostics.Add(Error("FM-H-MA-NOT-IMPLEMENTED", "Modular Avatar " + availability.PackageVersion + " was detected, but this optional backend has no implementation.", "Use Direct integration. No Modular Avatar components or assets were created."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarNotImplemented, "Modular Avatar " + availability.PackageVersion + " was detected, but this optional backend has no implementation.", "Use Direct integration. No Modular Avatar components or assets were created."));
             }
             return new OptionalIntegrationPlan(Id, availability, diagnostics);
         }

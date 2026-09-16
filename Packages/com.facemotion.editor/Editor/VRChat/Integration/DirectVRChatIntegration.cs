@@ -61,25 +61,25 @@ namespace FaceMotion.Editor.VRChat.Integration
         public static DirectIntegrationPlan Plan(DirectIntegrationRequest request)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
-            if (request == null || request.Avatar == null) diagnostics.Add(Error("FM-G-AVATAR", "Select a VRCAvatarDescriptor.", "Select the avatar root."));
-            if (request != null && request.Avatar != null && EditorUtility.IsPersistent(request.Avatar)) diagnostics.Add(Error("FM-G-PREFAB-ASSET", "Direct integration cannot modify a prefab asset.", "Instantiate the avatar in a scene before integrating."));
-            if (request == null || request.Clip == null) diagnostics.Add(Error("FM-G-CLIP", "Export or select an AnimationClip before integrating.", "Provide a .anim clip."));
-            if (request == null || !IsAssetFolder(request.OutputFolder)) diagnostics.Add(Error("FM-G-PATH", "Output folder must be an existing folder under Assets.", "Choose an existing Assets folder."));
+            if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationAvatar, "Select a VRCAvatarDescriptor.", "Select the avatar root."));
+            if (request != null && request.Avatar != null && EditorUtility.IsPersistent(request.Avatar)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationPrefabAsset, "Direct integration cannot modify a prefab asset.", "Instantiate the avatar in a scene before integrating."));
+            if (request == null || request.Clip == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationClip, "Export or select an AnimationClip before integrating.", "Provide a .anim clip."));
+            if (request == null || !IsAssetFolder(request.OutputFolder)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationPath, "Output folder must be an existing folder under Assets.", "Choose an existing Assets folder."));
             string stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
             string parameter = "FaceMotion_" + stem;
-            if (parameter.Length > 256) diagnostics.Add(Error("FM-G-PARAMETER-NAME", "The generated parameter name exceeds VRChat's 256 character limit.", "Use a shorter animation name."));
+            if (parameter.Length > 256) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationParameterName, "The generated parameter name exceeds VRChat's 256 character limit.", "Use a shorter animation name."));
             if (request != null && request.Avatar != null)
             {
                 // A managed reapply must not treat its generated copies as user conflicts.
                 if (FindManifest(request.Avatar) == null) ValidateExisting(request.Avatar, request.Clip, parameter, diagnostics);
             }
-            if (request != null && IsAssetFolder(request.OutputFolder) && OutputFolderIsUnmanaged(request)) diagnostics.Add(Error("FM-G-OUTPUT-CONFLICT", "The generated output folder already exists and is not owned by this avatar's integration.", "Choose a different animation name or output folder."));
+            if (request != null && IsAssetFolder(request.OutputFolder) && OutputFolderIsUnmanaged(request)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationOutputConflict, "The generated output folder already exists and is not owned by this avatar's integration.", "Choose a different animation name or output folder."));
             return new DirectIntegrationPlan(request, parameter, "FaceMotion " + stem, stem, diagnostics);
         }
 
         public static DirectIntegrationResult Apply(DirectIntegrationPlan plan)
         {
-            if (plan == null) return new DirectIntegrationResult(false, null, new[] { Error("FM-G-PLAN", "No integration plan was supplied.", "Plan the integration again.") });
+            if (plan == null) return new DirectIntegrationResult(false, null, new[] { Error(FaceMotionDiagnosticCodes.GenerationPlan, "No integration plan was supplied.", "Plan the integration again.") });
             if (!plan.IsValid) return new DirectIntegrationResult(false, null, plan.Diagnostics);
             var request = plan.Request;
             var diagnostics = new List<FaceMotionDiagnostic>(plan.Diagnostics);
@@ -138,7 +138,7 @@ namespace FaceMotion.Editor.VRChat.Integration
                 SessionManifests[request.Avatar] = manifest;
                 EditorUtility.SetDirty(request.Avatar); EditorUtility.SetDirty(manifest); AssetDatabase.SaveAssets();
                 Undo.CollapseUndoOperations(undoGroup);
-                diagnostics.Add(Info("FM-G-APPLIED", "Direct VRChat integration applied using copy-on-write assets."));
+                diagnostics.Add(Info(FaceMotionDiagnosticCodes.GenerationApplied, "Direct VRChat integration applied using copy-on-write assets."));
                 return new DirectIntegrationResult(true, manifest, diagnostics);
             }
             catch (Exception exception)
@@ -148,7 +148,7 @@ namespace FaceMotion.Editor.VRChat.Integration
                 for (int i = owned.Count - 1; i >= 0; i--) AssetDatabase.DeleteAsset(owned[i]);
                 GeneratedAssetOwnership.TryDeleteEmptyOwnedFolder(root, owned);
                 AssetDatabase.SaveAssets();
-                diagnostics.Add(Error("FM-G-APPLY", exception.Message, "No user-owned asset was edited; inspect the output folder and retry."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationApply, exception.Message, "No user-owned asset was edited; inspect the output folder and retry."));
                 return new DirectIntegrationResult(false, null, diagnostics);
             }
         }
@@ -157,7 +157,7 @@ namespace FaceMotion.Editor.VRChat.Integration
         {
             var items = new List<FaceMotionDiagnostic>();
             var avatar = DirectIntegrationManifestMigration.ResolveAvatar(manifest);
-            if (manifest == null || avatar == null) { items.Add(Error("FM-G-ROLLBACK", "The integration manifest or its avatar is missing.", "Restore the avatar references manually.")); diagnostics = items; return false; }
+            if (manifest == null || avatar == null) { items.Add(Error(FaceMotionDiagnosticCodes.GenerationRollback, "The integration manifest or its avatar is missing.", "Restore the avatar references manually.")); diagnostics = items; return false; }
             var migration = DirectIntegrationManifestMigration.TryMigrateOnUse(manifest, items);
             if (migration.Blocked) { diagnostics = items; return false; }
             Undo.RegisterCompleteObjectUndo(avatar, "Rollback FaceMotion VRChat integration");
@@ -171,7 +171,7 @@ namespace FaceMotion.Editor.VRChat.Integration
                 if (path == manifestPath) continue;
                 if (!GeneratedAssetOwnership.IsSafeOwnedAssetPath(path, root) || !GeneratedAssetOwnership.IsCanonicalGeneratedFileName(Path.GetFileName(path)))
                 {
-                    items.Add(Error("FM-G-OWNERSHIP", "Skipped an owned path that is outside the manifest folder or not a FaceMotion-generated asset.", "Inspect the manifest before deleting assets."));
+                    items.Add(Error(FaceMotionDiagnosticCodes.GenerationOwnership, "Skipped an owned path that is outside the manifest folder or not a FaceMotion-generated asset.", "Inspect the manifest before deleting assets."));
                     continue;
                 }
                 AssetDatabase.DeleteAsset(path);
@@ -190,24 +190,24 @@ namespace FaceMotion.Editor.VRChat.Integration
             }
             AssetDatabase.SaveAssets();
             SessionManifests.Remove(avatar);
-            items.Add(Info("FM-G-ROLLED-BACK", "FaceMotion-owned integration assets were removed and original references restored.")); diagnostics = items; return true;
+            items.Add(Info(FaceMotionDiagnosticCodes.GenerationRolledBack, "FaceMotion-owned integration assets were removed and original references restored.")); diagnostics = items; return true;
         }
 
         private static void ValidateExisting(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, List<FaceMotionDiagnostic> diagnostics)
         {
             var parameters = avatar.expressionParameters;
-            if (parameters != null && parameters.FindParameter(parameter) != null) diagnostics.Add(Error("FM-G-PARAMETER-CONFLICT", "A parameter with the generated name already exists.", "Rename the animation before planning."));
-            if (parameters != null && parameters.CalcTotalCost() + 1 > VRCExpressionParameters.MAX_PARAMETER_COST) diagnostics.Add(Error("FM-G-BUDGET", "Adding the Bool parameter exceeds VRChat's expression parameter budget.", "Free at least one expression parameter bit."));
-            if (avatar.expressionsMenu != null && avatar.expressionsMenu.controls != null && avatar.expressionsMenu.controls.Count >= MenuCapacity) diagnostics.Add(Error("FM-G-MENU-CAPACITY", "The expression menu has no free control slot.", "Free a root menu slot."));
+            if (parameters != null && parameters.FindParameter(parameter) != null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationParameterConflict, "A parameter with the generated name already exists.", "Rename the animation before planning."));
+            if (parameters != null && parameters.CalcTotalCost() + 1 > VRCExpressionParameters.MAX_PARAMETER_COST) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationBudget, "Adding the Bool parameter exceeds VRChat's expression parameter budget.", "Free at least one expression parameter bit."));
+            if (avatar.expressionsMenu != null && avatar.expressionsMenu.controls != null && avatar.expressionsMenu.controls.Count >= MenuCapacity) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationMenuCapacity, "The expression menu has no free control slot.", "Free a root menu slot."));
             var fx = GetFx(avatar) as AnimatorController;
-            if (fx == null) { diagnostics.Add(Error("FM-G-FX", "The avatar needs a custom FX AnimatorController.", "Assign an FX controller in the avatar descriptor.")); return; }
-            foreach (var p in fx.parameters) if (p.name == parameter) diagnostics.Add(Error("FM-G-ANIMATOR-PARAMETER-CONFLICT", "The FX controller already defines the generated parameter.", "Rename the animation before planning."));
+            if (fx == null) { diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationFx, "The avatar needs a custom FX AnimatorController.", "Assign an FX controller in the avatar descriptor.")); return; }
+            foreach (var p in fx.parameters) if (p.name == parameter) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationAnimatorParameterConflict, "The FX controller already defines the generated parameter.", "Rename the animation before planning."));
             foreach (var layer in fx.layers)
             {
-                if (layer.name.StartsWith("FaceMotion ", StringComparison.Ordinal)) diagnostics.Add(Error("FM-G-LAYER-CONFLICT", "The FX controller already has a FaceMotion layer.", "Rollback the prior integration or use a different name."));
-                if (layer.stateMachine != null) foreach (var state in layer.stateMachine.states) if (state.state != null && state.state.writeDefaultValues) diagnostics.Add(Error("FM-G-WRITE-DEFAULTS", "Direct integration requires Write Defaults disabled on every FX state.", "Disable Write Defaults or use a compatible FX controller."));
+                if (layer.name.StartsWith("FaceMotion ", StringComparison.Ordinal)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationLayerConflict, "The FX controller already has a FaceMotion layer.", "Rollback the prior integration or use a different name."));
+                if (layer.stateMachine != null) foreach (var state in layer.stateMachine.states) if (state.state != null && state.state.writeDefaultValues) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationWriteDefaults, "Direct integration requires Write Defaults disabled on every FX state.", "Disable Write Defaults or use a compatible FX controller."));
             }
-            foreach (var existing in fx.animationClips) if (existing != null && SharesBinding(existing, clip)) diagnostics.Add(Error("FM-G-BINDING-CONFLICT", "The exported clip animates a binding already used by the FX controller.", "Remove the competing animation binding or use a different target."));
+            foreach (var existing in fx.animationClips) if (existing != null && SharesBinding(existing, clip)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationBindingConflict, "The exported clip animates a binding already used by the FX controller.", "Remove the competing animation binding or use a different target."));
         }
 
         private static AnimatorController CloneFx(VRCAvatarDescriptor avatar, string path, List<string> owned) { if (!AssetDatabase.CopyAsset(AssetDatabase.GetAssetPath(GetFx(avatar)), path)) throw new InvalidOperationException("Could not copy the FX controller."); owned.Add(path); return AssetDatabase.LoadAssetAtPath<AnimatorController>(path); }

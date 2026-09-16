@@ -88,7 +88,7 @@ namespace FaceMotion.Editor.UI.Controllers
         public static FaceMotionDiagnostic Info(string message)
         {
             return new FaceMotionDiagnostic(
-                "FM-UI-INFO",
+                FaceMotionDiagnosticCodes.UiInfo,
                 FaceMotionDiagnosticSeverity.Info,
                 message,
                 string.Empty,

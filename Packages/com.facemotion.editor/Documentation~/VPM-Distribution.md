@@ -2,7 +2,7 @@
 
 This document describes how FaceMotion is distributed as a VPM package: the package
 repository, the separate listing repository, the release artifact format, checksums,
-and how VCC / ALCOM add the repository. FaceMotion `0.1.0` is published through
+and how VCC / ALCOM add the repository. FaceMotion `0.1.1` is published through
 the public listing described below.
 
 Companion docs: [Compatibility.md](Compatibility.md) (persisted-data contract),
@@ -31,7 +31,7 @@ a separate repository (below), so the two roles never mix:
   `THIRD-PARTY-NOTICES.md`, and the corresponding `.meta` files. `package.json` must not be
   nested under `Packages/com.facemotion.editor/` inside the ZIP.
 - Naming is consistent: `com.facemotion.editor-<version>.zip` (for example
-  `com.facemotion.editor-0.1.0.zip`).
+  `com.facemotion.editor-0.1.1.zip`).
 - SHA-256: computed over the generated ZIP and emitted into the release metadata
   (`release-info.json`). The checksum is stored in the **listing**, never in `package.json`.
 
@@ -59,7 +59,7 @@ dispatch:
    `release-info.json` (including `zipSHA256`).
 3. Uploads both to the GitHub Release created for the tag.
 
-The workflow uploaded the `v0.1.0` release artifact and metadata for the published release.
+The workflow uploaded the `v0.1.1` release artifact and metadata for the published release.
 
 Source validation is separate in `.github/workflows/ci.yml`; see [CI.md](CI.md). The release
 workflow currently does not itself require a completed CI run before a tag release.
@@ -87,11 +87,11 @@ An `index.json` repo listing looks like:
   "packages": {
     "com.facemotion.editor": {
       "versions": {
-        "0.1.0": {
+        "0.1.1": {
           "name": "com.facemotion.editor",
-          "url": "https://github.com/PHInadori/FaceMotion/releases/download/v0.1.0/com.facemotion.editor-0.1.0.zip",
+          "url": "https://github.com/PHInadori/FaceMotion/releases/download/v0.1.1/com.facemotion.editor-0.1.1.zip",
           "zipSHA256": "<sha256 of the zip>",
-          "version": "0.1.0",
+          "version": "0.1.1",
           "displayName": "FaceMotion",
           "description": "Unity Editor tooling for authoring animated facial motion for VRChat avatars...",
           "unity": "2022.3",

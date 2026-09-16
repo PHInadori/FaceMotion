@@ -99,5 +99,69 @@ namespace FaceMotion.Diagnostics
 
         public const string ForeignContentInFolder = "FM-OWNERSHIP-FOREIGN-CONTENT";
         public const string TamperedOwnedPaths = "FM-OWNERSHIP-TAMPERED";
+
+        // FM-EXPORT (AnimationClip exporter). Inline literals centralized here; the string
+        // values are unchanged.
+        public const string ExportCreateParentFailed = "FM-EXPORT-CREATE-PARENT-FAILED";
+        public const string ExportPathOccupied = "FM-EXPORT-PATH-OCCUPIED";
+        public const string ExportSucceeded = "FM-EXPORT-SUCCEEDED";
+        public const string ExportWriteFailed = "FM-EXPORT-WRITE-FAILED";
+        public const string ExportNoTimeline = "FM-EXPORT-NO-TIMELINE";
+        public const string ExportInvalidDuration = "FM-EXPORT-INVALID-DURATION";
+        public const string ExportInvalidFrameRate = "FM-EXPORT-INVALID-FRAMERATE";
+        public const string ExportInvalidPath = "FM-EXPORT-INVALID-PATH";
+        public const string ExportNullTrack = "FM-EXPORT-NULL-TRACK";
+        public const string ExportInvalidBlendShape = "FM-EXPORT-INVALID-BLENDSHAPE";
+        public const string ExportInvalidTransform = "FM-EXPORT-INVALID-TRANSFORM";
+        public const string ExportUnsupportedRotation = "FM-EXPORT-UNSUPPORTED-ROTATION";
+        public const string ExportInvalidKey = "FM-EXPORT-INVALID-KEY";
+
+        // FM-G (Direct VRChat integration / generation step). Inline literals centralized.
+        public const string GenerationAvatar = "FM-G-AVATAR";
+        public const string GenerationPrefabAsset = "FM-G-PREFAB-ASSET";
+        public const string GenerationClip = "FM-G-CLIP";
+        public const string GenerationPath = "FM-G-PATH";
+        public const string GenerationParameterName = "FM-G-PARAMETER-NAME";
+        public const string GenerationOutputConflict = "FM-G-OUTPUT-CONFLICT";
+        public const string GenerationPlan = "FM-G-PLAN";
+        public const string GenerationApplied = "FM-G-APPLIED";
+        public const string GenerationApply = "FM-G-APPLY";
+        public const string GenerationRollback = "FM-G-ROLLBACK";
+        public const string GenerationOwnership = "FM-G-OWNERSHIP";
+        public const string GenerationRolledBack = "FM-G-ROLLED-BACK";
+        public const string GenerationParameterConflict = "FM-G-PARAMETER-CONFLICT";
+        public const string GenerationBudget = "FM-G-BUDGET";
+        public const string GenerationMenuCapacity = "FM-G-MENU-CAPACITY";
+        public const string GenerationFx = "FM-G-FX";
+        public const string GenerationAnimatorParameterConflict = "FM-G-ANIMATOR-PARAMETER-CONFLICT";
+        public const string GenerationLayerConflict = "FM-G-LAYER-CONFLICT";
+        public const string GenerationWriteDefaults = "FM-G-WRITE-DEFAULTS";
+        public const string GenerationBindingConflict = "FM-G-BINDING-CONFLICT";
+        public const string GenerationManifest = "FM-G-MANIFEST";
+
+        // FM-H-MA (optional Modular Avatar backend). Inline literals centralized.
+        public const string ModularAvatarMetadataUnavailable = "FM-H-MA-METADATA-UNAVAILABLE";
+        public const string ModularAvatarNotInstalled = "FM-H-MA-NOT-INSTALLED";
+        public const string ModularAvatarVersionUnavailable = "FM-H-MA-VERSION-UNAVAILABLE";
+        public const string ModularAvatarNotImplemented = "FM-H-MA-NOT-IMPLEMENTED";
+        public const string ModularAvatarManifest = "FM-H-MA-MANIFEST";
+        public const string ModularAvatarAvatar = "FM-H-MA-AVATAR";
+        public const string ModularAvatarPrefabAsset = "FM-H-MA-PREFAB-ASSET";
+        public const string ModularAvatarClip = "FM-H-MA-CLIP";
+        public const string ModularAvatarPath = "FM-H-MA-PATH";
+        public const string ModularAvatarParameterName = "FM-H-MA-PARAMETER-NAME";
+        public const string ModularAvatarManifestConflict = "FM-H-MA-MANIFEST-CONFLICT";
+        public const string ModularAvatarPlan = "FM-H-MA-PLAN";
+        public const string ModularAvatarDetached = "FM-H-MA-DETACHED";
+        public const string ModularAvatarApplied = "FM-H-MA-APPLIED";
+        public const string ModularAvatarApply = "FM-H-MA-APPLY";
+        public const string ModularAvatarOwnership = "FM-H-MA-OWNERSHIP";
+        public const string ModularAvatarRemoved = "FM-H-MA-REMOVED";
+        public const string ModularAvatarParameterConflict = "FM-H-MA-PARAMETER-CONFLICT";
+        public const string ModularAvatarBindingConflict = "FM-H-MA-BINDING-CONFLICT";
+        public const string ModularAvatarCrossBindingConflict = "FM-H-MA-CROSS-BINDING-CONFLICT";
+
+        // FM-UI-INFO (controller status). Inline literal centralized.
+        public const string UiInfo = "FM-UI-INFO";
     }
 }

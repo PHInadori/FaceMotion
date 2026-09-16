@@ -14,7 +14,7 @@ FaceMotion の必須 VPM dependency は `com.vrchat.avatars` `3.10.5` だけで�
 
 ## VCC / ALCOM
 
-VCC / ALCOM に `https://phinadori.github.io/PHInadori-VPM/index.json` を custom VPM repository として追加し、`FaceMotion` `0.1.0` を導入します。listing identity は `PHInadori-VPM` / `com.phinadori.vpm` です。
+VCC / ALCOM に `https://phinadori.github.io/PHInadori-VPM/index.json` を custom VPM repository として追加し、`FaceMotion` `0.1.1` を導入します。listing identity は `PHInadori-VPM` / `com.phinadori.vpm` です。
 
 ## Manual package install
 

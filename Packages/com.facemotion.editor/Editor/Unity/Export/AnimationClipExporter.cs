@@ -27,7 +27,7 @@ namespace FaceMotion.Editor.Export
             var createdFolders = new List<string>();
             if (!EnsureParentFolders(assetPath, createdFolders, out string parentFailure))
             {
-                diagnostics.Add(Error("FM-EXPORT-CREATE-PARENT-FAILED", parentFailure, assetPath, "Choose a writable path under Assets."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportCreateParentFailed, parentFailure, assetPath, "Choose a writable path under Assets."));
                 return new AnimationClipExportResult(null, false, diagnostics);
             }
 
@@ -35,7 +35,7 @@ namespace FaceMotion.Editor.Export
             UnityEngine.Object mainAsset = AssetDatabase.LoadMainAssetAtPath(assetPath);
             if (mainAsset != null && existing == null)
             {
-                diagnostics.Add(Error("FM-EXPORT-PATH-OCCUPIED", "The destination is occupied by a non-AnimationClip asset.", assetPath, "Choose an empty .anim path or an existing AnimationClip."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportPathOccupied, "The destination is occupied by a non-AnimationClip asset.", assetPath, "Choose an empty .anim path or an existing AnimationClip."));
                 return new AnimationClipExportResult(null, false, diagnostics);
             }
 
@@ -59,7 +59,7 @@ namespace FaceMotion.Editor.Export
 
                 EditorUtility.SetDirty(existing);
                 AssetDatabase.SaveAssets();
-                diagnostics.Add(new FaceMotionDiagnostic("FM-EXPORT-SUCCEEDED", FaceMotionDiagnosticSeverity.Info, "AnimationClip exported successfully.", assetPath, false, string.Empty));
+                diagnostics.Add(new FaceMotionDiagnostic(FaceMotionDiagnosticCodes.ExportSucceeded, FaceMotionDiagnosticSeverity.Info, "AnimationClip exported successfully.", assetPath, false, string.Empty));
                 return new AnimationClipExportResult(existing, true, diagnostics);
             }
             catch (Exception exception)
@@ -75,7 +75,7 @@ namespace FaceMotion.Editor.Export
                     CleanupCreatedFolders(createdFolders);
                 }
 
-                diagnostics.Add(Error("FM-EXPORT-WRITE-FAILED", exception.Message, assetPath, "Check that the destination is writable and try again."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportWriteFailed, exception.Message, assetPath, "Check that the destination is writable and try again."));
                 return new AnimationClipExportResult(null, false, diagnostics);
             }
         }
@@ -91,23 +91,23 @@ namespace FaceMotion.Editor.Export
         {
             if (animation == null || animation.Timeline == null)
             {
-                diagnostics.Add(Error("FM-EXPORT-NO-TIMELINE", "Select an animation with a timeline before exporting.", string.Empty, "Select a valid FaceMotion animation."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportNoTimeline, "Select an animation with a timeline before exporting.", string.Empty, "Select a valid FaceMotion animation."));
                 return;
             }
 
             if (!IsFinite(animation.Timeline.Duration) || animation.Timeline.Duration <= 0f)
             {
-                diagnostics.Add(Error("FM-EXPORT-INVALID-DURATION", "Timeline duration must be finite and greater than zero.", animation.AnimationId, "Set a positive duration."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidDuration, "Timeline duration must be finite and greater than zero.", animation.AnimationId, "Set a positive duration."));
             }
 
             if (!IsFinite(animation.Timeline.FrameRate) || animation.Timeline.FrameRate <= 0f)
             {
-                diagnostics.Add(Error("FM-EXPORT-INVALID-FRAMERATE", "Timeline frame rate must be finite and greater than zero.", animation.AnimationId, "Set a positive frame rate."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidFrameRate, "Timeline frame rate must be finite and greater than zero.", animation.AnimationId, "Set a positive frame rate."));
             }
 
             if (!IsAssetsAnimationPath(assetPath))
             {
-                diagnostics.Add(Error("FM-EXPORT-INVALID-PATH", "Export destination must be a .anim asset under Assets.", assetPath, "Choose a path under Assets with the .anim extension."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidPath, "Export destination must be a .anim asset under Assets.", assetPath, "Choose a path under Assets with the .anim extension."));
             }
 
             foreach (var track in animation.Timeline.Tracks)
@@ -120,7 +120,7 @@ namespace FaceMotion.Editor.Export
         {
             if (track == null)
             {
-                diagnostics.Add(Error("FM-EXPORT-NULL-TRACK", "Timeline contains a null track.", string.Empty, "Remove the null track."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportNullTrack, "Timeline contains a null track.", string.Empty, "Remove the null track."));
                 return;
             }
 
@@ -133,7 +133,7 @@ namespace FaceMotion.Editor.Export
             {
                 if (track.BlendShape == null || string.IsNullOrEmpty(track.BlendShape.BlendShapeName) || track.BlendShape.Keys.Count == 0)
                 {
-                    diagnostics.Add(Error("FM-EXPORT-INVALID-BLENDSHAPE", "An enabled blend shape track needs a name and at least one key.", track.TrackId, "Set the binding and add a key, or disable the track."));
+                    diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidBlendShape, "An enabled blend shape track needs a name and at least one key.", track.TrackId, "Set the binding and add a key, or disable the track."));
                 }
                 else
                 {
@@ -145,11 +145,11 @@ namespace FaceMotion.Editor.Export
 
             if (!TrackKinds.IsTransform(track.Kind) || track.Transform == null || track.Transform.Keys.Count == 0)
             {
-                diagnostics.Add(Error("FM-EXPORT-INVALID-TRANSFORM", "An enabled transform track needs a supported payload and at least one key.", track.TrackId, "Set the transform binding and add a key, or disable the track."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidTransform, "An enabled transform track needs a supported payload and at least one key.", track.TrackId, "Set the transform binding and add a key, or disable the track."));
             }
             else if (track.Kind == TrackKind.TransformRotation && track.Transform.RotationMode != MotionRotationMode.ShortestQuaternion)
             {
-                diagnostics.Add(Error("FM-EXPORT-UNSUPPORTED-ROTATION", "Only ShortestQuaternion rotation tracks can be exported.", track.TrackId, "Use ShortestQuaternion rotation mode."));
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportUnsupportedRotation, "Only ShortestQuaternion rotation tracks can be exported.", track.TrackId, "Use ShortestQuaternion rotation mode."));
             }
             else
             {
@@ -163,7 +163,7 @@ namespace FaceMotion.Editor.Export
             {
                 if (keys[i] == null || !IsFinite(keys[i].Time) || !IsFinite(keys[i].Value))
                 {
-                    diagnostics.Add(Error("FM-EXPORT-INVALID-KEY", "Blend shape keys must have finite time and value.", trackId, "Remove or repair the invalid key."));
+                    diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidKey, "Blend shape keys must have finite time and value.", trackId, "Remove or repair the invalid key."));
                     return;
                 }
             }
@@ -175,7 +175,7 @@ namespace FaceMotion.Editor.Export
             {
                 if (keys[i] == null || !IsFinite(keys[i].Time) || !IsFinite(keys[i].Value))
                 {
-                    diagnostics.Add(Error("FM-EXPORT-INVALID-KEY", "Transform keys must have finite time and value.", trackId, "Remove or repair the invalid key."));
+                    diagnostics.Add(Error(FaceMotionDiagnosticCodes.ExportInvalidKey, "Transform keys must have finite time and value.", trackId, "Remove or repair the invalid key."));
                     return;
                 }
             }

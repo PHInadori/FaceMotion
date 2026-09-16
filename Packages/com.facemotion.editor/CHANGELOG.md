@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.1] - 2026-09-16
+
+### Changed / Improved
+
+- Improved user-facing diagnostic UX.
+- Added localized Japanese and English explanations for all known diagnostics.
+- Added action levels indicating whether an issue requires resolution.
+- Added cause, impact, resolution, caution, and context details.
+- Added safe Hierarchy navigation for supported diagnostics.
+- Added a Technical details foldout for raw developer diagnostics.
+- Improved `FM-AVT-0007` DuplicateTransformPath guidance.
+- Added diagnostic documentation.
+
+### Fixed / Safety
+
+- Ambiguous object identities are never resolved by choosing an arbitrary duplicate.
+- Unknown diagnostics preserve their raw message, suggested fix, context, and code.
+
 ## [0.1.0] - 2026-09-15
 
 - Timeline: animated facial motion authoring for blend shapes and transforms (position, scale, rotation).

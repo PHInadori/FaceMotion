@@ -26,7 +26,7 @@ namespace FaceMotion.Editor.ModularAvatar
             var items = diagnostics ?? new List<FaceMotionDiagnostic>();
             if (manifest == null)
             {
-                items.Add(Error("FM-H-MA-MANIFEST", "The Modular Avatar manifest is missing.", string.Empty, "Restore the manifest or re-integrate."));
+                items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifest, "The Modular Avatar manifest is missing.", string.Empty, "Restore the manifest or re-integrate."));
                 return new MigrationResult(false, true, items);
             }
 

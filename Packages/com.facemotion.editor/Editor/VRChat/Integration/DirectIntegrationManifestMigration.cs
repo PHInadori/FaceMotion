@@ -23,7 +23,7 @@ namespace FaceMotion.Editor.VRChat.Integration
             var items = diagnostics ?? new List<FaceMotionDiagnostic>();
             if (manifest == null)
             {
-                items.Add(Error("FM-G-MANIFEST", "The Direct integration manifest is missing.", string.Empty, "Restore the manifest or re-integrate."));
+                items.Add(Error(FaceMotionDiagnosticCodes.GenerationManifest, "The Direct integration manifest is missing.", string.Empty, "Restore the manifest or re-integrate."));
                 return new MigrationResult(false, true, items);
             }
 
