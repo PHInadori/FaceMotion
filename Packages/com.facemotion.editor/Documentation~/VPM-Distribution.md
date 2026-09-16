@@ -2,15 +2,15 @@
 
 This document describes how FaceMotion is distributed as a VPM package: the package
 repository, the separate listing repository, the release artifact format, checksums,
-and how VCC / ALCOM add the repository. Everything here is **preparation only** —
-no repository has been created and nothing has been published.
+and how VCC / ALCOM add the repository. FaceMotion `0.1.0` is published through
+the public listing described below.
 
 Companion docs: [Compatibility.md](Compatibility.md) (persisted-data contract),
 [Schema-Migration.md](Schema-Migration.md) (migration internals).
 
 ## Package repository
 
-Planned: **`PHInadori/FaceMotion`** (GitHub). It is the source of the package and hosts
+**`PHInadori/FaceMotion`** (GitHub) is the source of the package and hosts
 release artifacts. The package itself lives at `Packages/com.facemotion.editor/`.
 
 This repository is intentionally **not used for the VPM listing**; the listing lives in
@@ -59,8 +59,7 @@ dispatch:
    `release-info.json` (including `zipSHA256`).
 3. Uploads both to the GitHub Release created for the tag.
 
-No pushes, releases, or Pages are performed in Phase I.3 — the workflow files are prepared
-locally only.
+The workflow uploaded the `v0.1.0` release artifact and metadata for the published release.
 
 Source validation is separate in `.github/workflows/ci.yml`; see [CI.md](CI.md). The release
 workflow currently does not itself require a completed CI run before a tag release.
@@ -116,13 +115,12 @@ landing page automatically. A local candidate `source.json` is prepared at
 
 ## Listing repository strategy
 
-Planned: a **separate listing repository**, `PHInadori/PHInadori-VPM`, so the
+The **separate listing repository**, `PHInadori/PHInadori-VPM`, keeps the
 package repository stays clean. Its listing `id` is `com.phinadori.vpm`, which
 is separate from the package ID.
 
-The planned Pages URL is
-`https://phinadori.github.io/PHInadori-VPM/index.json`. It remains non-live
-until the listing repository is created and GitHub Pages is enabled.
+The live Pages URL is
+`https://phinadori.github.io/PHInadori-VPM/index.json`.
 
 ## Package ID
 
@@ -132,15 +130,5 @@ the decision is locked before publication.
 
 ## Adding to VCC / ALCOM
 
-Once the listing repository is public:
-
 - **VCC**: Manage Packages → + Add repository → paste the Pages URL ending in `index.json`.
 - **ALCOM**: Settings → add repository → paste the same URL.
-
-Until then nothing points at a live URL and no URLs are hard-coded into the package.
-
-## Do-not-publish reminder
-
-Phase I.3 creates local files only. Creating the GitHub repos, pushing, publishing releases,
-Pages, or listing registrations, and editing `package.json` after the public release are out
-of scope for this phase.

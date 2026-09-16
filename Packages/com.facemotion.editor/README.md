@@ -26,7 +26,7 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 
 ## インストール
 
-VPM repository は準備済みですが、まだ公開されていません。公開後は VCC / ALCOM に公開済みの repository URL を追加して導入します。公開前は、VRChat SDK が導入済みの Unity project で package folder の `package.json` を Package Manager の **Add package from disk** から選択する方法を利用できます。
+VCC / ALCOM に `https://phinadori.github.io/PHInadori-VPM/index.json` を追加して FaceMotion を導入できます。ローカル開発では、VRChat SDK が導入済みの Unity project で package folder の `package.json` を Package Manager の **Add package from disk** から選択する方法も利用できます。
 
 詳細: [Installation](Documentation~/Installation.md)
 
