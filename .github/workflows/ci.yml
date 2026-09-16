@@ -61,12 +61,11 @@ jobs:
         shell: pwsh
         run: ./Tools/ci/New-CiHostProject.ps1 -WithModularAvatar
       - name: Run Unity 2022.3.22f1 EditMode tests
-        uses: game-ci/unity-test-runner@v4
+        uses: game-ci/unity-test-runner@v4.3.2
         with:
           unityVersion: 2022.3.22f1
           projectPath: ci-host/ma
           testMode: EditMode
-          coverageEnabled: false
           artifactsPath: artifacts/editmode
           githubToken: ""
       - name: Summarize test results and enforce compiler policy
@@ -99,12 +98,11 @@ jobs:
         shell: pwsh
         run: ./Tools/ci/New-CiHostProject.ps1
       - name: Run no-MA EditMode smoke tests
-        uses: game-ci/unity-test-runner@v4
+        uses: game-ci/unity-test-runner@v4.3.2
         with:
           projectPath: ci-host/no-ma
           unityVersion: 2022.3.22f1
           testMode: EditMode
-          coverageEnabled: false
           artifactsPath: artifacts/no-ma
           githubToken: ""
       - name: Verify MA assemblies remain excluded and summarize results
