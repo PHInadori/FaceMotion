@@ -61,6 +61,12 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 - 解決策: 一方を rename するか、編集対象から外す
 - 選択ボタン: 重複のどれも選ばず、一意な親オブジェクト（または Avatar Root）をハイライト
 
+## Modular Avatar binding conflict
+
+**FM-H-MA-BINDING-CONFLICT** は、FaceMotionが統合するAnimationClipと既存のModular Avatar Merge Animatorが同じbindingをアニメーションする場合に、blockingとして表示されます。診断カードには競合object、hierarchy path、Animator Controller、AnimationClip、binding path / property / typeが表示され、**選択**は既存のMerge Animator objectのみをHierarchyで選択します。Sceneやassetは変更しません。
+
+同じ相対pathを持つavatar objectが原因の場合は、Merge Animator conflictではなく **FM-AVT-0007** と紐付く別の診断として表示されます。対象pathを一意にしてから、再度「統合を計画して検証」を実行してください。
+
 ## コード一覧
 
 `FM-AVT-0007` のように Blocking 運用されるコードは、通常時は `Recommended` として登録されています。

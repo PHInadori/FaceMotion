@@ -29,8 +29,10 @@ namespace FaceMotion.Editor.UI.Panels
         {
             EditorGUILayout.LabelField(FaceMotionUiText.Get("animations"), EditorStyles.boldLabel);
 
-            IReadOnlyList<FaceMotionAnimationData> list = _session.ActiveProject?.Animations;
-            int count = list?.Count ?? 0;
+            // Unity can refresh a serialized project while this IMGUI event is drawing. Render a
+            // stable snapshot so a list shrink cannot invalidate an already observed count.
+            IReadOnlyList<FaceMotionAnimationData> list = Snapshot(_session.ActiveProject?.Animations);
+            int count = list.Count;
 
             for (int i = 0; i < count; i++)
             {
@@ -115,6 +117,13 @@ namespace FaceMotion.Editor.UI.Panels
                     EditorGUILayout.EndHorizontal();
                 }
             }
+        }
+
+        internal static IReadOnlyList<FaceMotionAnimationData> Snapshot(IReadOnlyList<FaceMotionAnimationData> source)
+        {
+            return source == null
+                ? new List<FaceMotionAnimationData>()
+                : new List<FaceMotionAnimationData>(source);
         }
 
         private void DrawTimelineSettings()

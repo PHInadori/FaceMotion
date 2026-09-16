@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
+using FaceMotion.Editor.Avatar;
 using FaceMotion.Editor.Export;
 using FaceMotion.Editor.VRChat.Integration;
 using FaceMotion.Serialization;
@@ -22,6 +23,7 @@ namespace FaceMotion.Editor.ModularAvatar
         public const string BackendId = "modular-avatar";
         private const string Prefix = "FaceMotion MA ";
         private static readonly Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest> SessionManifests = new Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest>();
+        internal static Action<string> PlanFailureInjector;
 
         public bool HasExistingIntegration(VRCAvatarDescriptor avatar)
         {
@@ -29,6 +31,24 @@ namespace FaceMotion.Editor.ModularAvatar
         }
 
         public ModularAvatarIntegrationPlan Plan(ModularAvatarIntegrationRequest request)
+        {
+            try
+            {
+                PlanFailureInjector?.Invoke("before-plan");
+                return PlanCore(request);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                return new ModularAvatarIntegrationPlan(
+                    request,
+                    string.Empty,
+                    string.Empty,
+                    new[] { UnexpectedPlanDiagnostic(exception, request) });
+            }
+        }
+
+        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarAvatar, "Select a VRCAvatarDescriptor."));
@@ -42,9 +62,32 @@ namespace FaceMotion.Editor.ModularAvatar
             {
                 var existing = FindManifest(request.Avatar) ?? FindRemovalCandidateManifest(request.Avatar);
                 if (existing != null && existing.ParameterName != parameter) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifestConflict, "This avatar is already managed by FaceMotion Modular Avatar integration. Remove it before changing the animation name."));
-                ValidateConflicts(request.Avatar, request.Clip, parameter, existing, diagnostics);
+                if (request.Clip != null)
+                {
+                    ValidateAmbiguousClipBindings(request.Avatar, request.Clip, diagnostics);
+                    ValidateConflicts(request.Avatar, request.Clip, parameter, existing, diagnostics);
+                }
             }
             return new ModularAvatarIntegrationPlan(request, parameter, Prefix + stem, diagnostics);
+        }
+
+        private static FaceMotionDiagnostic UnexpectedPlanDiagnostic(Exception exception, ModularAvatarIntegrationRequest request)
+        {
+            string contextId = BackendId + "/plan" + (request?.Avatar == null ? string.Empty : "/" + request.Avatar.name);
+            string detail = "Exception: " + exception.GetType().FullName
+                + "\nMessage: " + exception.Message
+                + "\nStack trace:\n" + (exception.StackTrace ?? "(no stack trace)")
+                + "\nDiagnostic code: " + FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected
+                + "\nBackend: " + BackendId
+                + "\nOperation: Plan and Validate Integration"
+                + "\nContextId: " + contextId;
+            return new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected,
+                FaceMotionDiagnosticSeverity.Error,
+                detail,
+                contextId,
+                true,
+                "Review the integration settings and retry. If this repeats, report the diagnostic code and technical details.");
         }
 
         public ModularAvatarIntegrationResult Apply(ModularAvatarIntegrationPlan plan)
@@ -198,9 +241,86 @@ if (integrationObject == null)
                 if (!IsOwned(parameters.gameObject, owned, avatar))
                     if (parameters.parameters != null) foreach (var config in parameters.parameters) if (!config.isPrefix && config.nameOrPrefix == parameter) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarParameterConflict, "An MA Parameters component already defines the generated parameter."));
             foreach (var merge in avatar.GetComponentsInChildren<ModularAvatarMergeAnimator>(true))
-                if (!IsOwned(merge.gameObject, owned, avatar) && merge.animator != null)
-                    foreach (var candidate in merge.animator.animationClips) if (candidate != null && SharesBinding(candidate, clip)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarBindingConflict, "The clip shares an animated binding with another MA merge animator."));
-            var fx = GetFx(avatar); if (fx != null) foreach (var candidate in fx.animationClips) if (candidate != null && SharesBinding(candidate, clip)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict, "The clip shares an animated binding with the avatar FX controller."));
+            {
+                if (IsOwned(merge.gameObject, owned, avatar) || merge.animator == null) continue;
+                foreach (var candidate in merge.animator.animationClips)
+                {
+                    if (candidate == null) continue;
+                    foreach (var binding in SharedBindings(candidate, clip))
+                    {
+                        string objectPath = RelativePathUtility.GetRelativePath(avatar.transform, merge.transform) ?? string.Empty;
+                        string description = DescribeBinding(binding);
+                        diagnostics.Add(new FaceMotionDiagnostic(
+                            FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
+                            FaceMotionDiagnosticSeverity.Error,
+                            "The Modular Avatar Merge Animator \"" + merge.gameObject.name + "\" shares binding \"" + description + "\" through clip \"" + candidate.name + "\".",
+                            objectPath,
+                            true,
+                            "Resolve the competing Modular Avatar binding before planning the integration again.",
+                            MergeAnimatorConflictDetails(merge, objectPath, candidate, binding)));
+                    }
+                }
+            }
+            var fx = GetFx(avatar); if (fx != null) foreach (var candidate in fx.animationClips) if (candidate != null && HasSharedBinding(candidate, clip)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict, "The clip shares an animated binding with the avatar FX controller."));
+        }
+
+        private static void ValidateAmbiguousClipBindings(VRCAvatarDescriptor avatar, AnimationClip clip, List<FaceMotionDiagnostic> diagnostics)
+        {
+            var pathCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var transform in avatar.GetComponentsInChildren<Transform>(true))
+            {
+                string path = RelativePathUtility.GetRelativePath(avatar.transform, transform);
+                if (path == null) continue;
+                pathCounts.TryGetValue(path, out int count);
+                pathCounts[path] = count + 1;
+            }
+
+            foreach (var binding in AnimationUtility.GetCurveBindings(clip))
+            {
+                if (!pathCounts.TryGetValue(binding.path, out int count) || count < 2) continue;
+                string description = DescribeBinding(binding);
+                diagnostics.Add(new FaceMotionDiagnostic(
+                    FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
+                    FaceMotionDiagnosticSeverity.Error,
+                    "The AnimationClip binding \"" + description + "\" targets the ambiguous avatar path \"" + binding.path + "\".",
+                    binding.path,
+                    true,
+                    "Resolve the duplicate relative path before planning the integration again.",
+                    AmbiguousBindingDetails(binding, description)));
+            }
+        }
+
+        private static string DescribeBinding(EditorCurveBinding binding)
+        {
+            return (string.IsNullOrEmpty(binding.path) ? "<avatar root>" : binding.path)
+                + " / " + binding.type.Name + " / " + binding.propertyName;
+        }
+        private static Dictionary<string, string> MergeAnimatorConflictDetails(ModularAvatarMergeAnimator merge, string objectPath, AnimationClip clip, EditorCurveBinding binding)
+        {
+            return new Dictionary<string, string>
+            {
+                { FaceMotionDiagnosticDetailKeys.Reason, FaceMotionDiagnosticDetailKeys.ReasonMergeAnimatorBinding },
+                { FaceMotionDiagnosticDetailKeys.ConflictObjectName, merge.gameObject.name },
+                { FaceMotionDiagnosticDetailKeys.ConflictObjectPath, objectPath },
+                { FaceMotionDiagnosticDetailKeys.ConflictComponent, nameof(ModularAvatarMergeAnimator) },
+                { FaceMotionDiagnosticDetailKeys.ConflictController, merge.animator == null ? string.Empty : merge.animator.name },
+                { FaceMotionDiagnosticDetailKeys.ConflictClip, clip == null ? string.Empty : clip.name },
+                { FaceMotionDiagnosticDetailKeys.BindingPath, binding.path },
+                { FaceMotionDiagnosticDetailKeys.BindingProperty, binding.propertyName },
+                { FaceMotionDiagnosticDetailKeys.BindingType, binding.type == null ? string.Empty : binding.type.Name },
+                { FaceMotionDiagnosticDetailKeys.Binding, DescribeBinding(binding) }
+            };
+        }
+        private static Dictionary<string, string> AmbiguousBindingDetails(EditorCurveBinding binding, string description)
+        {
+            return new Dictionary<string, string>
+            {
+                { FaceMotionDiagnosticDetailKeys.Reason, FaceMotionDiagnosticDetailKeys.ReasonAmbiguousRelativePath },
+                { FaceMotionDiagnosticDetailKeys.BindingPath, binding.path },
+                { FaceMotionDiagnosticDetailKeys.BindingProperty, binding.propertyName },
+                { FaceMotionDiagnosticDetailKeys.BindingType, binding.type == null ? string.Empty : binding.type.Name },
+                { FaceMotionDiagnosticDetailKeys.Binding, description }
+            };
         }
         private static ModularAvatarIntegrationManifest FindManifest(VRCAvatarDescriptor avatar) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && ResolveIntegrationObject(session, avatar) != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && ResolveIntegrationObject(manifest, avatar) != null) return manifest; } return null; }
         private static ModularAvatarIntegrationManifest FindRemovalCandidateManifest(VRCAvatarDescriptor avatar) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) return manifest; } return null; }
@@ -246,7 +366,8 @@ if (integrationObject == null)
             return path;
         }
         private static RuntimeAnimatorController GetFx(VRCAvatarDescriptor avatar) { if (avatar == null || avatar.baseAnimationLayers == null) return null; foreach (var layer in avatar.baseAnimationLayers) if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX) return layer.animatorController; return null; }
-        private static bool SharesBinding(AnimationClip a, AnimationClip b) { var set = new HashSet<EditorCurveBinding>(AnimationUtility.GetCurveBindings(a)); foreach (var binding in AnimationUtility.GetCurveBindings(b)) if (set.Contains(binding)) return true; return false; }
+        private static IEnumerable<EditorCurveBinding> SharedBindings(AnimationClip a, AnimationClip b) { var set = new HashSet<EditorCurveBinding>(AnimationUtility.GetCurveBindings(a)); foreach (var binding in AnimationUtility.GetCurveBindings(b)) if (set.Contains(binding)) yield return binding; }
+        private static bool HasSharedBinding(AnimationClip a, AnimationClip b) { foreach (var binding in SharedBindings(a, b)) return true; return false; }
 
         private static bool IsAssetFolder(string path) { return !string.IsNullOrEmpty(path) && (path == "Assets" || path.StartsWith("Assets/", StringComparison.Ordinal)) && AssetDatabase.IsValidFolder(path) && !path.Contains(".."); }
         private static string Sanitize(string value) { var c = (value ?? "FaceMotion").ToCharArray(); for (var i = 0; i < c.Length; i++) if (!char.IsLetterOrDigit(c[i]) && c[i] != '_') c[i] = '_'; return new string(c); }

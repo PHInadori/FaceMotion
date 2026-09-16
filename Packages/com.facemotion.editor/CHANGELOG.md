@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.2] - 2026-09-16
+
+### Fixed / Safety
+
+- Fixed an `ArgumentOutOfRangeException` that could occur when the animation list changed during IMGUI rendering.
+- Added blocking, non-mutating exception boundaries for Direct and Modular Avatar integration planning; raw exception details remain available in Technical details.
+- Improved `FM-H-MA-BINDING-CONFLICT` diagnostics with conflict object, hierarchy path, Merge Animator component, Animator Controller, AnimationClip, and binding details.
+- Added safe, non-destructive Hierarchy selection for conflicting Modular Avatar Merge Animator objects; unavailable objects cannot be selected.
+- Kept duplicate avatar relative paths separate as `FM-AVT-0007` with specific resolution guidance.
+- Fixed invalid `.meta` formatting in three package files.
+
+### Changed / Improved
+
+- Integration diagnostics now use the unified diagnostic presentation, localization, and context pipeline.
+- Modular Avatar binding conflicts distinguish Merge Animator conflicts from ambiguous avatar relative paths.
+
 ## [0.1.1] - 2026-09-16
 
 ### Changed / Improved

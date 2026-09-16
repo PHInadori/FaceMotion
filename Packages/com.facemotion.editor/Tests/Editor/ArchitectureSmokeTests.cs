@@ -11,7 +11,7 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void Versions_StartAtDefinedValues()
         {
-            Assert.That(FaceMotionVersions.ToolVersion, Is.EqualTo("0.1.1"));
+            Assert.That(FaceMotionVersions.ToolVersion, Is.EqualTo("0.1.2"));
             Assert.That(FaceMotionVersions.ProjectSchemaVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.PresetSchemaVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.IntegrationManifestVersion, Is.EqualTo(1));

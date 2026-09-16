@@ -138,6 +138,7 @@ namespace FaceMotion.Diagnostics
         public const string GenerationWriteDefaults = "FM-G-WRITE-DEFAULTS";
         public const string GenerationBindingConflict = "FM-G-BINDING-CONFLICT";
         public const string GenerationManifest = "FM-G-MANIFEST";
+        public const string GenerationPlanUnexpected = "FM-G-PLAN-UNEXPECTED";
 
         // FM-H-MA (optional Modular Avatar backend). Inline literals centralized.
         public const string ModularAvatarMetadataUnavailable = "FM-H-MA-METADATA-UNAVAILABLE";
@@ -160,6 +161,7 @@ namespace FaceMotion.Diagnostics
         public const string ModularAvatarParameterConflict = "FM-H-MA-PARAMETER-CONFLICT";
         public const string ModularAvatarBindingConflict = "FM-H-MA-BINDING-CONFLICT";
         public const string ModularAvatarCrossBindingConflict = "FM-H-MA-CROSS-BINDING-CONFLICT";
+        public const string ModularAvatarPlanUnexpected = "FM-H-MA-PLAN-UNEXPECTED";
 
         // FM-UI-INFO (controller status). Inline literal centralized.
         public const string UiInfo = "FM-UI-INFO";

@@ -6,6 +6,7 @@ using FaceMotion.Diagnostics;
 using FaceMotion.Editor;
 using FaceMotion.Editor.Avatar;
 using FaceMotion.Editor.UI.Controllers;
+using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Timeline;
@@ -159,6 +160,18 @@ namespace FaceMotion.Editor.Tests
             _session.ValidateSelections();
             Assert.That(_session.SelectedAnimationId, Is.Null);
             Assert.That(_session.Selection.Count, Is.Zero);
+        }
+
+        [Test]
+        public void AnimationListSnapshot_RemainsReadableWhenTheSourceListShrinks()
+        {
+            var source = new List<FaceMotionAnimationData> { null, null };
+
+            IReadOnlyList<FaceMotionAnimationData> snapshot = AnimationListPanel.Snapshot(source);
+            source.RemoveAt(1);
+
+            Assert.That(snapshot.Count, Is.EqualTo(2));
+            Assert.That(snapshot[1], Is.Null);
         }
 
         [Test]

@@ -372,21 +372,21 @@ namespace FaceMotion.Editor.UI.Localization
             Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
                 new DiagnosticLocalizedFields
                 {
-                    Title = "バインドが競合しています",
-                    Summary = "統合結果の内で、同一対象へのバインドが競合しています。",
-                    Cause = "複数の統合先が同じブレンドシェイプ等を指しています。",
-                    Impact = "一部の統合結果が適用されない可能性があります。",
-                    Resolution = "競合するバインドを整理してから再実行してください。",
-                    Caution = ""
+                    Title = "Modular Avatarの既存アニメーションと対象が競合しています",
+                    Summary = "このAnimationClipが動かす対象を、別のModular Avatar Merge Animatorもアニメーションしています。",
+                    Cause = "同じAnimationClip bindingを複数のModular Avatar統合が使用しています。対象のbindingは詳細のContextで確認できます。",
+                    Impact = "安全に統合先を判断できないため、Modular Avatar統合は適用できません。アバターや既存アセットは変更されていません。",
+                    Resolution = "Contextに表示された対象と既存のModular Avatar Merge Animatorを確認し、同じ対象を動かすbindingを整理してから、もう一度「統合を計画して検証」を実行してください。",
+                    Caution = "競合したまま統合すると、意図しないアニメーションが優先または上書きされる可能性があります。"
                 },
                 new DiagnosticLocalizedFields
                 {
-                    Title = "Binding conflict",
-                    Summary = "Multiple integration targets bind to the same element.",
-                    Cause = "Several destinations point to the same blend shape or object.",
-                    Impact = "Some integration results may not be applied.",
-                    Resolution = "Resolve the conflicting bindings and re-run.",
-                    Caution = ""
+                    Title = "An existing Modular Avatar animation targets the same binding",
+                    Summary = "Another Modular Avatar Merge Animator also animates a target used by this AnimationClip.",
+                    Cause = "Multiple Modular Avatar integrations use the same AnimationClip binding. Check Context in the details for the affected binding.",
+                    Impact = "Modular Avatar integration cannot be applied because FaceMotion cannot safely determine the integration target. The avatar and existing assets have not been modified.",
+                    Resolution = "Check the target shown in Context and the existing Modular Avatar Merge Animator, resolve the bindings that animate the same target, then run Plan and Validate Integration again.",
+                    Caution = "Integrating while bindings conflict can prioritize or overwrite an unintended animation."
                 });
 
             Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict,
@@ -407,6 +407,26 @@ namespace FaceMotion.Editor.UI.Localization
                     Impact = "Which mesh is bound is ambiguous, and behavior may be unstable.",
                     Resolution = "Make the bound mesh explicit and resolve the conflict.",
                     Caution = ""
+                });
+
+            Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected,
+                new DiagnosticLocalizedFields
+                {
+                    Title = "VRChat統合の計画を作成できませんでした",
+                    Summary = "統合設定の処理中に予期しない問題が発生しました。",
+                    Cause = "Modular Avatar統合計画の内部処理で例外が発生しました。",
+                    Impact = "統合計画は作成されていません。アバターや既存アセットは変更されていません。",
+                    Resolution = "設定を確認してもう一度実行してください。繰り返し発生する場合は、診断コードと技術詳細を添えて報告してください。",
+                    Caution = "このエラーが発生した状態では統合を適用しないでください。"
+                },
+                new DiagnosticLocalizedFields
+                {
+                    Title = "Could not create the VRChat integration plan",
+                    Summary = "An unexpected problem occurred while processing the integration settings.",
+                    Cause = "An exception occurred inside Modular Avatar integration plan processing.",
+                    Impact = "No integration plan was created. The avatar and existing assets were not changed.",
+                    Resolution = "Review the settings and retry. If this repeats, report the diagnostic code and technical details.",
+                    Caution = "Do not apply the integration while this error is present."
                 });
         }
     }

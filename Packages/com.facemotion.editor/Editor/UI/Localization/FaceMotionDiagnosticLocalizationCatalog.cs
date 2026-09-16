@@ -6,7 +6,7 @@ namespace FaceMotion.Editor.UI.Localization
     /// <summary>
     /// Central registry of per-code localized user explanations, Japanese and English.
     /// Lookup is O(1) through prebuilt Dictionaries. Entries are registered per category in
-    /// separate partial files so the 135-entry surface stays readable.
+    /// separate partial files so the 137-entry surface stays readable.
     /// </summary>
     public static partial class FaceMotionDiagnosticLocalizationCatalog
     {

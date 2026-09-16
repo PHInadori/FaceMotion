@@ -1,4 +1,6 @@
 using FaceMotion.Editor.VRChat.Integration;
+using FaceMotion.Diagnostics;
+using FaceMotion.Editor.UI.Diagnostics;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Integration;
@@ -65,7 +67,7 @@ namespace FaceMotion.Editor.UI.Panels
                 for (int i = 0; i < _optionalPlan.Diagnostics.Count; i++)
                 {
                     var diagnostic = _optionalPlan.Diagnostics[i];
-                    EditorGUILayout.HelpBox(FaceMotionUiText.FormatDiagnostic(diagnostic.Code, diagnostic.Message, diagnostic.SuggestedFix), MessageType.Error);
+                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), MessageType.Error);
                 }
                 return;
             }
@@ -76,7 +78,7 @@ namespace FaceMotion.Editor.UI.Panels
                 for (int i = 0; i < _modularAvatarPlan.Diagnostics.Count; i++)
                 {
                     var diagnostic = _modularAvatarPlan.Diagnostics[i];
-                    EditorGUILayout.HelpBox(FaceMotionUiText.FormatDiagnostic(diagnostic.Code, diagnostic.Message, diagnostic.SuggestedFix), diagnostic.Blocking ? MessageType.Error : MessageType.Info);
+                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), diagnostic.Blocking ? MessageType.Error : MessageType.Info);
                 }
                 using (new EditorGUI.DisabledScope(!_modularAvatarPlan.IsValid || maBackend == null))
                     if (GUILayout.Button(FaceMotionUiText.Get("applyModularAvatarIntegration")))
@@ -95,7 +97,7 @@ namespace FaceMotion.Editor.UI.Panels
             for (int i = 0; i < _plan.Diagnostics.Count; i++)
             {
                 var d = _plan.Diagnostics[i];
-                EditorGUILayout.HelpBox(FaceMotionUiText.FormatDiagnostic(d.Code, d.Message, d.SuggestedFix), d.Blocking ? MessageType.Error : MessageType.Info);
+                EditorGUILayout.HelpBox(FormatDiagnostic(d), d.Blocking ? MessageType.Error : MessageType.Info);
             }
             using (new EditorGUI.DisabledScope(!_plan.IsValid))
             {
@@ -117,6 +119,56 @@ namespace FaceMotion.Editor.UI.Panels
             return backend == IntegrationBackendSelection.ModularAvatar
                 && modularAvatarBackend != null
                 && modularAvatarBackend.HasExistingIntegration(avatar);
+        }
+
+        internal static string FormatDiagnostic(
+            FaceMotionDiagnostic diagnostic,
+            FaceMotionDiagnosticLanguage? language = null)
+        {
+            if (diagnostic == null)
+            {
+                return string.Empty;
+            }
+
+            FaceMotionDiagnosticLanguage resolvedLanguage = language ?? FaceMotionUiLanguage.Resolve();
+            var presentation = new FaceMotionDiagnosticPresentation(diagnostic, resolvedLanguage);
+            SystemLanguage systemLanguage = resolvedLanguage == FaceMotionDiagnosticLanguage.Japanese
+                ? SystemLanguage.Japanese
+                : SystemLanguage.English;
+            var lines = new System.Collections.Generic.List<string>
+            {
+                "[" + presentation.Code + "]",
+                presentation.Title,
+                presentation.Summary
+            };
+            AddField(lines, FaceMotionUiText.Get("cause", systemLanguage), presentation.Cause);
+            AddDetail(lines, FaceMotionUiText.Get("conflictObject", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictObjectName);
+            AddDetail(lines, FaceMotionUiText.Get("conflictBinding", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.Binding);
+            AddDetail(lines, FaceMotionUiText.Get("hierarchyPath", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictObjectPath);
+            AddDetail(lines, FaceMotionUiText.Get("animatorController", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictController);
+            AddDetail(lines, FaceMotionUiText.Get("conflictAnimationClip", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictClip);
+            AddDetail(lines, FaceMotionUiText.Get("component", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictComponent);
+            AddField(lines, FaceMotionUiText.Get("impact", systemLanguage), presentation.Impact);
+            AddField(lines, FaceMotionUiText.Get("resolution", systemLanguage), presentation.Resolution);
+            AddField(lines, FaceMotionUiText.Get("caution", systemLanguage), presentation.Caution);
+            AddField(lines, FaceMotionUiText.Get("context", systemLanguage), presentation.ContextId);
+            return string.Join("\n", lines);
+        }
+
+        private static void AddField(System.Collections.Generic.List<string> lines, string label, string value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                lines.Add(label + ": " + value);
+            }
+        }
+
+        private static void AddDetail(System.Collections.Generic.List<string> lines, string label, FaceMotionDiagnosticPresentation presentation, string key)
+        {
+            if (presentation.Details != null && presentation.Details.TryGetValue(key, out string value))
+            {
+                AddField(lines, label, value);
+            }
         }
 
         private void DrawModularAvatarRemove(IModularAvatarIntegrationBackend maBackend, VRCAvatarDescriptor avatar)

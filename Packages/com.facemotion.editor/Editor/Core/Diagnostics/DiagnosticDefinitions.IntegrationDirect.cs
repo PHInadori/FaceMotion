@@ -27,6 +27,7 @@ namespace FaceMotion.Diagnostics
             Add(defs, FaceMotionDiagnosticCodes.GenerationWriteDefaults, FaceMotionDiagnosticActionLevel.Recommended, "integration-direct");
             Add(defs, FaceMotionDiagnosticCodes.GenerationBindingConflict, FaceMotionDiagnosticActionLevel.Recommended, "integration-direct");
             Add(defs, FaceMotionDiagnosticCodes.GenerationManifest, FaceMotionDiagnosticActionLevel.Recommended, "integration-direct");
+            Add(defs, FaceMotionDiagnosticCodes.GenerationPlanUnexpected, FaceMotionDiagnosticActionLevel.Recommended, "integration-direct");
         }
     }
 }

@@ -16,7 +16,7 @@ namespace FaceMotion.Editor.Tests
     /// </summary>
     public sealed class DiagnosticsContractsTests
     {
-        private const int ExpectedCodeCount = 135;
+        private const int ExpectedCodeCount = 137;
 
         [Test]
         public void Codes_ConstantsMatchRegisteredKeys_NoDuplicates()
@@ -52,13 +52,13 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void Registry_KnownCountIs135()
+        public void Registry_KnownCountIs137()
         {
             Assert.That(FaceMotionDiagnosticDefinitionRegistry.All.Count, Is.EqualTo(ExpectedCodeCount));
         }
 
         [Test]
-        public void Localization_JapaneseAndEnglishEachCount135_NoDivergence()
+        public void Localization_JapaneseAndEnglishEachCount137_NoDivergence()
         {
             IReadOnlyDictionary<string, DiagnosticLocalizedText> ja = FaceMotionDiagnosticLocalizationCatalog.JapaneseEntries;
             IReadOnlyDictionary<string, DiagnosticLocalizedText> en = FaceMotionDiagnosticLocalizationCatalog.EnglishEntries;
@@ -235,6 +235,81 @@ namespace FaceMotion.Editor.Tests
             Assert.That(en.Summary, Is.EqualTo(enText.Summary));
             Assert.That(en.ActionLevelText, Is.EqualTo("Required"));
             Assert.That(ja.Title, Is.Not.EqualTo(en.Title));
+        }
+
+        [Test]
+        public void Presentation_UnexpectedIntegrationPlan_UsesLocalizedSafetyGuidanceAndPreservesTechnicalDetail()
+        {
+            var diagnostic = new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected,
+                FaceMotionDiagnosticSeverity.Error,
+                "Exception: ArgumentOutOfRangeException\nStack trace:\nexample",
+                "modular-avatar/plan/Avatar",
+                blocking: true,
+                "Retry");
+
+            var ja = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.Japanese);
+            var en = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.English);
+
+            Assert.That(ja.Title, Is.EqualTo("VRChat統合の計画を作成できませんでした"));
+            Assert.That(ja.Summary, Is.EqualTo("統合設定の処理中に予期しない問題が発生しました。"));
+            Assert.That(ja.Resolution, Is.Not.Empty);
+            Assert.That(en.Title, Is.EqualTo("Could not create the VRChat integration plan"));
+            Assert.That(en.Summary, Is.EqualTo("An unexpected problem occurred while processing the integration settings."));
+            Assert.That(ja.ActionLevel, Is.EqualTo(FaceMotionDiagnosticActionLevel.Required));
+            Assert.That(ja.Detail, Does.Contain("ArgumentOutOfRangeException"));
+            Assert.That(ja.Detail, Does.Contain("Stack trace:"));
+        }
+
+        [Test]
+        public void Presentation_AmbiguousModularAvatarBindingGuidesToFmAvt0007()
+        {
+            var diagnostic = new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
+                FaceMotionDiagnosticSeverity.Error,
+                "Raw binding detail",
+                "Body/Face",
+                blocking: true,
+                "Raw suggested fix",
+                new Dictionary<string, string>
+                {
+                    { FaceMotionDiagnosticDetailKeys.Reason, FaceMotionDiagnosticDetailKeys.ReasonAmbiguousRelativePath }
+                });
+
+            var ja = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.Japanese);
+            var en = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.English);
+
+            Assert.That(ja.Title, Is.EqualTo("Modular Avatarのアニメーション対象を一意に特定できません"));
+            Assert.That(ja.Summary, Does.Contain("同じ相対パス"));
+            Assert.That(ja.Resolution, Does.Contain("FM-AVT-0007"));
+            Assert.That(ja.Resolution, Does.Contain("統合を計画して検証"));
+            Assert.That(en.Title, Is.EqualTo("Modular Avatar animation target cannot be uniquely resolved"));
+            Assert.That(en.Summary, Does.Contain("same relative path"));
+            Assert.That(en.Resolution, Does.Contain("FM-AVT-0007"));
+            Assert.That(en.Resolution, Does.Contain("Plan and Validate Integration"));
+            Assert.That(ja.ActionLevel, Is.EqualTo(FaceMotionDiagnosticActionLevel.Required));
+            Assert.That(ja.Detail, Is.EqualTo("Raw binding detail"));
+            Assert.That(ja.SelectionKind, Is.EqualTo(FaceMotionDiagnosticSelectionKind.ParentOfAmbiguousPath));
+        }
+
+        [Test]
+        public void Localization_ModularAvatarBindingConflict_DescribesTheNonAmbiguousCause()
+        {
+            FaceMotionDiagnosticLocalizationCatalog.TryGet(
+                FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
+                FaceMotionDiagnosticLanguage.Japanese,
+                out DiagnosticLocalizedText ja);
+            FaceMotionDiagnosticLocalizationCatalog.TryGet(
+                FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
+                FaceMotionDiagnosticLanguage.English,
+                out DiagnosticLocalizedText en);
+
+            Assert.That(ja.Title, Does.Contain("Modular Avatar"));
+            Assert.That(ja.Summary, Does.Contain("Merge Animator"));
+            Assert.That(ja.Resolution, Does.Contain("統合を計画して検証"));
+            Assert.That(en.Title, Is.Not.Empty);
+            Assert.That(en.Summary, Does.Contain("Merge Animator"));
+            Assert.That(en.Resolution, Is.Not.Empty);
         }
 
         [Test]

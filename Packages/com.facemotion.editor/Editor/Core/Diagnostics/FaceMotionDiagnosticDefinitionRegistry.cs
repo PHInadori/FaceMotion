@@ -5,7 +5,7 @@ namespace FaceMotion.Diagnostics
     /// <summary>
     /// Central registry of non-UI diagnostic metadata, keyed by diagnostic code. Lookup is
     /// O(1) through a prebuilt Dictionary. Definitions are registered per category in
-    /// separate partial files so the 135-entry surface stays readable.
+    /// separate partial files so the 137-entry surface stays readable.
     /// </summary>
     public static partial class FaceMotionDiagnosticDefinitionRegistry
     {

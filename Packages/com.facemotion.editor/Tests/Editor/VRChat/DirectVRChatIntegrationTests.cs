@@ -1,8 +1,10 @@
+using System.Text.RegularExpressions;
 using FaceMotion.Editor.VRChat.Integration;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.TestTools;
 using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
 
@@ -30,6 +32,7 @@ namespace FaceMotion.Editor.Tests
         public void TearDown()
         {
             DirectVRChatIntegration.ApplyFailureInjector = null;
+            DirectVRChatIntegration.PlanFailureInjector = null;
             Object.DestroyImmediate(_root); AssetDatabase.DeleteAsset(Folder); AssetDatabase.Refresh();
         }
 
@@ -54,6 +57,26 @@ namespace FaceMotion.Editor.Tests
             Assert.That(_avatar.expressionParameters, Is.Null);
             Assert.That(_avatar.expressionsMenu, Is.Null);
             Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+        }
+
+        [Test]
+        public void Plan_UnexpectedExceptionReturnsBlockingDiagnosticWithoutMutation()
+        {
+            DirectVRChatIntegration.PlanFailureInjector = _ => throw new System.InvalidOperationException("direct planning test exception");
+            LogAssert.Expect(LogType.Exception, new Regex("direct planning test exception"));
+
+            var plan = Plan();
+            var result = DirectVRChatIntegration.Apply(plan);
+
+            Assert.That(plan.IsValid, Is.False);
+            Assert.That(plan.Diagnostics, Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-G-PLAN-UNEXPECTED"));
+            Assert.That(plan.Diagnostics[0].Message, Does.Contain("InvalidOperationException"));
+            Assert.That(plan.Diagnostics[0].Message, Does.Contain("Stack trace:"));
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(_avatar.expressionParameters, Is.Null);
+            Assert.That(_avatar.expressionsMenu, Is.Null);
+            Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+            Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotion_Smile"), Is.False);
         }
 
         [Test]

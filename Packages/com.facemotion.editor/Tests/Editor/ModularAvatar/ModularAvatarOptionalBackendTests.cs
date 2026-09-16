@@ -1,7 +1,9 @@
 using System.Collections;
+using System.Text.RegularExpressions;
 using System.Reflection;
 using FaceMotion.Editor.VRChat.Integration;
 using FaceMotion.Editor.ModularAvatar;
+using FaceMotion.Editor.UI.Diagnostics;
 using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Integration;
 using nadena.dev.modular_avatar.core;
@@ -9,6 +11,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.TestTools;
 using VRC.SDK3.Avatars.Components;
 
 namespace FaceMotion.Editor.Tests
@@ -31,6 +34,7 @@ namespace FaceMotion.Editor.Tests
         [TearDown]
         public void TearDown()
         {
+            SetPlanFailureInjector(null);
             Object.DestroyImmediate(_root); AssetDatabase.DeleteAsset(Folder); AssetDatabase.Refresh();
         }
         [Test]
@@ -151,10 +155,103 @@ namespace FaceMotion.Editor.Tests
             other.AddComponent<ModularAvatarMergeAnimator>().animator = CreateControllerWithClip("other.controller", otherClip);
             var backend = new ModularAvatarIntegrationBackend();
 
-            Assert.That(backend.Plan(new ModularAvatarIntegrationRequest(_avatar, _clip, Folder, "Smile")).Diagnostics, Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-BINDING-CONFLICT"));
+            var maPlan = backend.Plan(new ModularAvatarIntegrationRequest(_avatar, _clip, Folder, "Smile"));
+            var maConflict = System.Linq.Enumerable.First(maPlan.Diagnostics, d => d.Code == "FM-H-MA-BINDING-CONFLICT");
+            string renderedMaConflict = DirectVRChatIntegrationPanel.FormatDiagnostic(
+                maConflict,
+                FaceMotion.Editor.UI.Localization.FaceMotionDiagnosticLanguage.Japanese);
+            var presentation = new FaceMotionDiagnosticPresentation(
+                maConflict,
+                FaceMotion.Editor.UI.Localization.FaceMotionDiagnosticLanguage.Japanese);
+            var cache = new FaceMotion.Editor.Avatar.UnityAvatarObjectCache();
+            cache.Rebuild(_root);
+            Assert.That(maPlan.Diagnostics, Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-BINDING-CONFLICT"));
+            Assert.That(renderedMaConflict, Does.Contain("既存アニメーションと対象が競合"));
+            Assert.That(renderedMaConflict, Does.Not.Contain("FM-AVT-0007"));
+            Assert.That(maConflict.Details[FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.ConflictObjectName], Is.EqualTo("Other"));
+            Assert.That(maConflict.Details[FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.ConflictObjectPath], Is.EqualTo("Other"));
+            Assert.That(maConflict.Details[FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.BindingPath], Is.EqualTo("Body"));
+            Assert.That(maConflict.Details[FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.BindingProperty], Is.EqualTo("m_LocalPosition.x"));
+            Assert.That(renderedMaConflict, Does.Contain("競合オブジェクト: Other"));
+            Assert.That(renderedMaConflict, Does.Contain("競合binding: Body / Transform / m_LocalPosition.x"));
+            Assert.That(FaceMotion.Editor.UI.Diagnostics.FaceMotionDiagnosticSelectionResolver.Resolve(presentation, _root, cache), Is.SameAs(other.transform));
             Object.DestroyImmediate(other);
+            cache.Rebuild(_root);
+            Assert.That(FaceMotion.Editor.UI.Diagnostics.FaceMotionDiagnosticSelectionResolver.CanResolve(presentation, _root, cache), Is.False);
             _avatar.baseAnimationLayers = new[] { new VRCAvatarDescriptor.CustomAnimLayer { type = VRCAvatarDescriptor.AnimLayerType.FX, animatorController = CreateControllerWithClip("fx.controller", otherClip) } };
             Assert.That(backend.Plan(new ModularAvatarIntegrationRequest(_avatar, _clip, Folder, "Smile")).Diagnostics, Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-CROSS-BINDING-CONFLICT"));
+        }
+
+        [Test]
+        public void Plan_AmbiguousClipPathUsesSpecificGuidanceAndCannotApply()
+        {
+            var first = new GameObject("Body");
+            first.transform.SetParent(_root.transform);
+            var second = new GameObject("Body");
+            second.transform.SetParent(_root.transform);
+            AnimationUtility.SetEditorCurve(
+                _clip,
+                EditorCurveBinding.FloatCurve("Body", typeof(Transform), "m_LocalPosition.x"),
+                AnimationCurve.Linear(0, 0, 1, 1));
+            var backend = new ModularAvatarIntegrationBackend();
+
+            var plan = backend.Plan(new ModularAvatarIntegrationRequest(_avatar, _clip, Folder, "Smile"));
+            var conflict = System.Linq.Enumerable.First(plan.Diagnostics,
+                d => d.Code == "FM-H-MA-BINDING-CONFLICT"
+                    && d.Details[FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.Reason]
+                        == FaceMotion.Diagnostics.FaceMotionDiagnosticDetailKeys.ReasonAmbiguousRelativePath);
+            var presentation = new FaceMotionDiagnosticPresentation(
+                conflict,
+                FaceMotion.Editor.UI.Localization.FaceMotionDiagnosticLanguage.Japanese);
+            string rendered = DirectVRChatIntegrationPanel.FormatDiagnostic(
+                conflict,
+                FaceMotion.Editor.UI.Localization.FaceMotionDiagnosticLanguage.Japanese);
+            var result = backend.Apply(plan);
+
+            Assert.That(plan.IsValid, Is.False);
+            Assert.That(presentation.Title, Is.EqualTo("Modular Avatarのアニメーション対象を一意に特定できません"));
+            Assert.That(presentation.Resolution, Does.Contain("FM-AVT-0007"));
+            Assert.That(rendered, Does.Contain("Modular Avatarのアニメーション対象を一意に特定できません"));
+            Assert.That(rendered, Does.Contain("FM-AVT-0007"));
+            Assert.That(rendered, Does.Contain("統合を計画して検証"));
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(_root.transform.childCount, Is.EqualTo(2));
+            Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotionMA_Smile"), Is.False);
+        }
+
+        [Test]
+        public void Plan_NullClipSkipsBindingConflictInspection()
+        {
+            var otherClip = new AnimationClip();
+            AssetDatabase.CreateAsset(otherClip, Folder + "/null-clip-other.anim");
+            var other = new GameObject("Other");
+            other.transform.SetParent(_root.transform);
+            other.AddComponent<ModularAvatarMergeAnimator>().animator = CreateControllerWithClip("null-clip-other.controller", otherClip);
+
+            Assert.DoesNotThrow(() => new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, null, Folder, "Smile")));
+            Assert.That(new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, null, Folder, "Smile")).Diagnostics,
+                Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-CLIP"));
+        }
+
+        [Test]
+        public void Plan_UnexpectedExceptionReturnsBlockingDiagnosticWithoutMutation()
+        {
+            SetPlanFailureInjector(_ => throw new System.ArgumentOutOfRangeException("index", "modular planning test exception"));
+            LogAssert.Expect(LogType.Exception, new Regex("modular planning test exception"));
+
+            var plan = new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, _clip, Folder, "Smile"));
+            var result = new ModularAvatarIntegrationBackend().Apply(plan);
+
+            Assert.That(plan.IsValid, Is.False);
+            Assert.That(plan.Diagnostics, Has.Some.Matches<FaceMotion.Diagnostics.FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-PLAN-UNEXPECTED"));
+            Assert.That(plan.Diagnostics[0].Message, Does.Contain("ArgumentOutOfRangeException"));
+            Assert.That(plan.Diagnostics[0].Message, Does.Contain("Stack trace:"));
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(_root.transform.childCount, Is.EqualTo(0));
+            Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotionMA_Smile"), Is.False);
         }
 
         [Test]
@@ -327,6 +424,13 @@ namespace FaceMotion.Editor.Tests
             var field = typeof(ModularAvatarIntegrationBackend)
                 .GetField("SessionManifests", BindingFlags.Static | BindingFlags.NonPublic);
             ((IDictionary)field.GetValue(null)).Clear();
+        }
+
+        private static void SetPlanFailureInjector(System.Action<string> value)
+        {
+            var field = typeof(ModularAvatarIntegrationBackend)
+                .GetField("PlanFailureInjector", BindingFlags.Static | BindingFlags.NonPublic);
+            field.SetValue(null, value);
         }
 
     }

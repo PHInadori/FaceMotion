@@ -54,6 +54,7 @@ namespace FaceMotion.Editor.UI.Diagnostics
             HelpTopicId = definition != null ? definition.HelpTopicId : diagnostic.Code;
             ContextId = diagnostic.ContextId;
             Detail = diagnostic.Message;
+            Details = diagnostic.Details;
 
             Title = ResolveField(preferred, other, t => t.Title, GenericTitle());
             Summary = ResolveField(preferred, other, t => t.Summary, diagnostic.Message);
@@ -61,6 +62,8 @@ namespace FaceMotion.Editor.UI.Diagnostics
             Impact = ResolveField(preferred, other, t => t.Impact, string.Empty);
             Resolution = ResolveField(preferred, other, t => t.Resolution, diagnostic.SuggestedFix);
             Caution = ResolveField(preferred, other, t => t.Caution, string.Empty);
+
+            ApplyAmbiguousModularAvatarBindingGuidance(diagnostic);
 
             ActionLevelText = ActionLevelLabel(ActionLevel, language);
             SeverityText = SeverityLabel(Severity, language);
@@ -91,30 +94,32 @@ namespace FaceMotion.Editor.UI.Diagnostics
 
         public bool CanAutoFix { get; }
 
-        public FaceMotionDiagnosticSelectionKind SelectionKind { get; }
+        public FaceMotionDiagnosticSelectionKind SelectionKind { get; private set; }
 
         public string HelpTopicId { get; }
 
         /// <summary>Display title localized for the current language; falls back to a generic title.</summary>
-        public string Title { get; }
+        public string Title { get; private set; }
 
         /// <summary>One-line explanation; falls back to the raw diagnostic message.</summary>
-        public string Summary { get; }
+        public string Summary { get; private set; }
 
-        public string Cause { get; }
+        public string Cause { get; private set; }
 
-        public string Impact { get; }
+        public string Impact { get; private set; }
 
         /// <summary>How to resolve; falls back to the raw suggested fix (or empty).</summary>
-        public string Resolution { get; }
+        public string Resolution { get; private set; }
 
-        public string Caution { get; }
+        public string Caution { get; private set; }
 
         /// <summary>Instance-specific context reference (object path, project id, etc.). May be empty.</summary>
         public string ContextId { get; }
 
         /// <summary>The raw, instance-specific message from the generator.</summary>
         public string Detail { get; }
+
+        public System.Collections.Generic.IReadOnlyDictionary<string, string> Details { get; }
 
         private static string ResolveField(
             DiagnosticLocalizedText preferred,
@@ -135,6 +140,38 @@ namespace FaceMotion.Editor.UI.Diagnostics
         private string GenericTitle()
         {
             return Language == FaceMotionDiagnosticLanguage.Japanese ? GenericTitleJa : GenericTitleEn;
+        }
+
+        private void ApplyAmbiguousModularAvatarBindingGuidance(FaceMotionDiagnostic diagnostic)
+        {
+            if (diagnostic.Code != FaceMotionDiagnosticCodes.ModularAvatarBindingConflict
+                || diagnostic.Details == null
+                || !diagnostic.Details.TryGetValue(FaceMotionDiagnosticDetailKeys.Reason, out string reason)
+                || reason != FaceMotionDiagnosticDetailKeys.ReasonAmbiguousRelativePath)
+            {
+                return;
+            }
+
+            SelectionKind = FaceMotionDiagnosticSelectionKind.ParentOfAmbiguousPath;
+
+            if (Language == FaceMotionDiagnosticLanguage.Japanese)
+            {
+                Title = "Modular Avatarのアニメーション対象を一意に特定できません";
+                Summary = "AnimationClipが参照している対象と同じ相対パスを持つオブジェクトがアバター内に複数あります。FaceMotionは安全に統合先を判断できないため、Modular Avatar統合を停止しました。";
+                Cause = "Contextに表示されたAnimationClip bindingが、重複した相対パスを参照しています。";
+                Impact = "この状態ではModular Avatar統合を適用できません。アバターや既存アセットは変更されていません。";
+                Resolution = "下の診断一覧で「同じ名前のオブジェクトが見つかりました」（FM-AVT-0007）を確認してください。「選択」で対象を確認し、重複しているオブジェクト名またはパスを一意にしてから、もう一度「統合を計画して検証」を実行してください。";
+                Caution = "重複したまま統合すると、意図しないオブジェクトへアニメーションが適用される可能性があります。";
+            }
+            else
+            {
+                Title = "Modular Avatar animation target cannot be uniquely resolved";
+                Summary = "Multiple objects in the avatar match the same relative path referenced by the AnimationClip. FaceMotion cannot safely determine the intended target, so Modular Avatar integration has been blocked.";
+                Cause = "The AnimationClip binding shown in Context references a duplicated relative path.";
+                Impact = "The integration cannot be applied in this state. No avatar or existing assets have been modified.";
+                Resolution = "Check the related FM-AVT-0007 diagnostic below. Use Select to locate the duplicated objects, make their names or paths unique, then run Plan and Validate Integration again.";
+                Caution = "Applying animation bindings while the target is ambiguous could affect an unintended object.";
+            }
         }
 
         private static string ActionLevelLabel(

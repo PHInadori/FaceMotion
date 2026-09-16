@@ -56,9 +56,29 @@ namespace FaceMotion.Editor.VRChat.Integration
         public const int BackendVersion = 1;
         private const int MenuCapacity = 8;
         private static readonly Dictionary<VRCAvatarDescriptor, DirectIntegrationManifest> SessionManifests = new Dictionary<VRCAvatarDescriptor, DirectIntegrationManifest>();
+        internal static Action<string> PlanFailureInjector;
         internal static Action<string> ApplyFailureInjector;
 
         public static DirectIntegrationPlan Plan(DirectIntegrationRequest request)
+        {
+            try
+            {
+                PlanFailureInjector?.Invoke("before-plan");
+                return PlanCore(request);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                return new DirectIntegrationPlan(
+                    request,
+                    string.Empty,
+                    string.Empty,
+                    string.Empty,
+                    new[] { UnexpectedPlanDiagnostic(exception, request) });
+            }
+        }
+
+        private static DirectIntegrationPlan PlanCore(DirectIntegrationRequest request)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationAvatar, "Select a VRCAvatarDescriptor.", "Select the avatar root."));
@@ -75,6 +95,25 @@ namespace FaceMotion.Editor.VRChat.Integration
             }
             if (request != null && IsAssetFolder(request.OutputFolder) && OutputFolderIsUnmanaged(request)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.GenerationOutputConflict, "The generated output folder already exists and is not owned by this avatar's integration.", "Choose a different animation name or output folder."));
             return new DirectIntegrationPlan(request, parameter, "FaceMotion " + stem, stem, diagnostics);
+        }
+
+        private static FaceMotionDiagnostic UnexpectedPlanDiagnostic(Exception exception, DirectIntegrationRequest request)
+        {
+            string contextId = BackendId + "/plan" + (request?.Avatar == null ? string.Empty : "/" + request.Avatar.name);
+            string detail = "Exception: " + exception.GetType().FullName
+                + "\nMessage: " + exception.Message
+                + "\nStack trace:\n" + (exception.StackTrace ?? "(no stack trace)")
+                + "\nDiagnostic code: " + FaceMotionDiagnosticCodes.GenerationPlanUnexpected
+                + "\nBackend: " + BackendId
+                + "\nOperation: Plan and Validate Integration"
+                + "\nContextId: " + contextId;
+            return new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.GenerationPlanUnexpected,
+                FaceMotionDiagnosticSeverity.Error,
+                detail,
+                contextId,
+                true,
+                "Review the integration settings and retry. If this repeats, report the diagnostic code and technical details.");
         }
 
         public static DirectIntegrationResult Apply(DirectIntegrationPlan plan)

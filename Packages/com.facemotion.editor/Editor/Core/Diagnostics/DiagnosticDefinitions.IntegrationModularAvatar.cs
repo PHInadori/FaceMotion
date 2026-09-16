@@ -24,8 +24,9 @@ namespace FaceMotion.Diagnostics
             Add(defs, FaceMotionDiagnosticCodes.ModularAvatarOwnership, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar");
             Add(defs, FaceMotionDiagnosticCodes.ModularAvatarRemoved, FaceMotionDiagnosticActionLevel.Info, "integration-modular-avatar");
             Add(defs, FaceMotionDiagnosticCodes.ModularAvatarParameterConflict, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar");
-            Add(defs, FaceMotionDiagnosticCodes.ModularAvatarBindingConflict, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar");
+            Add(defs, FaceMotionDiagnosticCodes.ModularAvatarBindingConflict, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar", selectionKind: FaceMotionDiagnosticSelectionKind.RelativeTransformPath);
             Add(defs, FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar");
+            Add(defs, FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected, FaceMotionDiagnosticActionLevel.Recommended, "integration-modular-avatar");
         }
     }
 }

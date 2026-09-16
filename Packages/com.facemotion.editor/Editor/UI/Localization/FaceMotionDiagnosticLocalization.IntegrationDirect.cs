@@ -428,6 +428,26 @@ namespace FaceMotion.Editor.UI.Localization
                     Resolution = "Re-validate the project to recreate the manifest.",
                     Caution = ""
                 });
+
+            Add(ja, en, FaceMotionDiagnosticCodes.GenerationPlanUnexpected,
+                new DiagnosticLocalizedFields
+                {
+                    Title = "VRChat統合の計画を作成できませんでした",
+                    Summary = "統合設定の処理中に予期しない問題が発生しました。",
+                    Cause = "統合計画の内部処理で例外が発生しました。",
+                    Impact = "統合計画は作成されていません。アバターや既存アセットは変更されていません。",
+                    Resolution = "設定を確認してもう一度実行してください。繰り返し発生する場合は、診断コードと技術詳細を添えて報告してください。",
+                    Caution = "このエラーが発生した状態では統合を適用しないでください。"
+                },
+                new DiagnosticLocalizedFields
+                {
+                    Title = "Could not create the VRChat integration plan",
+                    Summary = "An unexpected problem occurred while processing the integration settings.",
+                    Cause = "An exception occurred inside integration plan processing.",
+                    Impact = "No integration plan was created. The avatar and existing assets were not changed.",
+                    Resolution = "Review the settings and retry. If this repeats, report the diagnostic code and technical details.",
+                    Caution = "Do not apply the integration while this error is present."
+                });
         }
     }
 }
