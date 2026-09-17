@@ -48,7 +48,8 @@ jobs:
     name: Unity EditMode tests (MA installed)
     needs: package-validation
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
-    runs-on: ubuntu-latest
+    # Pin the host image because ubuntu-latest intermittently crashes Crunch during import.
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -87,7 +88,8 @@ jobs:
     name: Unity no-MA compile smoke
     needs: package-validation
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
-    runs-on: ubuntu-latest
+    # Pin the host image because ubuntu-latest intermittently crashes Crunch during import.
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     env:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
