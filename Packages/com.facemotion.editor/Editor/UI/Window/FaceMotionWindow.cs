@@ -2,6 +2,7 @@ using System;
 using FaceMotion.Data;
 using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Controllers;
+using FaceMotion.Editor.UI.Guidance;
 using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Preview;
 using FaceMotion.Editor.UI.Session;
@@ -9,7 +10,9 @@ using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Timeline;
 using FaceMotion.Editor.Preview;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace FaceMotion.Editor.UI.Window
 {
@@ -23,6 +26,7 @@ namespace FaceMotion.Editor.UI.Window
         public const string WindowTitle = "FaceMotion";
 
         private const float ToolbarHeight = 22f;
+        internal const float GuidanceHeight = 26f;
         internal const float MinimumWindowWidth = 900f;
         internal const float MinimumWindowHeight = 700f;
         internal const float MinimumLeftColumnWidth = 320f;
@@ -38,6 +42,7 @@ namespace FaceMotion.Editor.UI.Window
         internal const float MaximumPreviewHeightRatio = 0.7f;
         private const string LeftColumnRatioKey = "FaceMotion.Window.v1.LeftColumnRatio";
         private const string PreviewHeightRatioKey = "FaceMotion.Window.v1.PreviewHeightRatio";
+        private const int MaximumPendingAvatarRestoreAttempts = 8;
 
         private FaceMotionEditorSession _session;
         private ProjectController _project;
@@ -48,6 +53,7 @@ namespace FaceMotion.Editor.UI.Window
         private TimelineView _timelineView;
         private PreviewSession _previewSession;
         private SceneApplySession _sceneApplySession;
+        private PreviewPlaybackController _playback;
 
         private ProjectPanel _projectPanel;
         private AvatarPanel _avatarPanel;
@@ -57,17 +63,20 @@ namespace FaceMotion.Editor.UI.Window
         private DiagnosticsPanel _diagnosticsPanel;
         private GenerationPanel _generationPanel;
         private ExportPanel _exportPanel;
-        private DirectVRChatIntegrationPanel _integrationPanel;
+        private OneClickIntegrationPanel _integrationPanel;
         private PreviewPanel _previewPanel;
+        private ShortcutHelpPanel _shortcutHelpPanel;
 
-        private bool _playbackInitialized;
-        private double _lastUpdateRealtime;
         private float _leftColumnRatio = DefaultLeftColumnRatio;
         private bool _draggingSplitter;
         private float _previewHeightRatio = DefaultPreviewHeightRatio;
         private bool _draggingPreviewSplitter;
         private Vector2 _leftScrollPosition;
         private int _sessionChangedCount;
+        private string _pendingAvatarGlobalObjectId;
+        private string _pendingAvatarScenePath;
+        private int _pendingAvatarRestoreAttempts;
+        private string _lastPreviewAnimationId;
         private readonly PreviewRepaintScheduler _previewRepaint = new PreviewRepaintScheduler();
 
         // Unity's MenuItem attribute requires a compile-time constant, so it uses the Japanese default.
@@ -91,21 +100,24 @@ namespace FaceMotion.Editor.UI.Window
             _timelineView = new TimelineView(_session, _keys, _tracks);
             _previewSession = new PreviewSession();
             _sceneApplySession = new SceneApplySession();
+            _playback = new PreviewPlaybackController(_session);
 
             _projectPanel = new ProjectPanel(_session, _project);
             _avatarPanel = new AvatarPanel(_session, _avatar);
             _animationListPanel = new AnimationListPanel(_session, _animations);
-            _trackListPanel = new TrackListPanel(_session, _tracks);
+            _trackListPanel = new TrackListPanel(_session, _tracks, _previewSession.Override);
             _inspectorPanel = new KeyframeInspectorPanel(_session, _keys);
             _diagnosticsPanel = new DiagnosticsPanel(_session);
             _generationPanel = new GenerationPanel(_session);
             _exportPanel = new ExportPanel(_session);
-            _integrationPanel = new DirectVRChatIntegrationPanel(_session);
-            _previewPanel = new PreviewPanel(_session, _previewSession, _sceneApplySession);
+            _integrationPanel = new OneClickIntegrationPanel(_session);
+            _previewPanel = new PreviewPanel(_session, _previewSession, _sceneApplySession, _playback);
+            _shortcutHelpPanel = new ShortcutHelpPanel();
             _leftColumnRatio = Mathf.Clamp(EditorPrefs.GetFloat(LeftColumnRatioKey, DefaultLeftColumnRatio), 0.1f, MaximumLeftColumnRatio);
             _previewHeightRatio = Mathf.Clamp(EditorPrefs.GetFloat(PreviewHeightRatioKey, DefaultPreviewHeightRatio), 0.1f, MaximumPreviewHeightRatio);
 
             RestoreSessionState();
+            _lastPreviewAnimationId = _session.SelectedAnimationId;
 
             _session.Changed += OnSessionChanged;
             EditorApplication.update += OnEditorUpdate;
@@ -113,6 +125,9 @@ namespace FaceMotion.Editor.UI.Window
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            EditorSceneManager.sceneOpened += OnSceneOpened;
+            EditorSceneManager.activeSceneChangedInEditMode += OnActiveSceneChanged;
+            EditorApplication.delayCall += RestorePendingAvatar;
         }
 
         private void OnDisable()
@@ -124,6 +139,9 @@ namespace FaceMotion.Editor.UI.Window
             Undo.undoRedoPerformed -= OnUndoRedoPerformed;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
             EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorSceneManager.sceneOpened -= OnSceneOpened;
+            EditorSceneManager.activeSceneChangedInEditMode -= OnActiveSceneChanged;
+            EditorApplication.delayCall -= RestorePendingAvatar;
             _sceneApplySession?.Dispose();
             _previewSession?.Dispose();
 
@@ -134,7 +152,9 @@ namespace FaceMotion.Editor.UI.Window
                     _session.ActiveProjectAssetPath,
                     _session.SelectedAnimationId,
                     _session.ViewState.CurrentTime,
-                    _session.ViewState.Zoom);
+                    _session.ViewState.Zoom,
+                    GetAvatarGlobalObjectId(_session.ActiveDescriptor),
+                    GetAvatarScenePath(_session.ActiveDescriptor));
             }
 
             EditorPrefs.SetFloat(LeftColumnRatioKey, _leftColumnRatio);
@@ -165,7 +185,10 @@ namespace FaceMotion.Editor.UI.Window
             DrawToolbar();
             GUILayout.EndArea();
 
-            Rect area = new Rect(0f, ToolbarHeight, position.width, position.height - ToolbarHeight);
+            DrawGuidance();
+
+            float contentTop = ToolbarHeight + GuidanceHeight;
+            Rect area = new Rect(0f, contentTop, position.width, Mathf.Max(0f, position.height - contentTop));
             float leftWidth = CalculateLeftColumnWidth(position.width, _leftColumnRatio);
             Rect leftRect = new Rect(area.x, area.y, leftWidth, area.height);
             Rect splitterRect = new Rect(leftRect.xMax, area.y, SplitterWidth, area.height);
@@ -241,6 +264,26 @@ namespace FaceMotion.Editor.UI.Window
             EditorGUILayout.EndHorizontal();
         }
 
+        private void DrawGuidance()
+        {
+            FaceMotionGuidanceModel model = FaceMotionWorkflowHintService.Evaluate(_session);
+            string step = string.Format(FaceMotionUiText.Get("guidanceStepFormat"), model.StepNumber);
+            string hint = FaceMotionUiText.Get(model.HintKey);
+            GUILayout.BeginArea(new Rect(0f, ToolbarHeight, position.width, GuidanceHeight));
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            GUILayout.Label(step, EditorStyles.miniBoldLabel, GUILayout.Width(52f));
+            GUILayout.Label(FaceMotionUiText.Get("guidanceNextAction"), EditorStyles.miniLabel, GUILayout.Width(88f));
+            GUILayout.Label(hint, EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            if (model.IsComplete)
+            {
+                GUILayout.Label(FaceMotionUiText.Get("guidanceCompleteBadge"), EditorStyles.miniBoldLabel, GUILayout.Width(40f));
+            }
+
+            EditorGUILayout.EndHorizontal();
+            GUILayout.EndArea();
+        }
+
         private void ShowFileMenu()
         {
             var menu = new GenericMenu();
@@ -285,6 +328,8 @@ namespace FaceMotion.Editor.UI.Window
             EditorGUILayout.Space();
             _diagnosticsPanel.OnGUI();
             EditorGUILayout.Space();
+            _shortcutHelpPanel.OnGUI();
+            EditorGUILayout.Space();
             GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
@@ -322,6 +367,7 @@ namespace FaceMotion.Editor.UI.Window
 
         private void DrawRightColumn(Rect rect)
         {
+            bool inspectorOwnsKeyboard = KeyframeInspectorPanel.OwnsKeyboardFocus();
             float previewHeight = CalculatePreviewHeight(rect.height, _previewHeightRatio);
             Rect previewRect = new Rect(rect.x, rect.y, rect.width, previewHeight);
             Rect splitterRect = new Rect(rect.x, previewRect.yMax, rect.width, SplitterWidth);
@@ -331,19 +377,20 @@ namespace FaceMotion.Editor.UI.Window
 
             GUILayout.BeginArea(previewRect);
             GUI.Box(new Rect(0f, 0f, previewRect.width, previewRect.height), GUIContent.none, EditorStyles.helpBox);
-            _previewPanel.OnGUI(new Rect(0f, 0f, previewRect.width, previewRect.height));
+            _previewPanel.OnGUI(new Rect(0f, 0f, previewRect.width, previewRect.height), inspectorOwnsKeyboard);
             GUILayout.EndArea();
 
             DrawPreviewSplitter(splitterRect, rect);
-
-            GUILayout.BeginArea(timelineRect);
-            _timelineView.OnGUI(new Rect(0f, 0f, rect.width, timelineHeight));
-            GUILayout.EndArea();
 
             GUILayout.BeginArea(inspectorRect);
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             _inspectorPanel.OnGUI();
             EditorGUILayout.EndVertical();
+            GUILayout.EndArea();
+
+            // Inspector focus also blocks preview F-focus and timeline shortcuts.
+            GUILayout.BeginArea(timelineRect);
+            _timelineView.OnGUI(new Rect(0f, 0f, rect.width, timelineHeight), inspectorOwnsKeyboard);
             GUILayout.EndArea();
         }
 
@@ -379,7 +426,7 @@ namespace FaceMotion.Editor.UI.Window
 
         private void RestoreSessionState()
         {
-            FaceMotionSessionStateStore.Load(out string projectPath, out string animationId, out float time, out float zoom);
+            FaceMotionSessionStateStore.Load(out string projectPath, out string animationId, out float time, out float zoom, out string avatarGlobalObjectId, out string avatarScenePath);
             if (!string.IsNullOrEmpty(projectPath))
             {
                 var asset = AssetDatabase.LoadAssetAtPath<FaceMotionProject>(projectPath);
@@ -399,6 +446,101 @@ namespace FaceMotion.Editor.UI.Window
                 _session.SetCurrentTime(time);
                 _session.ViewState.Zoom = zoom;
             }
+
+            RestoreAvatar(avatarGlobalObjectId, avatarScenePath);
+        }
+
+        internal static bool TryResolveAvatarDescriptor(string globalObjectId, out VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
+        {
+            return TryResolveAvatarDescriptor(globalObjectId, string.Empty, out descriptor);
+        }
+
+        internal static bool TryResolveAvatarDescriptor(string globalObjectId, string expectedScenePath, out VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
+        {
+            descriptor = null;
+            if (string.IsNullOrEmpty(globalObjectId)
+                || !GlobalObjectId.TryParse(globalObjectId, out var id))
+            {
+                return false;
+            }
+
+            descriptor = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as VRC.SDK3.Avatars.Components.VRCAvatarDescriptor;
+            if (descriptor == null || !descriptor.gameObject.scene.IsValid() || !descriptor.gameObject.scene.isLoaded
+                // A valid avatar may be in a loaded additive scene which is not active.
+                || (!string.IsNullOrEmpty(expectedScenePath)
+                    && !string.Equals(descriptor.gameObject.scene.path, expectedScenePath, StringComparison.Ordinal)))
+            {
+                descriptor = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        private static string GetAvatarGlobalObjectId(VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
+        {
+            if (descriptor == null || EditorUtility.IsPersistent(descriptor) || !descriptor.gameObject.scene.IsValid())
+            {
+                return string.Empty;
+            }
+
+            return GlobalObjectId.GetGlobalObjectIdSlow(descriptor).ToString();
+        }
+
+        private static string GetAvatarScenePath(VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
+        {
+            return descriptor == null || !descriptor.gameObject.scene.IsValid()
+                ? string.Empty
+                : descriptor.gameObject.scene.path;
+        }
+
+        private void RestoreAvatar(string globalObjectId, string scenePath)
+        {
+            if (TryResolveAvatarDescriptor(globalObjectId, scenePath, out var descriptor))
+            {
+                _avatar.SetDescriptor(descriptor);
+                _pendingAvatarGlobalObjectId = null;
+                _pendingAvatarScenePath = null;
+                _pendingAvatarRestoreAttempts = 0;
+                return;
+            }
+
+            bool isNewPendingAvatar = !string.Equals(_pendingAvatarGlobalObjectId, globalObjectId, StringComparison.Ordinal)
+                || !string.Equals(_pendingAvatarScenePath, scenePath, StringComparison.Ordinal);
+            _pendingAvatarGlobalObjectId = globalObjectId;
+            _pendingAvatarScenePath = scenePath;
+            if (isNewPendingAvatar)
+            {
+                _pendingAvatarRestoreAttempts = 0;
+            }
+        }
+
+        private void RestorePendingAvatar()
+        {
+            if (string.IsNullOrEmpty(_pendingAvatarGlobalObjectId)
+                || _session?.ActiveDescriptor != null
+                || _pendingAvatarRestoreAttempts >= MaximumPendingAvatarRestoreAttempts)
+            {
+                return;
+            }
+
+            _pendingAvatarRestoreAttempts++;
+            RestoreAvatar(_pendingAvatarGlobalObjectId, _pendingAvatarScenePath);
+            if (!string.IsNullOrEmpty(_pendingAvatarGlobalObjectId) && _session?.ActiveDescriptor == null)
+            {
+                // OnEnable can precede hierarchy and AvatarIndex availability.
+                EditorApplication.delayCall += RestorePendingAvatar;
+            }
+        }
+
+        private void OnSceneOpened(Scene scene, OpenSceneMode mode)
+        {
+            RestorePendingAvatar();
+        }
+
+        private void OnActiveSceneChanged(Scene oldScene, Scene newScene)
+        {
+            RestorePendingAvatar();
         }
 
         private void OpenProjectDialog()
@@ -413,8 +555,7 @@ namespace FaceMotion.Editor.UI.Window
 
         private void TogglePlayback()
         {
-            _session.ViewState.IsPlaying = !_session.ViewState.IsPlaying;
-            _playbackInitialized = false;
+            _playback.Toggle();
         }
 
         private void FitTimeline()
@@ -437,62 +578,13 @@ namespace FaceMotion.Editor.UI.Window
 
         private void OnEditorUpdate()
         {
-            if (_session?.ViewState == null)
-            {
-                return;
-            }
-
-            if (_session.ViewState.IsPlaying && _session.ActiveProject != null)
-            {
-                double now = EditorApplication.timeSinceStartup;
-                if (!_playbackInitialized)
-                {
-                    _lastUpdateRealtime = now;
-                    _playbackInitialized = true;
-                    return;
-                }
-
-                float dt = Mathf.Max(0f, (float)(now - _lastUpdateRealtime));
-                _lastUpdateRealtime = now;
-                AdvancePlayback(dt);
-            }
-        }
-
-        private void AdvancePlayback(float dt)
-        {
-            var animation = _session.GetSelectedAnimation();
-            if (animation == null || animation.Timeline == null || dt <= 0f)
-            {
-                return;
-            }
-
-            float t = _session.ViewState.CurrentTime + dt;
-            float duration = animation.Timeline.Duration;
-            if (duration > 0f)
-            {
-                if (animation.Timeline.Loop)
-                {
-                    t = t % duration;
-                }
-                else
-                {
-                    t = Mathf.Min(t, duration);
-                    if (Mathf.Approximately(t, duration))
-                    {
-                        _session.ViewState.IsPlaying = false;
-                    }
-                }
-            }
-
-            if (!Mathf.Approximately(_session.ViewState.CurrentTime, t))
-            {
-                _session.SetCurrentTime(t);
-            }
+            _playback?.Tick(EditorApplication.timeSinceStartup);
         }
 
         private void OnHierarchyChanged()
         {
             _avatar?.MarkAvatarDirtyFromHierarchy();
+            RestorePendingAvatar();
         }
 
         private void OnUndoRedoPerformed()
@@ -505,6 +597,12 @@ namespace FaceMotion.Editor.UI.Window
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
                 return;
+            }
+
+            if (!string.Equals(_lastPreviewAnimationId, _session.SelectedAnimationId, StringComparison.Ordinal))
+            {
+                _lastPreviewAnimationId = _session.SelectedAnimationId;
+                _previewSession?.Override.Clear();
             }
 
             _sessionChangedCount++;
@@ -582,6 +680,11 @@ namespace FaceMotion.Editor.UI.Window
 
         private void OnBeforeAssemblyReload()
         {
+            if (_session != null)
+            {
+                _session.ViewState.IsPlaying = false;
+            }
+
             _sceneApplySession?.Dispose();
             _previewSession?.Dispose();
         }
@@ -590,6 +693,11 @@ namespace FaceMotion.Editor.UI.Window
         {
             if (state == PlayModeStateChange.ExitingEditMode || state == PlayModeStateChange.ExitingPlayMode)
             {
+                if (_session != null)
+                {
+                    _session.ViewState.IsPlaying = false;
+                }
+
                 _sceneApplySession?.Dispose();
                 _previewSession?.Dispose();
             }

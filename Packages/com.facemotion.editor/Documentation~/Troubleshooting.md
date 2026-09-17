@@ -8,6 +8,7 @@
 | Avatar が候補にない | scene 内の active avatar root と `VRCAvatarDescriptor` を確認します。Prefab asset ではなく scene object を選びます。 |
 | BlendShape が出ない | avatar を選択し直します。対象 SkinnedMeshRenderer に shared mesh / BlendShape があるか確認します。 |
 | Preview が更新されない | FaceMotion Project と Animation、avatar selection、enabled track / key を確認し、**プレビューを再構築** を試します。 |
+| Preview camera が操作できない | preview area に pointer を置きます。Alt+left drag は orbit、middle drag は pan、wheel または Alt+right drag は zoom、F は focus です。 |
 | Export できない | `Assets` 配下の `.anim` path、positive duration / frame rate、enabled track の binding と key を確認します。親 folder は自動作成されます。 |
 | MA backend が出ない | Modular Avatar `1.18.7` が導入済みか確認します。未導入時は正常に unavailable です。 |
 
@@ -16,6 +17,9 @@
 | 症状 | 確認 |
 | --- | --- |
 | Direct Apply が block される | Plan の diagnostic を確認します。parameter/binding conflict、menu capacity、expression budget、output path を確認します。restart後のManifest recoveryを使うsceneは、Apply前にsceneを保存します。 |
+| **VRChatへ追加** が停止する | `FM-J4-*` diagnostic を確認します。animation / avatar 未選択、backend unavailable、foreign clip は Apply 前に安全に停止します。 |
+| ワンクリックで既存 clip を更新できない | FaceMotion 所有でない AnimationClip は上書きしません。foreign clip を移動するか、別の animation 名を使います。 |
+| backend を切り替えた | `FM-J4-CROSS-BACKEND` warning を確認します。Direct と MA の生成物を理解した上で再適用してください。 |
 | `FM-G-WRITE-DEFAULTS` | 既存 FX state の Write Defaults ON が検出されています。FaceMotion は original FX を変更しません。影響を確認した controller で検証してください。 |
 | MA Apply 後に動かない | scene を保存し、Build & Test で parameter toggle を確認します。Merge Animator、parameter/menu installer、binding target を確認します。 |
 | OFF で戻らない | FaceMotion source AnimationClip の binding が baseline と一致するか確認します。OFF state は avatar の全状態 reset ではありません。 |

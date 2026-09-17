@@ -110,5 +110,28 @@ namespace FaceMotion.Editor.UI.Timeline
 
             return major;
         }
+
+        /// <summary>Returns the first finite tick on <paramref name="step"/>'s lattice at or after the visible start.</summary>
+        public static float FirstVisibleTick(float scrollTime, float step)
+        {
+            if (step <= 0f || float.IsNaN(step) || float.IsInfinity(step))
+            {
+                return 0f;
+            }
+
+            float start = float.IsNaN(scrollTime) || float.IsInfinity(scrollTime) ? 0f : Mathf.Max(0f, scrollTime);
+            float tick = Mathf.Ceil((start / step) - 1e-4f) * step;
+            return float.IsNaN(tick) || float.IsInfinity(tick) ? 0f : tick;
+        }
+
+        public static bool IsMajorTick(float time, float majorStep)
+        {
+            if (majorStep <= 0f || float.IsNaN(time) || float.IsInfinity(time))
+            {
+                return false;
+            }
+
+            return Mathf.Abs(time - Mathf.Round(time / majorStep) * majorStep) <= Mathf.Max(1e-4f, majorStep * 1e-4f);
+        }
     }
 }

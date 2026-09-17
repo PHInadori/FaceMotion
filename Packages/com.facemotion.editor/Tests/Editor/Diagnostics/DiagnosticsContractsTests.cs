@@ -16,7 +16,7 @@ namespace FaceMotion.Editor.Tests
     /// </summary>
     public sealed class DiagnosticsContractsTests
     {
-        private const int ExpectedCodeCount = 137;
+        private const int ExpectedCodeCount = 147;
 
         [Test]
         public void Codes_ConstantsMatchRegisteredKeys_NoDuplicates()
@@ -52,13 +52,13 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void Registry_KnownCountIs137()
+        public void Registry_KnownCountMatchesExpected()
         {
             Assert.That(FaceMotionDiagnosticDefinitionRegistry.All.Count, Is.EqualTo(ExpectedCodeCount));
         }
 
         [Test]
-        public void Localization_JapaneseAndEnglishEachCount137_NoDivergence()
+                public void Localization_JapaneseAndEnglishEachMatchExpectedCount_NoDivergence()
         {
             IReadOnlyDictionary<string, DiagnosticLocalizedText> ja = FaceMotionDiagnosticLocalizationCatalog.JapaneseEntries;
             IReadOnlyDictionary<string, DiagnosticLocalizedText> en = FaceMotionDiagnosticLocalizationCatalog.EnglishEntries;
@@ -129,15 +129,15 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void ActionLevel_InfoCodesResolveToInfo_ExactlyNine()
+                public void ActionLevel_InfoCodesResolveToInfo_ExactlyFourteen()
         {
             var infoCodes = FaceMotionDiagnosticDefinitionRegistry.All
                 .Where(pair => pair.Value.NonBlockingActionLevel == FaceMotionDiagnosticActionLevel.Info)
                 .Select(pair => pair.Key)
                 .ToArray();
 
-            Assert.That(infoCodes.Length, Is.EqualTo(9),
-                "Expected exactly nine Info codes, got: " + string.Join(",", infoCodes));
+            Assert.That(infoCodes.Length, Is.EqualTo(14),
+                "Expected exactly fourteen Info codes, got: " + string.Join(",", infoCodes));
 
             foreach (string code in infoCodes)
             {

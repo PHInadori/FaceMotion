@@ -190,7 +190,7 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-EXPORT-UNSUPPORTED-ROTATION` | Recommended | export |
 | `FM-EXPORT-INVALID-KEY` | Recommended | export |
 
-### Integration Direct（FM-G）– 21 code
+### Integration Direct（FM-G）– 22 code
 
 | Code | 既定レベル | 分類 |
 | --- | --- | --- |
@@ -215,8 +215,9 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-G-WRITE-DEFAULTS` | Recommended | integration-direct |
 | `FM-G-BINDING-CONFLICT` | Recommended | integration-direct |
 | `FM-G-MANIFEST` | Recommended | integration-direct |
+| `FM-G-PLAN-UNEXPECTED` | Recommended | integration-direct |
 
-### Integration Modular Avatar（FM-H-MA）– 20 code
+### Integration Modular Avatar（FM-H-MA）– 21 code
 
 | Code | 既定レベル | 分類 |
 | --- | --- | --- |
@@ -240,8 +241,26 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-H-MA-PARAMETER-CONFLICT` | Recommended | integration-modular-avatar |
 | `FM-H-MA-BINDING-CONFLICT` | Recommended | integration-modular-avatar |
 | `FM-H-MA-CROSS-BINDING-CONFLICT` | Recommended | integration-modular-avatar |
+| `FM-H-MA-PLAN-UNEXPECTED` | Recommended | integration-modular-avatar |
 
-計 **135** code。全 code の `CanAutoFix` は `false` です。自動修復は行わず、常に safety を優先します。
+### Integration One-Click（FM-J4）– 10 code
+
+`VRChat 統合` のワンクリックフロー（Export → Plan → Validate → Apply）が返すコードです。停止系は blocking として **対処が必要** に、完了・再利用の通知は **情報** になります。
+
+| Code | 既定レベル | 分類 |
+| --- | --- | --- |
+| `FM-J4-NO-ANIMATION` | Recommended | integration-one-click |
+| `FM-J4-NO-AVATAR` | Recommended | integration-one-click |
+| `FM-J4-FOREIGN-CLIP` | Recommended | integration-one-click |
+| `FM-J4-BACKEND-UNAVAILABLE` | Recommended | integration-one-click |
+| `FM-J4-CROSS-BACKEND` | Info | integration-one-click |
+| `FM-J4-EXPORTED` | Info | integration-one-click |
+| `FM-J4-REAPPLIED` | Info | integration-one-click |
+| `FM-J4-SUCCEEDED` | Info | integration-one-click |
+| `FM-J4-APPLY-STOPPED` | Recommended | integration-one-click |
+| `FM-J4-NO-PARTIAL-STATE` | Info | integration-one-click |
+
+計 **147** code。全 code の `CanAutoFix` は `false` です。自動修復は行わず、常に safety を優先します。
 
 ## 関連ドキュメント
 

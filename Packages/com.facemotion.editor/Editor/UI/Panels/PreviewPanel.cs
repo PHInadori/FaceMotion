@@ -16,15 +16,18 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly FaceMotionEditorSession _session;
         private readonly PreviewSession _preview;
         private readonly SceneApplySession _sceneApply;
+        private readonly PreviewPlaybackController _playback;
+        private int _lastOverrideChangeCount;
 
-        public PreviewPanel(FaceMotionEditorSession session, PreviewSession preview, SceneApplySession sceneApply)
+        public PreviewPanel(FaceMotionEditorSession session, PreviewSession preview, SceneApplySession sceneApply, PreviewPlaybackController playback)
         {
             _session = session;
             _preview = preview;
             _sceneApply = sceneApply;
+            _playback = playback;
         }
 
-        public void OnGUI(Rect assignedRect)
+        public void OnGUI(Rect assignedRect, bool textControlOwnsKeyboard = false)
         {
             var layout = CalculateLayout(assignedRect);
             GUI.Label(layout.HeaderRect, FaceMotionUiText.Get("preview"), EditorStyles.boldLabel);
@@ -63,17 +66,41 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 bool fit = false;
                 bool reset = false;
-                if (GUI.Button(new Rect(layout.ControlsRect.x, layout.ControlsRect.y + 24f, 60f, 20f), FaceMotionUiText.Get("fitAvatar")))
+                float buttonX = layout.ControlsRect.x;
+                float buttonY = layout.ControlsRect.y + 24f;
+                EditorGUI.BeginDisabledGroup(!_playback.CanPlay);
+                if (GUI.Button(new Rect(buttonX, buttonY, 52f, 20f), FaceMotionUiText.Get("previewPlay")))
+                {
+                    _playback.Play();
+                }
+
+                buttonX += 54f;
+                if (GUI.Button(new Rect(buttonX, buttonY, 52f, 20f), FaceMotionUiText.Get("previewPause")))
+                {
+                    _playback.Pause();
+                }
+
+                buttonX += 54f;
+                if (GUI.Button(new Rect(buttonX, buttonY, 52f, 20f), FaceMotionUiText.Get("previewStop")))
+                {
+                    _playback.Stop();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                buttonX += 54f;
+                if (GUI.Button(new Rect(buttonX, buttonY, 60f, 20f), FaceMotionUiText.Get("fitAvatar")))
                 {
                     fit = true;
                 }
 
-                if (GUI.Button(new Rect(layout.ControlsRect.x + 64f, layout.ControlsRect.y + 24f, 60f, 20f), FaceMotionUiText.Get("resetView")))
+                buttonX += 64f;
+                if (GUI.Button(new Rect(buttonX, buttonY, 60f, 20f), FaceMotionUiText.Get("resetView")))
                 {
                     reset = true;
                 }
 
-                GUI.Label(new Rect(layout.ControlsRect.x + 130f, layout.ControlsRect.y + 24f, layout.ControlsRect.width - 130f, 20f), FaceMotionUiText.Get("previewControls"), EditorStyles.miniLabel);
+                buttonX += 64f;
+                GUI.Label(new Rect(buttonX, buttonY, Mathf.Max(0f, layout.ControlsRect.xMax - buttonX), 20f), FaceMotionUiText.Get("previewControls"), EditorStyles.miniLabel);
                 Rect previewRect = layout.RenderRect;
                 if (fit)
                 {
@@ -85,7 +112,13 @@ namespace FaceMotion.Editor.UI.Panels
                     _preview.ResetCamera();
                 }
 
-                _preview.HandleCameraInput(previewRect);
+                if (_lastOverrideChangeCount != _preview.Override.ChangeCount)
+                {
+                    _lastOverrideChangeCount = _preview.Override.ChangeCount;
+                    _preview.Evaluate(_session.GetSelectedAnimation(), _session.ViewState.CurrentTime);
+                }
+
+                _preview.HandleCameraInput(previewRect, textControlOwnsKeyboard);
                 _preview.Draw(previewRect);
 
                 if (!string.IsNullOrEmpty(_preview.Diagnostic))

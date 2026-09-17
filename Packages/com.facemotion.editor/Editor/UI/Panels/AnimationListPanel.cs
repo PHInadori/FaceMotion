@@ -70,6 +70,11 @@ namespace FaceMotion.Editor.UI.Panels
                 EditorGUILayout.EndHorizontal();
             }
 
+            if (count == 0)
+            {
+                EditorGUILayout.HelpBox(FaceMotionUiText.Get("emptyAnimations"), MessageType.Info);
+            }
+
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button(FaceMotionUiText.Get("newAnimation"), GUILayout.Width(140)))
             {
@@ -145,7 +150,7 @@ namespace FaceMotion.Editor.UI.Panels
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(FaceMotionUiText.Get("timelineSettings"), EditorStyles.miniBoldLabel);
             EditorGUILayout.BeginHorizontal();
-            _durationBuffer = EditorGUILayout.FloatField(FaceMotionUiText.Get("duration"), _durationBuffer);
+            _durationBuffer = EditorGUILayout.FloatField(new GUIContent(FaceMotionUiText.Get("duration"), FaceMotionUiText.Get("tooltipDuration")), _durationBuffer);
             if (GUILayout.Button(FaceMotionUiText.Get("apply"), GUILayout.Width(48f)))
             {
                 if (_animation.SetDuration(_durationBuffer))
@@ -157,7 +162,7 @@ namespace FaceMotion.Editor.UI.Panels
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.BeginHorizontal();
-            _frameRateBuffer = EditorGUILayout.FloatField(FaceMotionUiText.Get("frameRate"), _frameRateBuffer);
+            _frameRateBuffer = EditorGUILayout.FloatField(new GUIContent(FaceMotionUiText.Get("frameRate"), FaceMotionUiText.Get("tooltipFrameRate")), _frameRateBuffer);
             if (GUILayout.Button(FaceMotionUiText.Get("apply"), GUILayout.Width(48f)))
             {
                 if (_animation.SetFrameRate(_frameRateBuffer))
@@ -168,7 +173,7 @@ namespace FaceMotion.Editor.UI.Panels
 
             EditorGUILayout.EndHorizontal();
 
-            bool loop = EditorGUILayout.Toggle(FaceMotionUiText.Get("loop"), _loopBuffer);
+            bool loop = EditorGUILayout.Toggle(new GUIContent(FaceMotionUiText.Get("loop"), FaceMotionUiText.Get("tooltipLoop")), _loopBuffer);
             if (loop != _loopBuffer)
             {
                 _loopBuffer = loop;

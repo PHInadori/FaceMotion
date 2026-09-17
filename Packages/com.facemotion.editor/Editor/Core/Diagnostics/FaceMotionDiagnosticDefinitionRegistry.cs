@@ -5,7 +5,7 @@ namespace FaceMotion.Diagnostics
     /// <summary>
     /// Central registry of non-UI diagnostic metadata, keyed by diagnostic code. Lookup is
     /// O(1) through a prebuilt Dictionary. Definitions are registered per category in
-    /// separate partial files so the 137-entry surface stays readable.
+    /// separate partial files so the 147-entry surface stays readable.
     /// </summary>
     public static partial class FaceMotionDiagnosticDefinitionRegistry
     {
@@ -21,6 +21,7 @@ namespace FaceMotion.Diagnostics
             RegisterCommandUiExportCodes(Definitions);
             RegisterIntegrationDirectCodes(Definitions);
             RegisterModularAvatarCodes(Definitions);
+            RegisterOneClickCodes(Definitions);
         }
 
         /// <summary>Returns the definition for a code, or null when the code is unknown.</summary>
@@ -60,5 +61,6 @@ namespace FaceMotion.Diagnostics
         static partial void RegisterCommandUiExportCodes(Dictionary<string, DiagnosticDefinition> defs);
         static partial void RegisterIntegrationDirectCodes(Dictionary<string, DiagnosticDefinition> defs);
         static partial void RegisterModularAvatarCodes(Dictionary<string, DiagnosticDefinition> defs);
+        static partial void RegisterOneClickCodes(Dictionary<string, DiagnosticDefinition> defs);
     }
 }

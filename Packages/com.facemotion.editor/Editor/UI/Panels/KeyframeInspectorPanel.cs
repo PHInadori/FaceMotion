@@ -11,6 +11,7 @@ namespace FaceMotion.Editor.UI.Panels
 {
     public sealed class KeyframeInspectorPanel
     {
+        internal const string EditableControlPrefix = "FaceMotion.KeyInspector.";
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
 
@@ -38,26 +39,29 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (inspected == null || selectedTrack == null)
             {
-                _time = EditorGUILayout.FloatField(FaceMotionUiText.Get("time"), _time);
-                EditorGUILayout.HelpBox(FaceMotionUiText.Get("noKeySelected"), MessageType.Info);
+                _time = DrawFloatField("time", FaceMotionUiText.Get("time"), _time);
+                bool hasTrackSelected = !string.IsNullOrEmpty(_session.SelectedTrackId);
+                EditorGUILayout.HelpBox(
+                    FaceMotionUiText.Get(hasTrackSelected ? "emptyKeys" : "noKeySelected"),
+                    MessageType.Info);
             }
             else
             {
-                _time = EditorGUILayout.FloatField(FaceMotionUiText.Get("time"), _time);
+                _time = DrawFloatField("time", FaceMotionUiText.Get("time"), _time);
                 var track = selectedTrack;
                 if (track != null)
                 {
                     if (track.Kind == TrackKind.BlendShape)
                     {
-                        _floatValue = EditorGUILayout.FloatField(FaceMotionUiText.Get("blendShape"), _floatValue);
+                        _floatValue = DrawFloatField("blendShape", FaceMotionUiText.Get("blendShape"), _floatValue);
                     }
                     else if (TrackKinds.IsTransform(track.Kind))
                     {
                         EditorGUILayout.LabelField(FaceMotionUiText.Get("value"));
                         EditorGUI.indentLevel++;
-                        _vectorValue.x = EditorGUILayout.FloatField(FaceMotionUiText.Get("xLocal"), _vectorValue.x);
-                        _vectorValue.y = EditorGUILayout.FloatField(FaceMotionUiText.Get("yLocal"), _vectorValue.y);
-                        _vectorValue.z = EditorGUILayout.FloatField(FaceMotionUiText.Get("zLocal"), _vectorValue.z);
+                        _vectorValue.x = DrawFloatField("x", FaceMotionUiText.Get("xLocal"), _vectorValue.x);
+                        _vectorValue.y = DrawFloatField("y", FaceMotionUiText.Get("yLocal"), _vectorValue.y);
+                        _vectorValue.z = DrawFloatField("z", FaceMotionUiText.Get("zLocal"), _vectorValue.z);
                         EditorGUI.indentLevel--;
                     }
 
@@ -81,7 +85,7 @@ namespace FaceMotion.Editor.UI.Panels
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("addKey"), FaceMotionUiText.Get("addKey")), EditorStyles.miniButtonLeft, GUILayout.Height(22f)))
             {
-                var created = _keys.AddKeyAt(_time, _floatValue, _vectorValue, (InterpolationType)_interpolationIndex);
+                var created = _keys.AddKeyAtCurrentTime(_floatValue, _vectorValue, (InterpolationType)_interpolationIndex);
                 if (created != null)
                 {
                     _inspectedKeyId = created;
@@ -121,6 +125,17 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 LoadFields(inspected, track);
             }
+        }
+
+        internal static bool OwnsKeyboardFocus()
+        {
+            return GUI.GetNameOfFocusedControl().StartsWith(EditableControlPrefix, StringComparison.Ordinal);
+        }
+
+        private static float DrawFloatField(string controlId, string label, float value)
+        {
+            GUI.SetNextControlName(EditableControlPrefix + controlId);
+            return EditorGUILayout.FloatField(label, value);
         }
 
         private static readonly string[] InterpolationNames =

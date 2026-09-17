@@ -19,17 +19,33 @@ namespace FaceMotion.Editor.UI.Panels
         private DirectIntegrationPlan _plan;
         private OptionalIntegrationPlan _optionalPlan;
         private ModularAvatarIntegrationPlan _modularAvatarPlan;
-        private IntegrationBackendSelection _backend = IntegrationBackendSelection.Direct;
+        private IntegrationBackendSelection _backend;
 
-        public DirectVRChatIntegrationPanel(FaceMotionEditorSession session) { _session = session; }
+        public DirectVRChatIntegrationPanel(FaceMotionEditorSession session)
+        {
+            _session = session;
+            _backend = IntegrationBackendSelectionStore.Load();
+        }
 
         public void OnGUI()
         {
             EditorGUILayout.LabelField(FaceMotionUiText.Get("directIntegration"), EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
-            int backendIndex = EditorGUILayout.Popup(FaceMotionUiText.Get("integrationBackend"), (int)_backend, new[] { FaceMotionUiText.Get("directBackend"), FaceMotionUiText.Get("modularAvatarBackend") });
+            int backendIndex = EditorGUILayout.Popup(new GUIContent(FaceMotionUiText.Get("integrationBackend"), FaceMotionUiText.Get("tooltipBackend")), (int)_backend, new[] { FaceMotionUiText.Get("directBackend"), FaceMotionUiText.Get("modularAvatarBackend") });
             _backend = (IntegrationBackendSelection)backendIndex;
-            if (EditorGUI.EndChangeCheck()) { _plan = null; _optionalPlan = null; _modularAvatarPlan = null; }
+            if (EditorGUI.EndChangeCheck())
+            {
+                IntegrationBackendSelectionStore.Save(_backend);
+                _plan = null;
+                _optionalPlan = null;
+                _modularAvatarPlan = null;
+            }
+
+            EditorGUILayout.LabelField(
+                _backend == IntegrationBackendSelection.ModularAvatar
+                    ? FaceMotionUiText.Get("backendModularAvatarDescription")
+                    : FaceMotionUiText.Get("backendDirectDescription"),
+                EditorStyles.wordWrappedMiniLabel);
             var avatar = _session.ActiveAvatarRoot == null ? null : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
             EditorGUILayout.ObjectField(FaceMotionUiText.Get("avatar"), avatar, typeof(VRCAvatarDescriptor), true);
             _clip = (AnimationClip)EditorGUILayout.ObjectField(FaceMotionUiText.Get("animationClip"), _clip, typeof(AnimationClip), false);
@@ -119,6 +135,14 @@ namespace FaceMotion.Editor.UI.Panels
             return backend == IntegrationBackendSelection.ModularAvatar
                 && modularAvatarBackend != null
                 && modularAvatarBackend.HasExistingIntegration(avatar);
+        }
+
+        internal static IntegrationBackendSelection ResolveInitialBackend(
+            bool hasExplicitSelection,
+            IntegrationBackendSelection explicitSelection,
+            bool modularAvatarAvailable)
+        {
+            return IntegrationBackendSelectionStore.ResolveInitial(hasExplicitSelection, explicitSelection, modularAvatarAvailable);
         }
 
         internal static string FormatDiagnostic(

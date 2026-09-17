@@ -43,6 +43,11 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public void OnGUI(Rect rect)
         {
+            OnGUI(rect, false);
+        }
+
+        public void OnGUI(Rect rect, bool textControlOwnsKeyboard)
+        {
             var animation = _session.GetSelectedAnimation();
             if (animation == null || animation.Timeline == null)
             {
@@ -80,7 +85,7 @@ namespace FaceMotion.Editor.UI.Timeline
             DrawTimelineHeader(rect, animation.Timeline.FrameRate);
 
             Event current = Event.current;
-            if (current != null && _input.HandleEvent(current, plotRect, layout))
+            if (current != null && _input.HandleEvent(current, plotRect, layout, textControlOwnsKeyboard))
             {
                 current.Use();
             }

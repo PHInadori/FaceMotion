@@ -65,14 +65,15 @@ namespace FaceMotion.Editor.UI.Timeline
 
             float major = TimelineGeometry.GetMajorStep(pps);
             float minor = TimelineGeometry.GetMinorStep(pps);
-            float firstMajor = Mathf.Max(0f, scroll) % major;
-            float minorStep = minor;
+            float firstTick = TimelineGeometry.FirstVisibleTick(scroll, minor);
+            float end = scroll + TimelineGeometry.VisibleDuration(ruler.width, pps);
+            bool drewLabel = false;
 
             int maxTicks = 1000;
             float y = ruler.y;
             float h = ruler.height;
 
-            for (float t = scroll + firstMajor, i = 0f; t <= scroll + TimelineGeometry.VisibleDuration(ruler.width, pps) && i < maxTicks; t += minorStep, i++)
+            for (float t = firstTick, i = 0f; t <= end + 1e-4f && i < maxTicks; t += minor, i++)
             {
                 float x = TimelineGeometry.TimeToPixel(t, scroll, pps, plotLeft);
                 if (x < plotLeft - 1f)
@@ -80,17 +81,27 @@ namespace FaceMotion.Editor.UI.Timeline
                     continue;
                 }
 
-                bool isMajor = Mathf.Abs(t / major - Mathf.Round(t / major)) < 0.001f;
+                bool isMajor = TimelineGeometry.IsMajorTick(t, major);
                 EditorGUI.DrawRect(
                     new Rect(x, isMajor ? y : y + h * 0.5f, 1f, isMajor ? h : h * 0.5f),
                     isMajor ? MajorGridLine : GridLine);
 
                 if (isMajor)
                 {
+                    drewLabel = true;
                     SetContent(FormatTime(t, major));
                     _rulerText.normal.textColor = new Color(0.8f, 0.8f, 0.8f, 1f);
                     GUI.Label(new Rect(x + 4f, y + 2f, 90f, h - 4f), _content, _rulerText);
                 }
+            }
+
+            // A narrow view can contain no major boundary. Keep at least one readable time label visible.
+            if (!drewLabel && firstTick <= end + 1e-4f)
+            {
+                float x = TimelineGeometry.TimeToPixel(firstTick, scroll, pps, plotLeft);
+                SetContent(FormatTime(firstTick, minor));
+                _rulerText.normal.textColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+                GUI.Label(new Rect(Mathf.Max(plotLeft, x + 4f), y + 2f, 90f, h - 4f), _content, _rulerText);
             }
 
             float cursorX = TimelineGeometry.TimeToPixel(currentTime, scroll, pps, plotLeft);
@@ -106,9 +117,11 @@ namespace FaceMotion.Editor.UI.Timeline
         {
             float major = TimelineGeometry.GetMajorStep(pps);
             float minor = TimelineGeometry.GetMinorStep(pps);
+            float firstTick = TimelineGeometry.FirstVisibleTick(scroll, minor);
+            float end = scroll + TimelineGeometry.VisibleDuration(grid.width, pps);
 
             int maxTicks = 1000;
-            for (float t = scroll, i = 0f; t <= scroll + TimelineGeometry.VisibleDuration(grid.width, pps) && i < maxTicks; t += minor, i++)
+            for (float t = firstTick, i = 0f; t <= end + 1e-4f && i < maxTicks; t += minor, i++)
             {
                 if (t < 0f)
                 {
@@ -121,7 +134,7 @@ namespace FaceMotion.Editor.UI.Timeline
                     continue;
                 }
 
-                bool isMajor = Mathf.Abs(t / major - Mathf.Round(t / major)) < 0.001f;
+                bool isMajor = TimelineGeometry.IsMajorTick(t, major);
                 EditorGUI.DrawRect(new Rect(x, grid.y, 1f, grid.height), isMajor ? MajorGridLine : GridLine);
             }
         }

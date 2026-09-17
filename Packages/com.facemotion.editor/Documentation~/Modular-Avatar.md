@@ -1,13 +1,13 @@
 # Modular Avatar Integration
 
-Modular Avatar backend は任意です。`nadena.dev.modular-avatar` `1.18.7` が導入されている場合にだけ `Modular Avatar (任意)` を選択できます。未導入なら Direct Integration を使用できます。
+Modular Avatar backend は任意です。`nadena.dev.modular-avatar` `1.18.7` が導入されている場合にだけ `Modular Avatar (任意)` を選択できます。未導入なら Direct Integration を使用できます。MA が利用可能な場合、ワンクリック統合の既定 backend は MA です。project 単位の明示選択はこの既定より優先されます。
 
 ## Workflow
 
 1. Modular Avatar を project に導入します。
-2. FaceMotion の `VRChat 統合` で Avatar、AnimationClip、`Assets` output folder を選択します。
-3. backend を `Modular Avatar (任意)` にし、**統合を計画して検証** を実行します。
-4. diagnostic を確認して **Modular Avatar 統合を適用** を押します。
+2. FaceMotion の `VRChat 統合` で Avatar と Animation を選択し、**VRChatへ追加** を押します。通常は AnimationClip と output folder の手動選択は不要です。
+3. backend を `Modular Avatar (任意)` にし、必要なら `詳細設定` から **統合を計画して検証** を実行します。
+4. diagnostic を確認して **Modular Avatar 統合を適用** を押すか、ワンクリックフローの Apply 完了を確認します。
 5. scene を保存し、VRChat SDK の Build & Test と parameter toggle で確認します。
 6. 不要になった場合は **Modular Avatar 統合を削除** を押します。
 7. 再適用すると retained manifest / generated assets を検証し、利用可能なら再利用します。

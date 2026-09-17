@@ -2,6 +2,7 @@ using System;
 using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Session;
+using UnityEditor;
 using UnityEngine;
 
 namespace FaceMotion.Editor.UI.Timeline
@@ -30,6 +31,11 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public bool HandleEvent(Event e, Rect plotRect, TimelineLayoutSnapshot layout)
         {
+            return HandleEvent(e, plotRect, layout, false);
+        }
+
+        public bool HandleEvent(Event e, Rect plotRect, TimelineLayoutSnapshot layout, bool textControlOwnsKeyboard)
+        {
             if (e == null || layout == null)
             {
                 return false;
@@ -42,10 +48,14 @@ namespace FaceMotion.Editor.UI.Timeline
                     return false;
 
                 case EventType.ScrollWheel:
-                    if (e.control || e.command)
+                    if ((e.control || e.command) && plotRect.Contains(e.mousePosition))
                     {
-                        ZoomAt(e.mousePosition.x, plotRect);
-                        return true;
+                        int sign = e.delta.y < 0f ? 1 : e.delta.y > 0f ? -1 : 0;
+                        if (sign != 0)
+                        {
+                            ZoomAt(e.mousePosition.x, plotRect, sign);
+                            return true;
+                        }
                     }
 
                     return false;
@@ -110,6 +120,12 @@ namespace FaceMotion.Editor.UI.Timeline
                     return false;
 
                 case EventType.KeyDown:
+                    // Let IMGUI text controls own deletion while they are editing.
+                    if (!CanHandleKeyboardShortcut(EditorGUIUtility.editingTextField, textControlOwnsKeyboard))
+                    {
+                        return false;
+                    }
+
                     if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace)
                     {
                         _keys.DeleteSelectedKeys();
@@ -216,10 +232,20 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public void ZoomAt(float anchorPixelX, Rect plotRect)
         {
+            ZoomAt(anchorPixelX, plotRect, 1);
+        }
+
+        public void ZoomAt(float anchorPixelX, Rect plotRect, int sign)
+        {
+            if (sign == 0)
+            {
+                return;
+            }
+
             float oldPps = _session.ViewState.PixelsPerSecond;
             float anchorTime = TimelineGeometry.PixelToTime(anchorPixelX, _session.ViewState.ScrollTime, oldPps, plotRect.x);
             float zoom = _session.ViewState.Zoom;
-            float factor = ToolbarZoomFactor(1);
+            float factor = ToolbarZoomFactor(sign);
             float newZoom = TimelineViewState.ClampZoom(zoom * factor);
             _session.ViewState.Zoom = newZoom;
             _session.ViewState.ScrollTime = TimelineGeometry.ComputeZoomedScroll(newZoom, anchorPixelX, anchorTime, plotRect.x);
@@ -231,6 +257,11 @@ namespace FaceMotion.Editor.UI.Timeline
         public static float ToolbarZoomFactor(int sign)
         {
             return sign >= 0 ? 1.2f : 1f / 1.2f;
+        }
+
+        internal static bool CanHandleKeyboardShortcut(bool editingTextField, bool textControlOwnsKeyboard = false)
+        {
+            return !editingTextField && !textControlOwnsKeyboard;
         }
 
         public void ZoomStep(int sign, Rect plotRect)

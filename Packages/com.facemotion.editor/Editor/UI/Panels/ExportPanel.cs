@@ -1,6 +1,7 @@
 using FaceMotion.Editor.Export;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
+using FaceMotion.Editor.VRChat.Integration;
 using UnityEditor;
 using UnityEngine;
 
@@ -43,6 +44,7 @@ namespace FaceMotion.Editor.UI.Panels
                 if (GUILayout.Button(FaceMotionUiText.Get("exportAnimationClip")))
                 {
                     var result = AnimationClipExporter.Export(animation, _path);
+                    if (result.Succeeded) ExportedClipRegistry.Record(animation.AnimationId, _path);
                     _session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
                     _session.RecomputeDiagnostics();
                     _session.NotifyChanged();

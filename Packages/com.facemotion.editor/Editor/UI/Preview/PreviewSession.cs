@@ -22,9 +22,15 @@ namespace FaceMotion.Editor.UI.Preview
 
         public bool IsActive => _clone != null && _clone.Root != null;
         public string Diagnostic { get; private set; }
+        internal PreviewCameraState Camera => _camera;
+        internal GameObject CloneRoot => _clone?.Root;
+        internal PreviewObjectCache Cache => _cache;
         internal int CloneCreationCount { get; private set; }
         internal int EvaluateCallCount { get; private set; }
         internal int RenderCallCount { get; private set; }
+
+        /// <summary>Transient preview-clone-only override (hover) layered over the timeline evaluation.</summary>
+        public PreviewOverrideState Override { get; } = new PreviewOverrideState();
 
         public void EnsureAvatar(GameObject source)
         {
@@ -74,6 +80,24 @@ namespace FaceMotion.Editor.UI.Preview
             if (IsActive)
             {
                 PreviewMotionApplier.Apply(animation, _cache, _baseline, time);
+                ApplyHoverOverride();
+            }
+        }
+
+        private void ApplyHoverOverride()
+        {
+            if (!Override.HasActive || _cache == null)
+            {
+                return;
+            }
+
+            var binding = Override.Binding.Value;
+            if (_cache.TryGetBlendShape(binding, out var renderer, out int index) && renderer != null && index >= 0)
+            {
+                // Capture before overlaying so the restored value is the isolated pose the
+                // timeline produced, never the hover value and never a scene avatar value.
+                _baseline.Capture(renderer, index);
+                renderer.SetBlendShapeWeight(index, 100f);
             }
         }
 
@@ -110,7 +134,12 @@ namespace FaceMotion.Editor.UI.Preview
 
         public void FitCamera(Rect rect)
         {
-            if (IsActive)
+            FocusCamera(rect);
+        }
+
+        public void FocusCamera(Rect rect)
+        {
+            if (IsActive && rect.width >= 1f && rect.height >= 1f)
             {
                 _hasBounds = PreviewCameraState.TryCalculateBounds(_clone.Root, out _bounds);
                 _camera.Fit(_bounds, _renderer.camera.fieldOfView, rect.width / Mathf.Max(1f, rect.height));
@@ -128,25 +157,39 @@ namespace FaceMotion.Editor.UI.Preview
             }
         }
 
-        public void HandleCameraInput(Rect rect)
+        public void HandleCameraInput(Rect rect, bool textControlOwnsKeyboard = false)
         {
-            if (!IsActive || !rect.Contains(Event.current.mousePosition))
+            HandleCameraEvent(Event.current, rect, textControlOwnsKeyboard);
+        }
+
+        internal void HandleCameraEvent(Event current, Rect rect, bool textControlOwnsKeyboard)
+        {
+            if (!IsActive || current == null || rect.width < 1f || rect.height < 1f
+                || !rect.Contains(current.mousePosition))
             {
                 return;
             }
 
-            Event current = Event.current;
             if (current.type == EventType.ScrollWheel)
             {
                 _camera.Zoom(current.delta.y);
             }
-            else if (current.type == EventType.MouseDrag && current.button == 0 && !current.alt)
+            else if (current.type == EventType.MouseDrag && current.button == 0 && current.alt)
             {
                 _camera.Orbit(current.delta);
             }
-            else if (current.type == EventType.MouseDrag && (current.button == 2 || (current.button == 0 && current.alt)))
+            else if (current.type == EventType.MouseDrag && current.button == 2)
             {
                 _camera.Pan(current.delta, rect.height);
+            }
+            else if (current.type == EventType.MouseDrag && current.button == 1 && current.alt)
+            {
+                _camera.Zoom(current.delta.y);
+            }
+            else if (current.type == EventType.KeyDown && current.keyCode == KeyCode.F
+                && !textControlOwnsKeyboard && !EditorGUIUtility.editingTextField)
+            {
+                FocusCamera(rect);
             }
             else
             {
@@ -159,6 +202,7 @@ namespace FaceMotion.Editor.UI.Preview
 
         public void Dispose()
         {
+            Override.Clear();
             _baseline?.Restore();
             _renderer?.Cleanup();
             _renderer = null;

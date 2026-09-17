@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FaceMotion.Avatar;
 using FaceMotion.Data;
 using FaceMotion.Editor.UI.Controllers;
+using FaceMotion.Editor.UI.Preview;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Localization;
@@ -14,8 +15,13 @@ namespace FaceMotion.Editor.UI.Panels
 {
     public sealed class TrackListPanel
     {
+        internal const float DefaultCandidateListHeight = 220f;
+        internal const float MinimumCandidateListHeight = 120f;
+        internal const float MaximumCandidateListHeight = 420f;
         private readonly FaceMotionEditorSession _session;
         private readonly TrackController _tracks;
+        private readonly PreviewOverrideState _previewOverride;
+        private readonly string _blendBrowserFoldoutPrefix;
 
         private int _addMode;
         private bool _advancedBlend;
@@ -34,20 +40,40 @@ namespace FaceMotion.Editor.UI.Panels
         private IReadOnlyList<AvatarCandidateSnapshot.TransformCandidate> _transformCandidates;
         private Vector2 _blendCandidateScroll;
         private Vector2 _transformCandidateScroll;
+        private int _blendCategoryFilter;
+        private bool _blendConflictsOnly;
+        private bool _blendSafeOnly;
+        private readonly ResizableVerticalSplitter _blendCandidateSplitter;
+        private readonly ResizableVerticalSplitter _transformCandidateSplitter;
 
-        public TrackListPanel(FaceMotionEditorSession session, TrackController tracks)
+        private const int LargeCategoryThreshold = 120;
+        private bool _blendListDirty = true;
+        private readonly int[] _blendCategoryCounts = new int[9];
+        private readonly int[] _blendTopLevelCounts = new int[5];
+        private readonly Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string> _blendTooltipCache =
+            new Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string>();
+        private FaceMotion.Data.FaceMotionAnimationData _addedBindingsAnimation;
+        private HashSet<string> _addedBlendBindings;
+
+        public TrackListPanel(FaceMotionEditorSession session, TrackController tracks, PreviewOverrideState previewOverride = null)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _tracks = tracks ?? throw new ArgumentNullException(nameof(tracks));
+            _previewOverride = previewOverride;
+            string prefix = "FaceMotion.Window.v2." + Hash128.Compute(Application.dataPath).ToString() + ".TrackPicker.";
+            _blendBrowserFoldoutPrefix = prefix + "BlendBrowser.";
+            _blendCandidateSplitter = new ResizableVerticalSplitter(prefix + "BlendHeight", DefaultCandidateListHeight, MinimumCandidateListHeight, MaximumCandidateListHeight);
+            _transformCandidateSplitter = new ResizableVerticalSplitter(prefix + "TransformHeight", DefaultCandidateListHeight, MinimumCandidateListHeight, MaximumCandidateListHeight);
         }
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("tracks"), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(new GUIContent(FaceMotionUiText.Get("tracks"), FaceMotionUiText.Get("tooltipTrack")), EditorStyles.boldLabel);
 
             var animation = _session.GetSelectedAnimation();
             if (animation == null || animation.Timeline == null)
             {
+                _previewOverride?.Clear();
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAnimation"), MessageType.Info);
                 return;
             }
@@ -78,7 +104,14 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (index == 0)
             {
-                EditorGUILayout.LabelField(FaceMotionUiText.Get("noTracks"), EditorStyles.centeredGreyMiniLabel);
+                if (string.IsNullOrEmpty(_search))
+                {
+                    EditorGUILayout.HelpBox(FaceMotionUiText.Get("emptyTracks"), MessageType.Info);
+                }
+                else
+                {
+                    EditorGUILayout.LabelField(FaceMotionUiText.Get("noTracks"), EditorStyles.centeredGreyMiniLabel);
+                }
             }
         }
 
@@ -103,8 +136,13 @@ namespace FaceMotion.Editor.UI.Panels
             }
             else if (_addMode == 2)
             {
+                _previewOverride?.Clear();
                 _transformKind = EditorGUILayout.Popup(FaceMotionUiText.Get("kind"), _transformKind, new[] { FaceMotionUiText.Get("position"), FaceMotionUiText.Get("rotation"), FaceMotionUiText.Get("scale") });
                 DrawTransformPicker();
+            }
+            else
+            {
+                _previewOverride?.Clear();
             }
         }
 
@@ -112,27 +150,304 @@ namespace FaceMotion.Editor.UI.Panels
         {
             if (!TryRefreshCandidateFilters())
             {
+                _previewOverride?.Clear();
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAvatarForBlend"), MessageType.Info);
                 DrawBlendShapeFallback();
                 return;
             }
 
-            _blendCandidateSearch = EditorGUILayout.TextField(FaceMotionUiText.Get("search"), _blendCandidateSearch);
-            RefreshBlendCandidatesIfNeeded();
-            _blendCandidateScroll = EditorGUILayout.BeginScrollView(_blendCandidateScroll, GUILayout.Height(110f));
+            string search = EditorGUILayout.TextField(FaceMotionUiText.Get("search"), _blendCandidateSearch);
+            if (!string.Equals(search, _blendCandidateSearch, StringComparison.Ordinal))
+            {
+                _blendCandidateSearch = search;
+                _blendListDirty = true;
+            }
+
+            DrawBlendShapeFilters();
+            RefreshBlendView();
+            _blendCandidateScroll = EditorGUILayout.BeginScrollView(_blendCandidateScroll, GUILayout.Height(_blendCandidateSplitter.Height));
+            bool hoveringCandidate = false;
+            DrawBlendShapeTree(_session.GetSelectedAnimation(), ref hoveringCandidate);
+
+            EditorGUILayout.EndScrollView();
+            if (!hoveringCandidate && Event.current != null && Event.current.type == EventType.Repaint)
+            {
+                _previewOverride?.Clear();
+            }
+            _blendCandidateSplitter.Draw(MinimumCandidateListHeight, MaximumCandidateListHeight);
+            DrawBlendShapeFallback();
+        }
+
+        private void DrawBlendShapeFilters()
+        {
+            EditorGUILayout.BeginHorizontal();
+            _blendCategoryFilter = EditorGUILayout.Popup(
+                FaceMotionUiText.Get("filter"),
+                _blendCategoryFilter,
+                new[]
+                {
+                    FaceMotionUiText.Get("browserAll"),
+                    FaceMotionUiText.Get("categoryFace"),
+                    FaceMotionUiText.Get("categoryHair"),
+                    FaceMotionUiText.Get("categoryBody"),
+                    FaceMotionUiText.Get("categoryClothes"),
+                    FaceMotionUiText.Get("categoryOther")
+                });
+            bool conflicts = GUILayout.Toggle(_blendConflictsOnly, FaceMotionUiText.Get("browserConflicts"), EditorStyles.miniButtonLeft, GUILayout.Width(64f));
+            bool safe = GUILayout.Toggle(_blendSafeOnly, FaceMotionUiText.Get("browserSafe"), EditorStyles.miniButtonRight, GUILayout.Width(54f));
+            bool conflictsChanged = conflicts != _blendConflictsOnly;
+            _blendConflictsOnly = conflicts;
+            bool safeChanged = (safe && !conflicts) != _blendSafeOnly;
+            _blendSafeOnly = safe && !conflicts;
+            if (conflictsChanged || safeChanged)
+            {
+                _blendListDirty = true;
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawBlendShapeTree(FaceMotion.Data.FaceMotionAnimationData animation, ref bool hoveringCandidate)
+        {
+            if (!ReferenceEquals(_addedBindingsAnimation, animation))
+            {
+                _addedBlendBindings = BuildAddedBlendShapeBindings(animation);
+                _addedBindingsAnimation = animation;
+            }
+
+            var added = _addedBlendBindings;
+            DrawTopLevelCategory("Face", new[]
+            {
+                AvatarCandidateSnapshot.BlendShapeCategory.Eye,
+                AvatarCandidateSnapshot.BlendShapeCategory.Blink,
+                AvatarCandidateSnapshot.BlendShapeCategory.Brow,
+                AvatarCandidateSnapshot.BlendShapeCategory.Mouth,
+                AvatarCandidateSnapshot.BlendShapeCategory.FaceOther
+            }, animation, added, ref hoveringCandidate);
+            DrawTopLevelCategory("Hair", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Hair }, animation, added, ref hoveringCandidate);
+            DrawTopLevelCategory("Body", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Body }, animation, added, ref hoveringCandidate);
+            DrawTopLevelCategory("Clothes", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Clothes }, animation, added, ref hoveringCandidate);
+            DrawTopLevelCategory("Other", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Other }, animation, added, ref hoveringCandidate);
+        }
+
+        private void DrawTopLevelCategory(
+            string topLevel,
+            AvatarCandidateSnapshot.BlendShapeCategory[] categories,
+            FaceMotion.Data.FaceMotionAnimationData animation,
+            HashSet<string> addedBlendBindings,
+            ref bool hoveringCandidate)
+        {
+            int total = CountVisible(categories);
+            if (total == 0 || !MatchesTopLevelFilter(topLevel))
+            {
+                return;
+            }
+
+            bool open = DrawPersistentFoldout("Top." + topLevel, FaceMotionUiText.Get("category" + topLevel) + " (" + total + ")", total >= LargeCategoryThreshold);
+            if (!open)
+            {
+                return;
+            }
+
+            EditorGUI.indentLevel++;
+            if (string.Equals(topLevel, "Face", StringComparison.Ordinal))
+            {
+                for (int i = 0; i < categories.Length; i++)
+                {
+                    DrawFaceCategory(categories[i], animation, addedBlendBindings, ref hoveringCandidate);
+                }
+            }
+            else
+            {
+                DrawCandidates(categories[0], animation, addedBlendBindings, ref hoveringCandidate);
+            }
+
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawFaceCategory(
+            AvatarCandidateSnapshot.BlendShapeCategory category,
+            FaceMotion.Data.FaceMotionAnimationData animation,
+            HashSet<string> addedBlendBindings,
+            ref bool hoveringCandidate)
+        {
+            int total = CountVisible(category);
+            if (total == 0)
+            {
+                return;
+            }
+
+            bool open = DrawPersistentFoldout("Face." + category, FaceMotionUiText.Get("category" + category) + " (" + total + ")", total >= LargeCategoryThreshold);
+            if (!open)
+            {
+                return;
+            }
+
+            EditorGUI.indentLevel++;
+            DrawCandidates(category, animation, addedBlendBindings, ref hoveringCandidate);
+            EditorGUI.indentLevel--;
+        }
+
+        private void DrawCandidates(
+            AvatarCandidateSnapshot.BlendShapeCategory category,
+            FaceMotion.Data.FaceMotionAnimationData animation,
+            HashSet<string> addedBlendBindings,
+            ref bool hoveringCandidate)
+        {
             for (int i = 0; i < _blendCandidates.Count; i++)
             {
                 var candidate = _blendCandidates[i];
-                if (candidate != null && GUILayout.Button(candidate.DisplayLabel, EditorStyles.miniButton))
+                if (!FilterAllowsCandidate(candidate) || candidate.Category != category)
+                {
+                    continue;
+                }
+
+                bool alreadyAdded = addedBlendBindings != null
+                    && addedBlendBindings.Contains(BlendBindingKey(candidate.RendererPath, candidate.BlendShapeName));
+                string label = candidate.BlendShapeName + "  (" + candidate.RendererPath + ")";
+                if (alreadyAdded)
+                {
+                    label += " [" + FaceMotionUiText.Get("browserAdded") + "]";
+                }
+                else if (candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Conflict)
+                {
+                    label += " [" + FaceMotionUiText.Get("browserConflict") + "]";
+                }
+                else if (candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning)
+                {
+                    label += " [" + FaceMotionUiText.Get("browserCaution") + "]";
+                }
+
+                EditorGUI.BeginDisabledGroup(alreadyAdded);
+                if (GUILayout.Button(new GUIContent(label, CachedTooltip(candidate)), EditorStyles.miniButton))
                 {
                     _tracks.AddBlendShapeTrack(candidate);
                     _addMode = 0;
+                    _previewOverride?.Clear();
+                    _addedBindingsAnimation = null;
                     GUIUtility.ExitGUI();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                if (_previewOverride != null && Event.current != null && Event.current.type == EventType.Repaint
+                    && GUILayoutUtility.GetLastRect().Contains(Event.current.mousePosition))
+                {
+                    _previewOverride.SetHover(candidate.ToBinding());
+                    hoveringCandidate = true;
+                }
+            }
+        }
+
+        private bool DrawPersistentFoldout(string suffix, string label, bool defaultClosed)
+        {
+            string key = _blendBrowserFoldoutPrefix + suffix;
+            bool saved = EditorPrefs.GetBool(key, !defaultClosed);
+            bool forceOpen = !string.IsNullOrEmpty(_blendCandidateSearch);
+            bool visible = forceOpen ? true : saved;
+            bool changed = EditorGUILayout.Foldout(visible, label, true);
+            if (!forceOpen && changed != saved)
+            {
+                EditorPrefs.SetBool(key, changed);
+            }
+
+            return forceOpen || changed;
+        }
+
+        private int CountVisible(AvatarCandidateSnapshot.BlendShapeCategory[] categories)
+        {
+            int count = 0;
+            for (int i = 0; i < categories.Length; i++)
+            {
+                count += CountVisible(categories[i]);
+            }
+
+            return count;
+        }
+
+        private int CountVisible(AvatarCandidateSnapshot.BlendShapeCategory category)
+        {
+            return _blendCategoryCounts[(int)category];
+        }
+
+        private bool FilterAllowsCandidate(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            if (candidate == null || candidate.IsSeparator)
+            {
+                return false;
+            }
+
+            if (_blendConflictsOnly && candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Safe)
+            {
+                return false;
+            }
+
+            if (_blendSafeOnly && candidate.ConflictStatus != AvatarCandidateSnapshot.BlendShapeConflictStatus.Safe)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool MatchesTopLevelFilter(string topLevel)
+        {
+            return _blendCategoryFilter == 0
+                || (_blendCategoryFilter == 1 && topLevel == "Face")
+                || (_blendCategoryFilter == 2 && topLevel == "Hair")
+                || (_blendCategoryFilter == 3 && topLevel == "Body")
+                || (_blendCategoryFilter == 4 && topLevel == "Clothes")
+                || (_blendCategoryFilter == 5 && topLevel == "Other");
+        }
+
+        private static HashSet<string> BuildAddedBlendShapeBindings(FaceMotion.Data.FaceMotionAnimationData animation)
+        {
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            if (animation == null || animation.Timeline == null)
+            {
+                return set;
+            }
+
+            for (int i = 0; i < animation.Timeline.Tracks.Count; i++)
+            {
+                var track = animation.Timeline.Tracks[i];
+                if (track != null && track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+                {
+                    set.Add(BlendBindingKey(track.BlendShape.RendererPath, track.BlendShape.BlendShapeName));
                 }
             }
 
-            EditorGUILayout.EndScrollView();
-            DrawBlendShapeFallback();
+            return set;
+        }
+
+        private static string BlendBindingKey(string rendererPath, string blendShapeName)
+        {
+            return rendererPath + "\n" + blendShapeName;
+        }
+
+        private string CachedTooltip(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            if (_blendTooltipCache.TryGetValue(candidate, out string cached))
+            {
+                return cached;
+            }
+
+            string tooltip = CandidateTooltip(candidate);
+            _blendTooltipCache[candidate] = tooltip;
+            return tooltip;
+        }
+
+        private static string CandidateTooltip(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            string text = FaceMotionUiText.Get("category") + ": " + candidate.TopLevelCategory + "/" + candidate.Category
+                + "\n" + FaceMotionUiText.Get("classification") + ": " + candidate.ClassificationReason
+                + "\n" + FaceMotionUiText.Get("bindings") + ": " + candidate.DisplayLabel;
+            if (candidate.ConflictStatus != AvatarCandidateSnapshot.BlendShapeConflictStatus.Safe)
+            {
+                text += "\n" + FaceMotionUiText.Get("conflict") + ": " + candidate.ConflictReason
+                    + "\n" + FaceMotionUiText.Get("source") + ": " + candidate.ConflictSource;
+            }
+
+            return text;
         }
 
         private void DrawTransformPicker()
@@ -146,7 +461,7 @@ namespace FaceMotion.Editor.UI.Panels
 
             _transformCandidateSearch = EditorGUILayout.TextField(FaceMotionUiText.Get("search"), _transformCandidateSearch);
             RefreshTransformCandidatesIfNeeded();
-            _transformCandidateScroll = EditorGUILayout.BeginScrollView(_transformCandidateScroll, GUILayout.Height(110f));
+            _transformCandidateScroll = EditorGUILayout.BeginScrollView(_transformCandidateScroll, GUILayout.Height(_transformCandidateSplitter.Height));
             for (int i = 0; i < _transformCandidates.Count; i++)
             {
                 var candidate = _transformCandidates[i];
@@ -163,6 +478,7 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             EditorGUILayout.EndScrollView();
+            _transformCandidateSplitter.Draw(MinimumCandidateListHeight, MaximumCandidateListHeight);
             DrawTransformFallback();
         }
 
@@ -182,18 +498,46 @@ namespace FaceMotion.Editor.UI.Panels
                 _candidateSource = candidates;
                 _lastBlendCandidateSearch = null;
                 _lastTransformCandidateSearch = null;
+                _blendListDirty = true;
+                _blendTooltipCache.Clear();
+                _addedBindingsAnimation = null;
             }
 
             return true;
         }
 
-        private void RefreshBlendCandidatesIfNeeded()
+        private void RefreshBlendView()
         {
-            if (_blendCandidates == null || !string.Equals(_lastBlendCandidateSearch, _blendCandidateSearch, StringComparison.Ordinal))
+            if (!_blendListDirty)
             {
-                _blendCandidates = _candidateSource.FilterBlendShapes(_blendCandidateSearch);
-                _lastBlendCandidateSearch = _blendCandidateSearch;
+                return;
             }
+
+            _blendListDirty = false;
+            _lastBlendCandidateSearch = _blendCandidateSearch;
+            _blendCandidates = _candidateSource.FilterBlendShapes(_blendCandidateSearch);
+            Array.Clear(_blendCategoryCounts, 0, _blendCategoryCounts.Length);
+            Array.Clear(_blendTopLevelCounts, 0, _blendTopLevelCounts.Length);
+            for (int i = 0; i < _blendCandidates.Count; i++)
+            {
+                var candidate = _blendCandidates[i];
+                if (!FilterAllowsCandidate(candidate))
+                {
+                    continue;
+                }
+
+                _blendCategoryCounts[(int)candidate.Category]++;
+                _blendTopLevelCounts[TopLevelIndex(candidate.TopLevelCategory)]++;
+            }
+        }
+
+        private static int TopLevelIndex(string topLevel)
+        {
+            return topLevel == "Hair" ? 1
+                : topLevel == "Body" ? 2
+                : topLevel == "Clothes" ? 3
+                : topLevel == "Other" ? 4
+                : 0;
         }
 
         private void RefreshTransformCandidatesIfNeeded()
@@ -265,6 +609,7 @@ namespace FaceMotion.Editor.UI.Panels
             if (GUILayout.Button(FaceMotionUiText.Get("deleteShort"), EditorStyles.miniButtonRight, GUILayout.Width(34)))
             {
                 _tracks.RemoveTrack(track.TrackId);
+                _addedBindingsAnimation = null;
             }
 
             EditorGUILayout.EndHorizontal();

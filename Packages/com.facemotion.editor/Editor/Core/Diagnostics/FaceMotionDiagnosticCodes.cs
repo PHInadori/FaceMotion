@@ -165,5 +165,17 @@ namespace FaceMotion.Diagnostics
 
         // FM-UI-INFO (controller status). Inline literal centralized.
         public const string UiInfo = "FM-UI-INFO";
+
+        // FM-J4 (one-click VRChat integration). Inline literals centralized.
+        public const string OneClickNoCurrentAnimation = "FM-J4-NO-ANIMATION";
+        public const string OneClickNoAvatar = "FM-J4-NO-AVATAR";
+        public const string OneClickForeignClip = "FM-J4-FOREIGN-CLIP";
+        public const string OneClickBackendUnavailable = "FM-J4-BACKEND-UNAVAILABLE";
+        public const string OneClickCrossBackend = "FM-J4-CROSS-BACKEND";
+        public const string OneClickExported = "FM-J4-EXPORTED";
+        public const string OneClickReapplied = "FM-J4-REAPPLIED";
+        public const string OneClickSucceeded = "FM-J4-SUCCEEDED";
+        public const string OneClickApplyStopped = "FM-J4-APPLY-STOPPED";
+        public const string OneClickNoPartialState = "FM-J4-NO-PARTIAL-STATE";
     }
 }

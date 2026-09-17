@@ -1,6 +1,6 @@
 # VRChat Integration
 
-VRChat 統合は `VRChat 統合` panel で行います。必ず **統合を計画して検証** を実行し、blocking diagnostic がないことを確認してから Apply してください。
+VRChat 統合は `VRChat 統合` panel で行います。通常は **VRChatへ追加** のワンクリックフローを使います。詳細な手動 workflow では、必ず **統合を計画して検証** を実行し、blocking diagnostic がないことを確認してから Apply してください。
 
 | | Direct Integration | Modular Avatar Integration |
 | --- | --- | --- |
@@ -8,6 +8,16 @@ VRChat 統合は `VRChat 統合` panel で行います。必ず **統合を計�
 | Descriptor | FX / menu / parameters 参照を copy-on-write で更新 | Descriptor 参照を直接変更しない |
 | 生成物 | FX、menu、parameters、reset clip、manifest | integration root、Merge Animator、Parameters、Menu Installer、generated assets、manifest |
 | Remove | current UI に専用 button はない。managed reapply は既存 integration を rollback して再作成 | Remove button が hierarchy を detach し、assets / manifest は保持 |
+
+## One-click workflow
+
+1. scene Avatar と FaceMotion Animation を選択します。
+2. **VRChatへ追加** を押します。Modular Avatar が導入済みなら MA backend が既定で選ばれます。project 単位の明示選択は優先されます。
+3. FaceMotion は Export → Plan → Validate → Apply を順に実行し、progress と diagnostic を表示します。
+4. blocking diagnostic が出た場合は Apply せず停止します。FaceMotion 所有でない AnimationClip は上書きされません。
+5. 成功時は backend と animation 名を確認し、scene を保存して Build & Test します。
+
+再実行は owned AnimationClip の GUID と既存 managed integration を再利用します。Direct と MA を切り替える場合は cross-backend warning を確認してください。`詳細設定` foldout には manual export path、AnimationClip、backend、Plan/Validate、Apply の workflow が残されています。
 
 ## Direct workflow
 

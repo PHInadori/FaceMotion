@@ -79,7 +79,7 @@ namespace FaceMotion.Editor.UI.Controllers
             var validation = VRCAvatarDescriptorAdapter.Validate(descriptor);
             var cache = new UnityAvatarObjectCache();
             var report = cache.Rebuild(descriptor.gameObject);
-            var candidates = AvatarCandidateSnapshot.Build(report.Index);
+            var candidates = AvatarCandidateSnapshot.Build(report.Index, descriptor);
             _session.SetAvatar(descriptor, descriptor.gameObject, validation, report, cache, candidates);
         }
     }

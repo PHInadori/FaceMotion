@@ -25,6 +25,7 @@ namespace FaceMotion.Editor.UI.Localization
             RegisterCommandUiExportTexts(Japanese, English);
             RegisterIntegrationDirectTexts(Japanese, English);
             RegisterModularAvatarTexts(Japanese, English);
+            RegisterOneClickTexts(Japanese, English);
         }
 
         public static IReadOnlyDictionary<string, DiagnosticLocalizedText> JapaneseEntries => Japanese;
@@ -94,6 +95,10 @@ namespace FaceMotion.Editor.UI.Localization
             Dictionary<string, DiagnosticLocalizedText> en);
 
         static partial void RegisterModularAvatarTexts(
+            Dictionary<string, DiagnosticLocalizedText> ja,
+            Dictionary<string, DiagnosticLocalizedText> en);
+
+        static partial void RegisterOneClickTexts(
             Dictionary<string, DiagnosticLocalizedText> ja,
             Dictionary<string, DiagnosticLocalizedText> en);
     }

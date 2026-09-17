@@ -8,12 +8,14 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 
 ## 主な機能
 
-- BlendShape、Position、Rotation、Scale のタイムライン編集
-- 分離された Preview と、明示操作による可逆的な Scene Apply
+- BlendShape、Position、Rotation、Scale のタイムライン編集（Ctrl/Cmd+ホイールで zoom）
+- 分離された Preview、再生コントロール、scene-style camera、明示操作による可逆的な Scene Apply
+- BlendShape browser tree（カテゴリ分類、検索、VRChat / MA conflict の事前表示）
 - Smile、Wink、Blink、Angry、Sad、Surprise、Embarrassed の built-in preset
 - seed を指定できる deterministic な Blink / Random motion generation
 - AnimationClip export
-- Direct Integration または任意の Modular Avatar Integration
+- VRChat へのワンクリック統合（Export → Plan → Validate → Apply）、Direct Integration、任意の Modular Avatar Integration
+- 次の操作を示す workflow guidance、empty state、tooltip、shortcut help
 
 ## 対応環境
 
@@ -26,7 +28,7 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 
 ## インストール
 
-VPM repository は準備済みですが、まだ公開されていません。公開後は VCC / ALCOM に公開済みの repository URL を追加して導入します。公開前は、VRChat SDK が導入済みの Unity project で package folder の `package.json` を Package Manager の **Add package from disk** から選択する方法を利用できます。
+VCC / ALCOM では `https://phinadori.github.io/PHInadori-VPM/index.json` を custom VPM repository として追加し、最新の公開版を導入できます。開発・検証用途では、VRChat SDK が導入済みの Unity project で package folder の `package.json` を Package Manager の **Add package from disk** から選択できます。
 
 詳細: [Installation](Documentation~/Installation.md)
 
@@ -35,8 +37,8 @@ VPM repository は準備済みですが、まだ公開されていません。�
 1. Unity menu **Tools/FaceMotion/FaceMotion ウィンドウを開く** を開きます。
 2. scene 内の VRChat avatar を選択し、FaceMotion Project と Animation を作成します。
 3. BlendShape または Transform Track を追加し、Keyframe を編集します。
-4. Preview で確認し、必要なら AnimationClip を export します。
-5. VRChat 統合では Plan の diagnostic を確認してから Direct または Modular Avatar backend を Apply します。
+4. Preview の再生コントロールと camera 操作で確認し、必要なら AnimationClip を export します。
+5. VRChat 統合では **VRChatへ追加** のワンクリックフローを使うか、Plan の diagnostic を確認してから Direct または Modular Avatar backend を Apply します。
 6. scene を保存し、VRChat SDK の Build & Test で動作を確認します。
 
 詳細: [Getting Started](Documentation~/Getting-Started.md)
@@ -48,7 +50,7 @@ VPM repository は準備済みですが、まだ公開されていません。�
 | Direct Integration | MA を使わない構成 | FX / menu / parameters を copy-on-write で生成し、Descriptor 参照を更新 |
 | Modular Avatar Integration | MA を使う構成 | Descriptor 参照を直接変更せず、avatar root 配下の MA integration root を生成 |
 
-Direct は既存 FX の Write Defaults が ON の場合、安全のため block します。MA は任意依存であり、未導入でも Direct workflow は使用できます。
+Direct は既存 FX の Write Defaults が ON の場合、安全のため block します。MA は任意依存であり、未導入でも Direct workflow は使用できます。MA 導入時は MA backend が既定で優先され、project 単位で変更できます。
 
 詳細: [VRChat Integration](Documentation~/VRChat-Integration.md) / [Modular Avatar](Documentation~/Modular-Avatar.md)
 
@@ -57,6 +59,7 @@ Direct は既存 FX の Write Defaults が ON の場合、安全のため block 
 - Preview は scene を自動変更しません。Scene Apply は明示操作で、停止・window close・reload 時に baseline へ戻します。
 - Integration 前に Plan の diagnostic を確認してください。
 - FaceMotion は manifest で所有を確認できる生成物だけを自動処理します。foreign asset や曖昧な状態は自動修復せず block します。
+- ワンクリック統合は FaceMotion 所有でない AnimationClip を上書きせず、再実行時は既存の owned clip GUID を維持します。
 - Apply 前には version control または project backup を推奨します。
 
 ## Documentation

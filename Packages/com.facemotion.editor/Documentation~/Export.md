@@ -2,6 +2,8 @@
 
 `AnimationClip エクスポート` は選択中の FaceMotion Animation を Unity の `.anim` へ出力します。
 
+`VRChat 統合` の **VRChatへ追加** は、通常この export を自動で実行します。ここに記載する手順は clip を手動で確認・利用したい場合の workflow です。
+
 ## 手順
 
 1. FaceMotion Project と Animation を選択します。
@@ -17,7 +19,7 @@
 - enabled BlendShape track には binding name と key、Transform track には supported binding と key が必要です。
 - BlendShape と Transform curve（Position / Rotation / Scale）を出力します。
 - export は timeline の frame rate で sample し、loop 設定を clip へ引き継ぎます。
-- 既存の AnimationClip を同じ path に export すると内容を overwrite しますが、asset の `.meta` GUID は維持され、既存 reference を壊しません。
-- 同じ path に AnimationClip 以外の asset がある場合は安全のため block します。
+- FaceMotion が所有する既存の AnimationClip を同じ path に export すると内容を overwrite しますが、asset の `.meta` GUID は維持され、既存 reference を壊しません。
+- FaceMotion 所有でない AnimationClip、または AnimationClip 以外の asset が同じ path にある場合は安全のため block します。
 
 `Reset.anim` は VRChat Integration が OFF state 用に生成する asset です。通常の AnimationClip export の出力とは別物です。

@@ -59,6 +59,12 @@ namespace FaceMotion.Editor.UI.Controllers
             return Mathf.Clamp(time, 0f, duration);
         }
 
+        /// <summary>Adds or updates a key at the shared playhead using the inspector values.</summary>
+        public string AddKeyAtCurrentTime(float floatValue, Vector3 vectorValue, InterpolationType interpolation)
+        {
+            return AddKeyAt(_session.ViewState.CurrentTime, floatValue, vectorValue, interpolation);
+        }
+
         /// <summary>Adds or updates a key at the given time using the inspector values.</summary>
         public string AddKeyAt(float time, float floatValue, Vector3 vectorValue, InterpolationType interpolation)
         {

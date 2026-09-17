@@ -78,6 +78,12 @@ namespace FaceMotion.Editor.VRChat.Integration
             }
         }
 
+        /// <summary>True when this avatar carries an active Direct integration manifest.</summary>
+        public static bool HasExistingIntegration(VRCAvatarDescriptor avatar)
+        {
+            return FindManifest(avatar) != null;
+        }
+
         private static DirectIntegrationPlan PlanCore(DirectIntegrationRequest request)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
