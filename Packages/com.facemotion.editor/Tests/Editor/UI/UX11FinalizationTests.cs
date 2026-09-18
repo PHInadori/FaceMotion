@@ -124,7 +124,7 @@ namespace FaceMotion.Editor.Tests
         {
             string[] panelKeys =
             {
-                "project", "avatar", "animations", "tracks", "keyInspector", "presetsGeneration",
+                "project", "avatar", "animations", "tracks", "keyInspector",
                 "animationClipExport", "directIntegration", "preview", "selectAvatarToPreview",
                 "exportPathPrompt", "planIntegration", "advancedManualBinding"
             };

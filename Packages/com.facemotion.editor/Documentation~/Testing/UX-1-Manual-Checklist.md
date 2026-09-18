@@ -17,6 +17,6 @@
 15. Verify an explicitly configured English fallback shows English labels where the host/editor integration requests it.
 16. Trigger a validation error and an export or integration diagnostic; confirm the diagnostic code remains visible and the localized message is understandable.
 17. At 900x700, drag both splitters to their extremes; confirm the left panel, preview, timeline, and inspector never overlap or collapse below their minimum usable areas.
-18. Audit the Project, Avatar, Animations, Tracks, Presets & Generation, AnimationClip Export, VRChat Direct Integration, Diagnostics, Preview, and key inspector panels: labels, buttons, help text, menus, dialogs, and tooltips are Japanese by default.
+18. Audit the Project, Avatar, Animations, Tracks, AnimationClip Export, VRChat Direct Integration, Diagnostics, Preview, and key inspector panels: labels, buttons, help text, menus, dialogs, and tooltips are Japanese by default.
 19. Trigger an unlisted diagnostic (for example, a write failure); confirm the Japanese UI shows its stable code with Japanese guidance and does not surface the raw English detail or suggested fix.
 20. With the English fallback explicitly requested by the host/editor integration, confirm the same panel keys, diagnostic detail, and suggested fix render in English.

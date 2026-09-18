@@ -108,7 +108,6 @@ namespace FaceMotion.Data
                 ValidateAnimation(project, animation, seenAnimationIds, diagnostics);
             }
 
-            ValidateGenerationRegistry(project, diagnostics);
         }
 
         private static void ValidateAnimation(
@@ -473,34 +472,6 @@ namespace FaceMotion.Data
                         "Two keys share the same time.",
                         contextId,
                         "Separate or deduplicate the overlapping keys."));
-                }
-            }
-        }
-
-        private static void ValidateGenerationRegistry(
-            FaceMotionProject project,
-            List<FaceMotionDiagnostic> diagnostics)
-        {
-            var seenGenerationIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var record in project.Generations)
-            {
-                if (record == null)
-                {
-                    diagnostics.Add(Blocking(
-                        FaceMotionDiagnosticCodes.NullGenerationRecord,
-                        "A generation record entry is null.",
-                        project.ProjectId,
-                        "Remove the null entry."));
-                    continue;
-                }
-
-                if (!string.IsNullOrEmpty(record.GenerationId) && !seenGenerationIds.Add(record.GenerationId))
-                {
-                    diagnostics.Add(Warning(
-                        FaceMotionDiagnosticCodes.DuplicateGenerationId,
-                        "Generation ID appears more than once.",
-                        record.GenerationId,
-                        "Assign a unique generation ID."));
                 }
             }
         }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted, 2026-09-14.
+Historical, removed from the current product. Accepted 2026-09-14; preset and random-generation authoring was subsequently removed. Serialized models remain for compatibility and migration only.
 
 ## Decision
 

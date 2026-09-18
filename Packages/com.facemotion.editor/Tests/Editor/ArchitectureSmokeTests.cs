@@ -11,11 +11,9 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void Versions_StartAtDefinedValues()
         {
-            Assert.That(FaceMotionVersions.ToolVersion, Is.EqualTo("0.2.0"));
+            Assert.That(FaceMotionVersions.ToolVersion, Is.EqualTo("0.3.0"));
             Assert.That(FaceMotionVersions.ProjectSchemaVersion, Is.EqualTo(1));
-            Assert.That(FaceMotionVersions.PresetSchemaVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.IntegrationManifestVersion, Is.EqualTo(1));
-            Assert.That(FaceMotionVersions.GeneratorAlgorithmVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.IntegrationBackendVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.MappingProfileSchemaVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.AvatarFingerprintAlgorithmVersion, Is.EqualTo(1));

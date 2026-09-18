@@ -4,6 +4,7 @@ using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Timeline;
 using UnityEngine;
 using UnityEditor;
+using Unity.Profiling;
 
 namespace FaceMotion.Editor.UI.Timeline
 {
@@ -31,6 +32,7 @@ namespace FaceMotion.Editor.UI.Timeline
         private static GUIStyle _rowLabel;
         private static GUIStyle _hintLabel;
         private static GUIContent _content = new GUIContent();
+        private static readonly ProfilerMarker DrawMarker = new ProfilerMarker("FaceMotion.Timeline.Draw");
 
         public static void Draw(
             Rect rect,
@@ -38,6 +40,8 @@ namespace FaceMotion.Editor.UI.Timeline
             TimelineViewState view,
             TimelineSelection selection)
         {
+            using (DrawMarker.Auto())
+            {
             EnsureStyles();
 
             Rect plot = new Rect(layout.PlotLeft, rect.y, Mathf.Max(1f, rect.width - layout.PlotLeft), rect.height);
@@ -56,6 +60,7 @@ namespace FaceMotion.Editor.UI.Timeline
             if (layout.RowCount == 0)
             {
                 GUI.Label(new Rect(plot.x + 10f, rowsTop + 8f, plot.width - 20f, 24f), FaceMotionUiText.Get("noTracks"), _hintLabel);
+            }
             }
         }
 
@@ -236,7 +241,8 @@ namespace FaceMotion.Editor.UI.Timeline
             Rect marker = new Rect(x - size * 0.5f, y - size * 0.5f, size, size);
             EditorGUI.DrawRect(marker, color);
             EditorGUIUtility.AddCursorRect(marker, MouseCursor.Link);
-            GUI.Label(marker, new GUIContent(string.Empty, string.Format(FaceMotionUiText.Get("keyTooltip"), time)), GUIStyle.none);
+            SetContent(string.Empty, string.Format(FaceMotionUiText.Get("keyTooltip"), time));
+            GUI.Label(marker, _content, GUIStyle.none);
         }
 
         private static void DrawCursor(Rect area, float currentTime, float scroll, float pps, float plotLeft)
@@ -338,6 +344,13 @@ namespace FaceMotion.Editor.UI.Timeline
             _content.text = text;
             _content.image = null;
             _content.tooltip = null;
+        }
+
+        private static void SetContent(string text, string tooltip)
+        {
+            _content.text = text;
+            _content.image = null;
+            _content.tooltip = tooltip;
         }
 
         private static void EnsureStyles()

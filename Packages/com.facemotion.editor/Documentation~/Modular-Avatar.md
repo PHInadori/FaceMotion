@@ -12,6 +12,8 @@ Modular Avatar backend は任意です。`nadena.dev.modular-avatar` `1.18.7` �
 6. 不要になった場合は **Modular Avatar 統合を削除** を押します。
 7. 再適用すると retained manifest / generated assets を検証し、利用可能なら再利用します。
 
+複数 Animation をまとめて統合する場合は、Animation list で複数の checkbox を選択して Batch Integration を使います。MA batch は Animation ごとに manifest を持つ integration root を作成し、再実行時は既存の matching item に idempotent に再適用します。
+
 ## 生成物と Remove
 
 Apply は avatar root の下に FaceMotion-owned integration root を作り、MA Merge Animator、Parameters、Menu Installer を追加します。avatar root 基準の binding を維持して animation を接続します。Descriptor の FX / menu / parameter 参照は直接変更しません。

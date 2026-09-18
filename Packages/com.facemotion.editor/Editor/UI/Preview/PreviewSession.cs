@@ -5,6 +5,7 @@ using FaceMotion.Editor.Preview;
 using FaceMotion.Editor.UI.Localization;
 using UnityEditor;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace FaceMotion.Editor.UI.Preview
 {
@@ -19,6 +20,8 @@ namespace FaceMotion.Editor.UI.Preview
         private Bounds _bounds;
         private bool _hasBounds;
         private readonly PreviewCameraState _camera = new PreviewCameraState();
+        private static readonly ProfilerMarker EvaluateMarker = new ProfilerMarker("FaceMotion.Preview.Evaluate");
+        private static readonly ProfilerMarker RenderMarker = new ProfilerMarker("FaceMotion.Preview.Render");
 
         public bool IsActive => _clone != null && _clone.Root != null;
         public string Diagnostic { get; private set; }
@@ -68,6 +71,8 @@ namespace FaceMotion.Editor.UI.Preview
 
         public void Evaluate(FaceMotionAnimationData animation, float time)
         {
+            using (EvaluateMarker.Auto())
+            {
             EvaluateCallCount++;
             FaceMotionPreviewTrace.Trace(
                 "E.Evaluate",
@@ -81,6 +86,7 @@ namespace FaceMotion.Editor.UI.Preview
             {
                 PreviewMotionApplier.Apply(animation, _cache, _baseline, time);
                 ApplyHoverOverride();
+            }
             }
         }
 
@@ -103,11 +109,13 @@ namespace FaceMotion.Editor.UI.Preview
 
         public void Draw(Rect rect)
         {
-            if (!IsActive || rect.width < 1f || rect.height < 1f)
+            if (!IsActive || rect.width < 1f || rect.height < 1f || !ShouldRender(Event.current))
             {
                 return;
             }
 
+            using (RenderMarker.Auto())
+            {
             RenderCallCount++;
             string eventType = Event.current == null ? "<none>" : Event.current.type.ToString();
             Texture texture = null;
@@ -130,6 +138,12 @@ namespace FaceMotion.Editor.UI.Preview
                 RenderCallCount,
                 eventType,
                 texture == null ? 0 : texture.GetInstanceID());
+            }
+        }
+
+        internal static bool ShouldRender(Event current)
+        {
+            return current == null || current.type == EventType.Repaint;
         }
 
         public void FitCamera(Rect rect)

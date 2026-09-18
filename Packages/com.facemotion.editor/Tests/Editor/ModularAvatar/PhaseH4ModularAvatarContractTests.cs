@@ -226,20 +226,21 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void Apply_CreatesAnimatorAndMenuTopologyForTheGeneratedParameter()
         {
-            Apply("Smile");
-            var node = _root.transform.Find("FaceMotion MA Smile").gameObject;
+            Apply("Smile Test");
+            var node = _root.transform.Find("FaceMotion MA Smile_Test").gameObject;
             var controller = node.GetComponent<ModularAvatarMergeAnimator>().animator as AnimatorController;
             var layer = controller.layers[1];
             var states = layer.stateMachine.states;
             var menu = node.GetComponent<ModularAvatarMenuInstaller>().menuToAppend;
 
-            Assert.That(controller.parameters, Has.Some.Matches<AnimatorControllerParameter>(p => p.name == "FaceMotion_Smile" && p.type == AnimatorControllerParameterType.Bool));
-            Assert.That(layer.name, Is.EqualTo("FaceMotion MA Smile"));
+            Assert.That(controller.parameters, Has.Some.Matches<AnimatorControllerParameter>(p => p.name == "FaceMotion_Smile_Test" && p.type == AnimatorControllerParameterType.Bool));
+            Assert.That(layer.name, Is.EqualTo("FaceMotion MA Smile_Test"));
             Assert.That(states, Has.Some.Matches<ChildAnimatorState>(s => s.state.name == "Off" && s.state.writeDefaultValues == false));
             Assert.That(states, Has.Some.Matches<ChildAnimatorState>(s => s.state.name == "On" && s.state.motion == _clip && s.state.writeDefaultValues == false));
             Assert.That(menu.controls, Has.Count.EqualTo(1));
             Assert.That(menu.controls[0].type, Is.EqualTo(VRCExpressionsMenu.Control.ControlType.Toggle));
-            Assert.That(menu.controls[0].parameter.name, Is.EqualTo("FaceMotion_Smile"));
+            Assert.That(menu.controls[0].parameter.name, Is.EqualTo("FaceMotion_Smile_Test"));
+            Assert.That(menu.controls[0].name, Is.EqualTo("Smile Test"));
         }
 
         [Test]

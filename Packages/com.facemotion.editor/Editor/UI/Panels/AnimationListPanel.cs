@@ -12,8 +12,8 @@ namespace FaceMotion.Editor.UI.Panels
     {
         private readonly FaceMotionEditorSession _session;
         private readonly AnimationController _animation;
-        private bool _renameActive;
         private string _renameBuffer;
+        private string _renameAnimationId;
         private string _settingsAnimationId;
         private float _durationBuffer;
         private float _frameRateBuffer;
@@ -34,6 +34,14 @@ namespace FaceMotion.Editor.UI.Panels
             IReadOnlyList<FaceMotionAnimationData> list = Snapshot(_session.ActiveProject?.Animations);
             int count = list.Count;
 
+            if (count > 0)
+            {
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button(FaceMotionUiText.Get("batchSelectAll"), EditorStyles.miniButtonLeft)) _session.SelectAllBatchAnimations();
+                if (GUILayout.Button(FaceMotionUiText.Get("batchClearAll"), EditorStyles.miniButtonRight)) _session.ClearBatchSelection();
+                EditorGUILayout.EndHorizontal();
+            }
+
             for (int i = 0; i < count; i++)
             {
                 var anim = list[i];
@@ -45,11 +53,14 @@ namespace FaceMotion.Editor.UI.Panels
                 bool isSelected = string.Equals(anim.AnimationId, _session.SelectedAnimationId, System.StringComparison.Ordinal);
                 EditorGUILayout.BeginHorizontal();
 
+                bool batchSelected = EditorGUILayout.Toggle(_session.IsBatchSelected(anim.AnimationId), GUILayout.Width(18f));
+                if (batchSelected != _session.IsBatchSelected(anim.AnimationId)) _session.SetBatchSelected(anim.AnimationId, batchSelected);
+
                 string label = !string.IsNullOrEmpty(anim.DisplayName) ? anim.DisplayName : FaceMotionUiText.Get("unnamed");
                 if (GUILayout.Button(label, isSelected ? EditorStyles.miniButtonMid : EditorStyles.miniButtonLeft))
                 {
                     _animation.Select(anim.AnimationId);
-                    _renameActive = false;
+                    _renameAnimationId = null;
                 }
 
                 if (GUILayout.Button(FaceMotionUiText.Get("duplicate"), EditorStyles.miniButtonMid, GUILayout.Width(38)))
@@ -88,40 +99,39 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (_session.SelectedAnimationId != null)
             {
+                DrawAnimationName();
                 DrawTimelineSettings();
 
                 EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button(FaceMotionUiText.Get("rename"), EditorStyles.miniButton))
-                {
-                    _renameActive = true;
-                    _renameBuffer = _session.GetSelectedAnimation()?.DisplayName ?? string.Empty;
-                }
-
                 if (GUILayout.Button(FaceMotionUiText.Get("delete"), EditorStyles.miniButton))
                 {
                     _animation.Delete();
                 }
 
                 EditorGUILayout.EndHorizontal();
+            }
+        }
 
-                if (_renameActive)
+        private void DrawAnimationName()
+        {
+            var selected = _session.GetSelectedAnimation();
+            if (selected == null) return;
+            if (!string.Equals(_renameAnimationId, selected.AnimationId, System.StringComparison.Ordinal))
+            {
+                _renameAnimationId = selected.AnimationId;
+                _renameBuffer = selected.DisplayName ?? string.Empty;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            _renameBuffer = EditorGUILayout.TextField(new GUIContent(FaceMotionUiText.Get("animationName"), FaceMotionUiText.Get("tooltipAnimationName")), _renameBuffer);
+            using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(_renameBuffer) || string.Equals(_renameBuffer.Trim(), selected.DisplayName, System.StringComparison.Ordinal)))
+            {
+                if (GUILayout.Button(FaceMotionUiText.Get("apply"), GUILayout.Width(48f)))
                 {
-                    EditorGUILayout.BeginHorizontal();
-                    _renameBuffer = EditorGUILayout.TextField(_renameBuffer);
-                    if (GUILayout.Button(FaceMotionUiText.Get("ok"), GUILayout.Width(36)))
-                    {
-                        _animation.Rename(_renameBuffer);
-                        _renameActive = false;
-                    }
-
-                    if (GUILayout.Button(FaceMotionUiText.Get("cancel"), GUILayout.Width(56)))
-                    {
-                        _renameActive = false;
-                    }
-
-                    EditorGUILayout.EndHorizontal();
+                    if (_animation.Rename(_renameBuffer)) _renameBuffer = _session.GetSelectedAnimation()?.DisplayName ?? _renameBuffer;
                 }
             }
+            EditorGUILayout.EndHorizontal();
         }
 
         internal static IReadOnlyList<FaceMotionAnimationData> Snapshot(IReadOnlyList<FaceMotionAnimationData> source)

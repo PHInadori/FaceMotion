@@ -10,9 +10,9 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 
 - BlendShape、Position、Rotation、Scale のタイムライン編集（Ctrl/Cmd+ホイールで zoom）
 - 分離された Preview、再生コントロール、scene-style camera、明示操作による可逆的な Scene Apply
-- BlendShape browser tree（カテゴリ分類、検索、VRChat / MA conflict の事前表示）
-- Smile、Wink、Blink、Angry、Sad、Surprise、Embarrassed の built-in preset
-- seed を指定できる deterministic な Blink / Random motion generation
+- BlendShape browser（カテゴリ分類ボタン、検索、VRChat / MA conflict の事前表示）
+- 編集可能な Animation 名（VRChat menu label にもそのまま使用）
+- 複数 Animation の一括選択と Batch Integration
 - AnimationClip export
 - VRChat へのワンクリック統合（Export → Plan → Validate → Apply）、Direct Integration、任意の Modular Avatar Integration
 - 次の操作を示す workflow guidance、empty state、tooltip、shortcut help
@@ -35,10 +35,10 @@ VCC / ALCOM では `https://phinadori.github.io/PHInadori-VPM/index.json` を cu
 ## Quick Start
 
 1. Unity menu **Tools/FaceMotion/FaceMotion ウィンドウを開く** を開きます。
-2. scene 内の VRChat avatar を選択し、FaceMotion Project と Animation を作成します。
-3. BlendShape または Transform Track を追加し、Keyframe を編集します。
+2. scene 内の VRChat avatar を選択し、FaceMotion Project と Animation を作成します。Animation 名は編集でき、VRChat の menu label にそのまま使われます。
+3. BlendShape または Transform Track を追加し、Keyframe を編集します。BlendShape Track 追加時は現在のアバターの BlendShape 値を 0 秒の初期 key として自動生成します。
 4. Preview の再生コントロールと camera 操作で確認し、必要なら AnimationClip を export します。
-5. VRChat 統合では **VRChatへ追加** のワンクリックフローを使うか、Plan の diagnostic を確認してから Direct または Modular Avatar backend を Apply します。
+5. VRChat 統合では **VRChatへ追加** のワンクリックフローを使うか、複数 Animation をまとめて一括統合（Batch Integration）できます。Plan の diagnostic を確認してから Direct または Modular Avatar backend を Apply します。
 6. scene を保存し、VRChat SDK の Build & Test で動作を確認します。
 
 詳細: [Getting Started](Documentation~/Getting-Started.md)

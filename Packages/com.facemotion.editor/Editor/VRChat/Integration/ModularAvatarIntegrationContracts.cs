@@ -20,12 +20,33 @@ namespace FaceMotion.Editor.VRChat.Integration
     public sealed class ModularAvatarIntegrationPlan
     {
         public ModularAvatarIntegrationPlan(ModularAvatarIntegrationRequest request, string parameterName, string objectName, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
-        { Request = request; ParameterName = parameterName; ObjectName = objectName; Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>(); }
+            : this(request, parameterName, objectName, "FaceMotionMA_" + (objectName ?? string.Empty).Replace("FaceMotion MA ", string.Empty), diagnostics) { }
+        public ModularAvatarIntegrationPlan(ModularAvatarIntegrationRequest request, string parameterName, string objectName, string rootName, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
+        { Request = request; ParameterName = parameterName; ObjectName = objectName; RootName = rootName; Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>(); }
         public ModularAvatarIntegrationRequest Request { get; }
         public string ParameterName { get; }
         public string ObjectName { get; }
+        public string RootName { get; }
         public IReadOnlyList<FaceMotionDiagnostic> Diagnostics { get; }
         public bool IsValid { get { for (var i = 0; i < Diagnostics.Count; i++) if (Diagnostics[i].Blocking) return false; return true; } }
+    }
+
+    /// <summary>Pure, all-or-nothing planning input for multiple MA integrations on one avatar.</summary>
+    public sealed class ModularAvatarIntegrationBatchPlan
+    {
+        public ModularAvatarIntegrationBatchPlan(IReadOnlyList<ModularAvatarIntegrationPlan> items)
+        { Items = items ?? Array.Empty<ModularAvatarIntegrationPlan>(); }
+        public IReadOnlyList<ModularAvatarIntegrationPlan> Items { get; }
+        public bool IsValid { get { if (Items.Count == 0) return false; for (var i = 0; i < Items.Count; i++) if (Items[i] == null || !Items[i].IsValid) return false; return true; } }
+    }
+
+    public sealed class ModularAvatarIntegrationBatchResult
+    {
+        public ModularAvatarIntegrationBatchResult(bool succeeded, IReadOnlyList<ModularAvatarIntegrationResult> items, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
+        { Succeeded = succeeded; Items = items ?? Array.Empty<ModularAvatarIntegrationResult>(); Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>(); }
+        public bool Succeeded { get; }
+        public IReadOnlyList<ModularAvatarIntegrationResult> Items { get; }
+        public IReadOnlyList<FaceMotionDiagnostic> Diagnostics { get; }
     }
 
     public sealed class ModularAvatarIntegrationResult
@@ -43,6 +64,8 @@ namespace FaceMotion.Editor.VRChat.Integration
         ModularAvatarIntegrationPlan Plan(ModularAvatarIntegrationRequest request);
         ModularAvatarIntegrationResult Apply(ModularAvatarIntegrationPlan plan);
         ModularAvatarIntegrationResult Remove(VRCAvatarDescriptor avatar);
+        ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests);
+        ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan);
     }
 
     public static class ModularAvatarIntegrationBackendLocator

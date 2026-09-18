@@ -17,26 +17,30 @@ namespace FaceMotion.Editor.UI.Preview
         /// <summary>Monotonic change counter so panels can trigger a preview re-evaluation.</summary>
         public int ChangeCount { get; private set; }
 
-        public void SetHover(BlendShapeBinding binding)
+        /// <returns>True when the preview override changed.</returns>
+        public bool SetHover(BlendShapeBinding binding)
         {
             if (_binding.HasValue && _binding.Value.Equals(binding))
             {
-                return;
+                return false;
             }
 
             _binding = binding;
             ChangeCount++;
+            return true;
         }
 
-        public void Clear()
+        /// <returns>True when an active preview override was cleared.</returns>
+        public bool Clear()
         {
             if (!_binding.HasValue)
             {
-                return;
+                return false;
             }
 
             _binding = null;
             ChangeCount++;
+            return true;
         }
     }
 }

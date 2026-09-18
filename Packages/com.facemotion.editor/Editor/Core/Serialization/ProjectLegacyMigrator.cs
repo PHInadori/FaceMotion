@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
-using FaceMotion.Generation;
 using FaceMotion.Timeline;
 using FaceMotion.Versioning;
 using UnityEngine;
@@ -41,7 +40,6 @@ namespace FaceMotion.Serialization
 
             RepairProjectId(sourceCopy, diagnostics);
             RepairAnimations(sourceCopy, diagnostics);
-            RepairGenerationRecords(sourceCopy, diagnostics);
             return true;
         }
 
@@ -233,47 +231,6 @@ namespace FaceMotion.Serialization
             }
 
             applyId(repaired);
-        }
-
-        private static void RepairGenerationRecords(FaceMotionProject project, ICollection<FaceMotionDiagnostic> diagnostics)
-        {
-            var seenGenerationIds = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var record in project.Generations)
-            {
-                if (record == null)
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.PartialRecovery, "A null generation record was removed during migration.", project.ProjectId, "Recreate the record if it was unexpected."));
-                    continue;
-                }
-
-                record.SetGenerationIdForMigration(MigrationIds.RepairUnique(
-                    record.GenerationId, seenGenerationIds, out bool idRepaired, out bool idDuplicated));
-                if (idRepaired)
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.IdRepaired, "A generation record had no valid stable ID; a new one was generated.", record.GenerationId, "Keep the generated ID."));
-                }
-                else if (idDuplicated)
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.DuplicateId, "A duplicate generation record ID was replaced with a new stable ID.", record.GenerationId, "Keep the generated ID."));
-                }
-
-                if (record.AlgorithmVersion == FaceMotionVersions.LegacyGeneratorAlgorithmVersion)
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.PartialRecovery, "A generation record predates algorithm versions; its pass cannot be regenerated with a guaranteed algorithm version.", record.GenerationId, "Regenerate if you need fresh output."));
-                }
-
-                if (string.IsNullOrEmpty(record.SettingsSnapshot))
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.PartialRecovery, "A generation record has no settings snapshot; it cannot be reproduced from provenance.", record.GenerationId, "Regenerate if you need fresh output."));
-                    continue;
-                }
-
-                var snapshot = JsonUtility.FromJson<GenerationSettingsSnapshot>(record.SettingsSnapshot);
-                if (snapshot == null || snapshot.FormatVersion != 1)
-                {
-                    diagnostics.Add(Warning(FaceMotionDiagnosticCodes.PartialRecovery, "A generation record's settings snapshot uses an unknown format; it cannot be reproduced from provenance.", record.GenerationId, "Regenerate if you need fresh output."));
-                }
-            }
         }
 
         private static bool IsSupportedKind(TrackKind kind)

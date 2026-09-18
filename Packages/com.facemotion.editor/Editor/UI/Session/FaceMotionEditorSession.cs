@@ -25,6 +25,7 @@ namespace FaceMotion.Editor.UI.Session
         private readonly List<FaceMotionDiagnostic> _diagnostics = new List<FaceMotionDiagnostic>();
         private readonly Dictionary<string, TrackBindingValidation> _trackBindings =
             new Dictionary<string, TrackBindingValidation>(StringComparer.Ordinal);
+        private readonly HashSet<string> _batchAnimationIds = new HashSet<string>(StringComparer.Ordinal);
         private FaceMotionDiagnostic _lastOperationDiagnostic;
 
         public ValidationReport LastProjectValidation { get; set; }
@@ -48,6 +49,9 @@ namespace FaceMotion.Editor.UI.Session
         public bool AvatarIndexDirty { get; set; }
 
         public string SelectedAnimationId { get; set; }
+
+        /// <summary>Session-only targets for K2 batch integration; independent of timeline selection.</summary>
+        public IReadOnlyCollection<string> BatchAnimationIds => _batchAnimationIds;
 
         public string SelectedTrackId { get; set; }
 
@@ -112,6 +116,7 @@ namespace FaceMotion.Editor.UI.Session
             ActiveProject = project;
             ActiveProjectAssetPath = assetPath;
             SelectedAnimationId = null;
+            _batchAnimationIds.Clear();
             SelectedTrackId = null;
             Selection.Clear();
             ViewState.CurrentTime = 0f;
@@ -178,6 +183,7 @@ namespace FaceMotion.Editor.UI.Session
             if (ActiveProject == null)
             {
                 SelectedAnimationId = null;
+                _batchAnimationIds.Clear();
                 SelectedTrackId = null;
                 Selection.Clear();
                 return;
@@ -198,8 +204,11 @@ namespace FaceMotion.Editor.UI.Session
                 SelectedAnimationId = null;
                 SelectedTrackId = null;
                 Selection.Clear();
-                return;
             }
+
+            _batchAnimationIds.RemoveWhere(id => !ActiveProject.TryGetAnimation(id, out _));
+
+            if (animation == null) return;
 
             if (string.IsNullOrEmpty(SelectedTrackId)
                 || !animation.Timeline.TryGetTrack(SelectedTrackId, out var track))
@@ -298,6 +307,38 @@ namespace FaceMotion.Editor.UI.Session
 
             ActiveProject.TryGetAnimation(SelectedAnimationId, out var animation);
             return animation;
+        }
+
+        public bool IsBatchSelected(string animationId)
+        {
+            return !string.IsNullOrEmpty(animationId) && _batchAnimationIds.Contains(animationId);
+        }
+
+        public bool SetBatchSelected(string animationId, bool selected)
+        {
+            if (string.IsNullOrEmpty(animationId)) return false;
+            bool changed = selected ? _batchAnimationIds.Add(animationId) : _batchAnimationIds.Remove(animationId);
+            if (changed) NotifyChanged();
+            return changed;
+        }
+
+        public void SelectAllBatchAnimations()
+        {
+            if (ActiveProject == null) return;
+            bool changed = false;
+            for (int i = 0; i < ActiveProject.Animations.Count; i++)
+            {
+                var animation = ActiveProject.Animations[i];
+                if (animation != null && !string.IsNullOrEmpty(animation.AnimationId)) changed |= _batchAnimationIds.Add(animation.AnimationId);
+            }
+            if (changed) NotifyChanged();
+        }
+
+        public void ClearBatchSelection()
+        {
+            if (_batchAnimationIds.Count == 0) return;
+            _batchAnimationIds.Clear();
+            NotifyChanged();
         }
 
         public FaceTrackData GetSelectedTrack()

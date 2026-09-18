@@ -1,4 +1,6 @@
 using System;
+using FaceMotion.Avatar;
+using FaceMotion.Editor.Avatar;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Timeline;
@@ -50,7 +52,41 @@ namespace FaceMotion.Editor.UI.Controllers
         /// <summary>Adds the exact binding represented by an avatar candidate snapshot.</summary>
         public bool AddBlendShapeTrack(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
         {
-            return candidate != null && AddBlendShapeTrack(candidate.RendererPath, candidate.BlendShapeName);
+            if (candidate == null) return false;
+            var animation = _session.GetSelectedAnimation();
+            if (animation == null)
+            {
+                SetOutcome(ControllerDiagnostics.NoSelection("animation"));
+                return false;
+            }
+            if (TrackDuplicateFinder.HasDuplicate(animation, TrackKind.BlendShape, candidate.RendererPath, candidate.BlendShapeName, null))
+            {
+                SetOutcome(ControllerDiagnostics.DuplicateTrack(candidate.RendererPath + " / " + candidate.BlendShapeName, animation.AnimationId));
+                return false;
+            }
+
+            var binding = candidate.ToBinding();
+            UnityAvatarObjectCache cache = _session.ActiveObjectCache;
+            if (cache == null || !cache.TryGetRenderer(binding.RendererPath, out var renderer)
+                || !cache.TryGetBlendShapeIndex(binding, out int index)
+                || renderer == null || renderer.sharedMesh == null || index < 0 || index >= renderer.sharedMesh.blendShapeCount
+                || !string.Equals(renderer.sharedMesh.GetBlendShapeName(index), binding.BlendShapeName, StringComparison.Ordinal))
+            {
+                SetOutcome(ControllerDiagnostics.InvalidValue("The selected blend shape is no longer available on the active avatar."));
+                return false;
+            }
+
+            float value = renderer.GetBlendShapeWeight(index);
+            if (float.IsNaN(value) || float.IsInfinity(value))
+            {
+                SetOutcome(ControllerDiagnostics.InvalidValue("The active avatar returned an invalid blend shape weight."));
+                return false;
+            }
+
+            var command = new AddBlendShapeTrackWithInitialKeyCommand(animation.AnimationId, binding.RendererPath, binding.BlendShapeName, value);
+            var result = UICommandRunner.Run(_session, command);
+            if (result.Succeeded && !string.IsNullOrEmpty(command.CreatedTrackId)) Select(command.CreatedTrackId);
+            return result.Succeeded;
         }
 
         public bool AddTransformTrack(TrackKind kind, string transformPath)

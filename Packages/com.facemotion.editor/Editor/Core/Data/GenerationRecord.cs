@@ -1,5 +1,4 @@
 using System;
-using FaceMotion.Generation;
 using UnityEngine;
 
 namespace FaceMotion.Data
@@ -107,10 +106,5 @@ namespace FaceMotion.Data
             _generationId = id ?? string.Empty;
         }
 
-        internal void NormalizeBuiltinPresetIds()
-        {
-            _sourcePresetId = FaceMotionBuiltins.NormalizeId(_sourcePresetId);
-            _settingsSnapshot = GenerationSettingsSnapshot.NormalizeLegacyBuiltinPresetId(_settingsSnapshot);
-        }
     }
 }

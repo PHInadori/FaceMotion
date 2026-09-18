@@ -38,4 +38,5 @@ namespace FaceMotion.Editor.UI.Window
             Pending = false;
         }
     }
+
 }

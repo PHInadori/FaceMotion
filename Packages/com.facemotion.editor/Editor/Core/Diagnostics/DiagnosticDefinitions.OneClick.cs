@@ -16,6 +16,11 @@ namespace FaceMotion.Diagnostics
             Add(defs, FaceMotionDiagnosticCodes.OneClickSucceeded, FaceMotionDiagnosticActionLevel.Info, "integration-one-click");
             Add(defs, FaceMotionDiagnosticCodes.OneClickApplyStopped, FaceMotionDiagnosticActionLevel.Recommended, "integration-one-click");
             Add(defs, FaceMotionDiagnosticCodes.OneClickNoPartialState, FaceMotionDiagnosticActionLevel.Info, "integration-one-click");
+            Add(defs, FaceMotionDiagnosticCodes.BatchNoSelection, FaceMotionDiagnosticActionLevel.Recommended, "integration-batch");
+            Add(defs, FaceMotionDiagnosticCodes.BatchDuplicateExportPath, FaceMotionDiagnosticActionLevel.Recommended, "integration-batch");
+            Add(defs, FaceMotionDiagnosticCodes.BatchPreflightFailed, FaceMotionDiagnosticActionLevel.Recommended, "integration-batch");
+            Add(defs, FaceMotionDiagnosticCodes.BatchRollback, FaceMotionDiagnosticActionLevel.Recommended, "integration-batch");
+            Add(defs, FaceMotionDiagnosticCodes.BatchPartialApply, FaceMotionDiagnosticActionLevel.Recommended, "integration-batch");
         }
     }
 }

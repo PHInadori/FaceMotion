@@ -5,10 +5,12 @@
 > Historical architecture record. Current user-facing behavior is documented in
 > `../README.md`; current compatibility and migration contracts are
 > `../Compatibility.md` and `../Schema-Migration.md`.
+> Phase E preset and random-generation authoring was removed from the current
+> product. Its serialized models and provenance remain only for compatibility.
 
 Phase A complete and Phase A.1 hardening accepted on 2026-09-14. The working domain model, serialization, migration, Undo commands, canonical evaluator, and provenance contracts are implemented and covered by permanent EditMode tests. Phase B (avatar index / binding / mapping foundation) is complete: the SDK-neutral AvatarIndex, avatar fingerprint, mapping profile, exact resolver, and per-track binding validator are implemented and covered by permanent EditMode tests. Phase C is complete: the EditorWindow, session, avatar candidate pickers, timeline interaction, timeline settings, snap toggle, key editing, diagnostics, and avatar binding visibility are implemented. The code-level completion inventory is `Phase-C-Implementation-Inventory.md`.
 
-Phase D preview foundations use an isolated hidden avatar clone rendered through `PreviewRenderUtility`, the canonical evaluator, reversible scene apply, and window/reload/play-mode cleanup. Phase E.1 exposes built-ins, unique-only mapping suggestions, and deterministic generated motion through explicit one-step Undoable editor actions. Export, Direct Integration, and the optional Modular Avatar Integration were completed in later phases; see the current user documentation rather than interpreting earlier phase scope as current product limits.
+Phase D preview foundations use an isolated hidden avatar clone rendered through `PreviewRenderUtility`, the canonical evaluator, reversible scene apply, and window/reload/play-mode cleanup. Phase E.1 formerly exposed built-ins, unique-only mapping suggestions, and deterministic generated motion through explicit one-step Undoable editor actions; that authoring workflow has been removed. Export, Direct Integration, and the optional Modular Avatar Integration were completed in later phases; see the current user documentation rather than interpreting earlier phase scope as current product limits.
 
 ## Frozen Environment
 

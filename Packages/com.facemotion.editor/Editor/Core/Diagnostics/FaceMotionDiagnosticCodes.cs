@@ -177,5 +177,12 @@ namespace FaceMotion.Diagnostics
         public const string OneClickSucceeded = "FM-J4-SUCCEEDED";
         public const string OneClickApplyStopped = "FM-J4-APPLY-STOPPED";
         public const string OneClickNoPartialState = "FM-J4-NO-PARTIAL-STATE";
+
+        // FM-K2 (batch VRChat integration).
+        public const string BatchNoSelection = "FM-K2-NO-SELECTION";
+        public const string BatchDuplicateExportPath = "FM-K2-DUPLICATE-EXPORT-PATH";
+        public const string BatchPreflightFailed = "FM-K2-PREFLIGHT-FAILED";
+        public const string BatchRollback = "FM-K2-BATCH-ROLLBACK";
+        public const string BatchPartialApply = "FM-K2-PARTIAL-APPLY";
     }
 }

@@ -7,7 +7,7 @@ FaceMotion の基本文書は日本語中心です。UI の technical identifier
 - [Getting Started](Getting-Started.md) - 最短の作成から VRChat Build & Test まで
 - [Installation](Installation.md) - 対応環境、VCC / ALCOM、手動導入
 - [Uninstall and Update](Uninstall-Update.md) - package removal、reinstall、schema update の実測済み挙動
-- [User Guide](User-Guide.md) - project、track、timeline、preview、preset、Undo
+- [User Guide](User-Guide.md) - project、track、timeline、preview、Undo
 - [Export](Export.md) - AnimationClip export の制約と overwrite
 - [VRChat Integration](VRChat-Integration.md) - Direct Integration と安全性
 - [Modular Avatar](Modular-Avatar.md) - 任意 MA backend の workflow

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using FaceMotion.Avatar;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
@@ -279,6 +280,48 @@ namespace FaceMotion.Editor.Tests
             Assert.That(_tracks.AddBlendShapeTrack("Body/Face", "Mouth_Smile"), Is.True);
             Assert.That(_tracks.AddBlendShapeTrack("Body/Face", "Mouth_Smile"), Is.False);
             Assert.That(animation.Timeline.Tracks.Count, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void TrackController_AddBlendShapeCandidate_UsesCurrentAvatarWeightAsInitialKey()
+        {
+            using (var fixture = AvatarFixture.Create())
+            {
+                var project = CreateProject(_temp, "TrackBaseline");
+                _session.SetActiveProject(project, "a.asset");
+                _animations.Add();
+                fixture.FaceRenderer.SetBlendShapeWeight(0, 20.5f);
+                _avatar.SetDescriptor(fixture.Descriptor);
+                var candidate = _session.Candidates.BlendShapes.First(c => c.RendererPath == AvatarFixture.FaceRendererPath && c.BlendShapeName == "Mouth_Smile");
+
+                Assert.That(_tracks.AddBlendShapeTrack(candidate), Is.True);
+
+                var track = _session.GetSelectedTrack();
+                Assert.That(track.BlendShape.Keys, Has.Count.EqualTo(1));
+                Assert.That(track.BlendShape.Keys[0].Time, Is.EqualTo(0f));
+                Assert.That(track.BlendShape.Keys[0].Value, Is.EqualTo(20.5f));
+                Assert.That(fixture.FaceRenderer.GetBlendShapeWeight(0), Is.EqualTo(20.5f));
+            }
+        }
+
+        [Test]
+        public void TrackController_AddBlendShapeCandidate_DoesNotAddBaselineToExistingTrack()
+        {
+            using (var fixture = AvatarFixture.Create())
+            {
+                var project = CreateProject(_temp, "TrackBaselineExisting");
+                _session.SetActiveProject(project, "a.asset");
+                _animations.Add();
+                _avatar.SetDescriptor(fixture.Descriptor);
+                var candidate = _session.Candidates.BlendShapes.First(c => c.RendererPath == AvatarFixture.FaceRendererPath && c.BlendShapeName == "Mouth_Smile");
+                Assert.That(_tracks.AddBlendShapeTrack(candidate), Is.True);
+                var track = _session.GetSelectedTrack();
+                Assert.That(track.BlendShape.Keys, Has.Count.EqualTo(1));
+                fixture.FaceRenderer.SetBlendShapeWeight(0, 80f);
+
+                Assert.That(_tracks.AddBlendShapeTrack(candidate), Is.False);
+                Assert.That(track.BlendShape.Keys, Has.Count.EqualTo(1));
+            }
         }
 
         [Test]

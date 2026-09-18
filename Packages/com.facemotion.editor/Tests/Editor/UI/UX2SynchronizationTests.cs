@@ -384,6 +384,20 @@ namespace FaceMotion.Editor.Tests
             Assert.That(scheduler.Request(), Is.True);
         }
 
+        [Test]
+        public void PlaybackUpdateGate_RegistersOnlyForActivePlayback()
+        {
+            var gate = new PlaybackUpdateGate();
+
+            Assert.That(gate.Synchronize(false), Is.False);
+            Assert.That(gate.Synchronize(true), Is.True);
+            Assert.That(gate.IsRegistered, Is.True);
+            Assert.That(gate.Synchronize(true), Is.False);
+            Assert.That(gate.Reset(), Is.True);
+            Assert.That(gate.IsRegistered, Is.False);
+            Assert.That(gate.Reset(), Is.False);
+        }
+
         private static int CountEntriesContaining(IReadOnlyList<string> entries, string text)
         {
             int count = 0;

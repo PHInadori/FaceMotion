@@ -13,7 +13,7 @@ namespace FaceMotion.Editor
         public RenameAnimationCommand(string animationId, string displayName)
         {
             _animationId = animationId;
-            _displayName = displayName ?? string.Empty;
+            _displayName = displayName == null ? string.Empty : displayName.Trim();
         }
 
         public string UndoLabel => "Rename Animation";
@@ -23,6 +23,12 @@ namespace FaceMotion.Editor
             if (!project.TryGetAnimation(_animationId, out _))
             {
                 error = CommandDiagnostics.TargetNotFound("animation", _animationId);
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(_displayName))
+            {
+                error = CommandDiagnostics.InvalidArgument("Animation name cannot be empty.", _animationId);
                 return false;
             }
 

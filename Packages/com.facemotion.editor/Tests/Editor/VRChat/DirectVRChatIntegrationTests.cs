@@ -207,11 +207,12 @@ namespace FaceMotion.Editor.Tests
         {
             var menu = ScriptableObject.CreateInstance<VRCExpressionsMenu>(); menu.controls = null;
             _avatar.expressionsMenu = menu;
-            var result = DirectVRChatIntegration.Apply(Plan());
+            var result = DirectVRChatIntegration.Apply(Plan("Happy Face"));
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Manifest.GeneratedMenu.controls, Has.Count.EqualTo(1));
             Assert.That(result.Manifest.GeneratedMenu.controls[0].type, Is.EqualTo(VRCExpressionsMenu.Control.ControlType.SubMenu));
             Assert.That(result.Manifest.GeneratedMenu.controls[0].subMenu, Is.Not.Null);
+            Assert.That(result.Manifest.GeneratedSubMenu.controls[0].name, Is.EqualTo("Happy Face"));
         }
 
         [Test]
@@ -409,6 +410,72 @@ namespace FaceMotion.Editor.Tests
             Assert.That(AssetDatabase.GetAssetPath(second.Manifest), Is.EqualTo(Folder + "/FaceMotion_Smile/Manifest.asset"));
             Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotion_Smile 1"), Is.False);
             AssetDatabase.DeleteAsset(Folder + "/FaceMotion_Smile/MyUserMemo.anim");
+        }
+
+        [Test]
+        public void BatchPlan_InvalidDuplicateClipPathDoesNotCreateAssetsOrMutateDescriptor()
+        {
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile"),
+                new DirectIntegrationBatchItemRequest(_clip, "Frown")
+            }, Folder);
+
+            var plan = DirectVRChatIntegration.PlanBatch(request);
+            var result = DirectVRChatIntegration.ApplyBatch(plan);
+
+            Assert.That(plan.IsValid, Is.False);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+            Assert.That(_avatar.expressionParameters, Is.Null);
+            Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotion_Batch"), Is.False);
+        }
+
+        [Test]
+        public void BatchApply_ComposesOneOutputSetAndIdenticalRerunIsIdempotent()
+        {
+            var secondClip = new AnimationClip(); AssetDatabase.CreateAsset(secondClip, Folder + "/frown.anim");
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile"),
+                new DirectIntegrationBatchItemRequest(secondClip, "Frown")
+            }, Folder);
+
+            var first = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+            var second = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+
+            Assert.That(first.Succeeded, Is.True);
+            Assert.That(first.Manifest.GeneratedFx.parameters, Has.Some.Matches<AnimatorControllerParameter>(p => p.name == "FaceMotion_Smile"));
+            Assert.That(first.Manifest.GeneratedFx.parameters, Has.Some.Matches<AnimatorControllerParameter>(p => p.name == "FaceMotion_Frown"));
+            Assert.That(first.Manifest.GeneratedSubMenu.controls, Has.Count.EqualTo(2));
+            Assert.That(first.Manifest.GeneratedSubMenu.controls[0].name, Is.EqualTo("Smile"));
+            Assert.That(first.Manifest.GeneratedSubMenu.controls[1].name, Is.EqualTo("Frown"));
+            Assert.That(first.Manifest.GeneratedMenu.controls, Has.Count.EqualTo(1));
+            Assert.That(second.Succeeded, Is.True);
+            Assert.That(second.Manifest, Is.SameAs(first.Manifest));
+            Assert.That(AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(Folder + "/FaceMotion_Batch/BatchManifest.asset"), Is.SameAs(first.Manifest));
+            Assert.That(DirectVRChatIntegration.RollbackBatch(first.Manifest, out _), Is.True);
+            Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+        }
+
+        [Test]
+        public void BatchApply_InjectedFailureRollsBackAllGeneratedAssetsBeforeDescriptorAssignment()
+        {
+            var secondClip = new AnimationClip(); AssetDatabase.CreateAsset(secondClip, Folder + "/frown.anim");
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile"),
+                new DirectIntegrationBatchItemRequest(secondClip, "Frown")
+            }, Folder);
+            DirectVRChatIntegration.ApplyFailureInjector = stage => { if (stage == "after-batch-item-0") throw new System.InvalidOperationException("injected"); };
+
+            var result = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+            Assert.That(_avatar.expressionParameters, Is.Null);
+            Assert.That(_avatar.expressionsMenu, Is.Null);
+            Assert.That(AssetDatabase.IsValidFolder(Folder + "/FaceMotion_Batch"), Is.False);
         }
 
         private void SetCurve(string path, System.Type type, string property) { _clip.SetCurve(path, type, property, AnimationCurve.Constant(0f, 1f, 100f)); }

@@ -86,6 +86,69 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void SetHover_ReportsOnlyTargetChanges()
+        {
+            var first = new BlendShapeBinding(AvatarFixture.FaceRendererPath, "Mouth_Smile");
+            var second = new BlendShapeBinding(AvatarFixture.CheekRendererPath, "Smile");
+
+            Assert.That(_preview.Override.SetHover(first), Is.True);
+            Assert.That(_preview.Override.SetHover(first), Is.False);
+            Assert.That(_preview.Override.SetHover(second), Is.True);
+            Assert.That(_preview.Override.Binding, Is.EqualTo(second));
+            Assert.That(_preview.Override.Clear(), Is.True);
+            Assert.That(_preview.Override.Clear(), Is.False);
+        }
+
+        [Test]
+        public void HoverTransitions_RequestOneRepaintOnlyWhenTheTargetChanges()
+        {
+            var state = new PreviewOverrideState();
+            var first = new BlendShapeBinding(AvatarFixture.FaceRendererPath, "Mouth_Smile");
+            var second = new BlendShapeBinding(AvatarFixture.CheekRendererPath, "Smile");
+            int repaints = 0;
+
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, first, () => repaints++), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, first, () => repaints++), Is.False);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, second, () => repaints++), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, null, () => repaints++), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, null, () => repaints++), Is.False);
+            Assert.That(repaints, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void HoverEventPolicy_HandlesWindowEnterWithoutPolling()
+        {
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.MouseEnterWindow }), Is.True);
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.MouseMove }), Is.True);
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.Repaint }), Is.True);
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.Layout }), Is.False);
+        }
+
+        [Test]
+        public void MouseEnterWindowCandidate_ChangesHoverAndRequestsOneRepaint()
+        {
+            var state = new PreviewOverrideState();
+            var binding = new BlendShapeBinding(AvatarFixture.FaceRendererPath, "Mouth_Smile");
+            int repaints = 0;
+
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.MouseEnterWindow }), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, binding, () => repaints++), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, binding, () => repaints++), Is.False);
+            Assert.That(repaints, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void MouseLeaveWindow_ClearsActiveHoverImmediately()
+        {
+            var state = new PreviewOverrideState();
+            state.SetHover(new BlendShapeBinding(AvatarFixture.FaceRendererPath, "Mouth_Smile"));
+
+            Assert.That(TrackListPanel.ShouldClearHoverPreview(new Event { type = EventType.MouseLeaveWindow }, true), Is.True);
+            Assert.That(TrackListPanel.ApplyHoverPreviewChange(state, null, null), Is.True);
+            Assert.That(state.HasActive, Is.False);
+        }
+
+        [Test]
         public void ClearHover_MarksOverrideInactive()
         {
             var binding = new BlendShapeBinding(AvatarFixture.FaceRendererPath, "Mouth_Smile");
@@ -202,6 +265,14 @@ namespace FaceMotion.Editor.Tests
                 preview.Dispose();
                 fixture.Dispose();
             }
+        }
+
+        [Test]
+        public void PreviewRenderPolicy_OnlyRendersOnRepaint()
+        {
+            Assert.That(PreviewSession.ShouldRender(new Event { type = EventType.Layout }), Is.False);
+            Assert.That(PreviewSession.ShouldRender(new Event { type = EventType.MouseMove }), Is.False);
+            Assert.That(PreviewSession.ShouldRender(new Event { type = EventType.Repaint }), Is.True);
         }
 
         [Test]

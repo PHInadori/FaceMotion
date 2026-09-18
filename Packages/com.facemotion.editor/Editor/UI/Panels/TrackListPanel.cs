@@ -21,8 +21,7 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly FaceMotionEditorSession _session;
         private readonly TrackController _tracks;
         private readonly PreviewOverrideState _previewOverride;
-        private readonly string _blendBrowserFoldoutPrefix;
-
+        private readonly Action _requestPreviewRepaint;
         private int _addMode;
         private bool _advancedBlend;
         private bool _advancedTransform;
@@ -41,27 +40,29 @@ namespace FaceMotion.Editor.UI.Panels
         private Vector2 _blendCandidateScroll;
         private Vector2 _transformCandidateScroll;
         private int _blendCategoryFilter;
+        private int _blendFaceCategoryFilter;
         private bool _blendConflictsOnly;
         private bool _blendSafeOnly;
         private readonly ResizableVerticalSplitter _blendCandidateSplitter;
         private readonly ResizableVerticalSplitter _transformCandidateSplitter;
 
-        private const int LargeCategoryThreshold = 120;
         private bool _blendListDirty = true;
-        private readonly int[] _blendCategoryCounts = new int[9];
-        private readonly int[] _blendTopLevelCounts = new int[5];
         private readonly Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string> _blendTooltipCache =
             new Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string>();
         private FaceMotion.Data.FaceMotionAnimationData _addedBindingsAnimation;
         private HashSet<string> _addedBlendBindings;
 
-        public TrackListPanel(FaceMotionEditorSession session, TrackController tracks, PreviewOverrideState previewOverride = null)
+        public TrackListPanel(
+            FaceMotionEditorSession session,
+            TrackController tracks,
+            PreviewOverrideState previewOverride = null,
+            Action requestPreviewRepaint = null)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _tracks = tracks ?? throw new ArgumentNullException(nameof(tracks));
             _previewOverride = previewOverride;
+            _requestPreviewRepaint = requestPreviewRepaint;
             string prefix = "FaceMotion.Window.v2." + Hash128.Compute(Application.dataPath).ToString() + ".TrackPicker.";
-            _blendBrowserFoldoutPrefix = prefix + "BlendBrowser.";
             _blendCandidateSplitter = new ResizableVerticalSplitter(prefix + "BlendHeight", DefaultCandidateListHeight, MinimumCandidateListHeight, MaximumCandidateListHeight);
             _transformCandidateSplitter = new ResizableVerticalSplitter(prefix + "TransformHeight", DefaultCandidateListHeight, MinimumCandidateListHeight, MaximumCandidateListHeight);
         }
@@ -73,7 +74,7 @@ namespace FaceMotion.Editor.UI.Panels
             var animation = _session.GetSelectedAnimation();
             if (animation == null || animation.Timeline == null)
             {
-                _previewOverride?.Clear();
+                ClearHoverPreview();
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAnimation"), MessageType.Info);
                 return;
             }
@@ -136,13 +137,13 @@ namespace FaceMotion.Editor.UI.Panels
             }
             else if (_addMode == 2)
             {
-                _previewOverride?.Clear();
+                ClearHoverPreview();
                 _transformKind = EditorGUILayout.Popup(FaceMotionUiText.Get("kind"), _transformKind, new[] { FaceMotionUiText.Get("position"), FaceMotionUiText.Get("rotation"), FaceMotionUiText.Get("scale") });
                 DrawTransformPicker();
             }
             else
             {
-                _previewOverride?.Clear();
+                ClearHoverPreview();
             }
         }
 
@@ -167,12 +168,13 @@ namespace FaceMotion.Editor.UI.Panels
             RefreshBlendView();
             _blendCandidateScroll = EditorGUILayout.BeginScrollView(_blendCandidateScroll, GUILayout.Height(_blendCandidateSplitter.Height));
             bool hoveringCandidate = false;
-            DrawBlendShapeTree(_session.GetSelectedAnimation(), ref hoveringCandidate);
+            DrawBlendShapeCandidates(_session.GetSelectedAnimation(), ref hoveringCandidate);
 
             EditorGUILayout.EndScrollView();
-            if (!hoveringCandidate && Event.current != null && Event.current.type == EventType.Repaint)
+            Event current = Event.current;
+            if (ShouldClearHoverPreview(current, hoveringCandidate))
             {
-                _previewOverride?.Clear();
+                ClearHoverPreview();
             }
             _blendCandidateSplitter.Draw(MinimumCandidateListHeight, MaximumCandidateListHeight);
             DrawBlendShapeFallback();
@@ -180,19 +182,28 @@ namespace FaceMotion.Editor.UI.Panels
 
         private void DrawBlendShapeFilters()
         {
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            DrawCategoryButton(0, FaceMotionUiText.Get("browserAll"));
+            DrawCategoryButton(1, FaceMotionUiText.Get("categoryFace"));
+            DrawCategoryButton(2, FaceMotionUiText.Get("categoryHair"));
+            DrawCategoryButton(3, FaceMotionUiText.Get("categoryBody"));
+            DrawCategoryButton(4, FaceMotionUiText.Get("categoryClothes"));
+            DrawCategoryButton(5, FaceMotionUiText.Get("categoryOther"));
+            EditorGUILayout.EndHorizontal();
+
+            if (_blendCategoryFilter == 1)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+                DrawFaceCategoryButton(0, FaceMotionUiText.Get("browserAll"));
+                DrawFaceCategoryButton(1, FaceMotionUiText.Get("categoryEye"));
+                DrawFaceCategoryButton(2, FaceMotionUiText.Get("categoryBlink"));
+                DrawFaceCategoryButton(3, FaceMotionUiText.Get("categoryBrow"));
+                DrawFaceCategoryButton(4, FaceMotionUiText.Get("categoryMouth"));
+                DrawFaceCategoryButton(5, FaceMotionUiText.Get("categoryFaceOther"));
+                EditorGUILayout.EndHorizontal();
+            }
+
             EditorGUILayout.BeginHorizontal();
-            _blendCategoryFilter = EditorGUILayout.Popup(
-                FaceMotionUiText.Get("filter"),
-                _blendCategoryFilter,
-                new[]
-                {
-                    FaceMotionUiText.Get("browserAll"),
-                    FaceMotionUiText.Get("categoryFace"),
-                    FaceMotionUiText.Get("categoryHair"),
-                    FaceMotionUiText.Get("categoryBody"),
-                    FaceMotionUiText.Get("categoryClothes"),
-                    FaceMotionUiText.Get("categoryOther")
-                });
             bool conflicts = GUILayout.Toggle(_blendConflictsOnly, FaceMotionUiText.Get("browserConflicts"), EditorStyles.miniButtonLeft, GUILayout.Width(64f));
             bool safe = GUILayout.Toggle(_blendSafeOnly, FaceMotionUiText.Get("browserSafe"), EditorStyles.miniButtonRight, GUILayout.Width(54f));
             bool conflictsChanged = conflicts != _blendConflictsOnly;
@@ -207,7 +218,25 @@ namespace FaceMotion.Editor.UI.Panels
             EditorGUILayout.EndHorizontal();
         }
 
-        private void DrawBlendShapeTree(FaceMotion.Data.FaceMotionAnimationData animation, ref bool hoveringCandidate)
+        private void DrawCategoryButton(int category, string label)
+        {
+            bool selected = _blendCategoryFilter == category;
+            if (GUILayout.Toggle(selected, label, EditorStyles.toolbarButton) && !selected)
+            {
+                _blendCategoryFilter = category;
+            }
+        }
+
+        private void DrawFaceCategoryButton(int category, string label)
+        {
+            bool selected = _blendFaceCategoryFilter == category;
+            if (GUILayout.Toggle(selected, label, EditorStyles.toolbarButton) && !selected)
+            {
+                _blendFaceCategoryFilter = category;
+            }
+        }
+
+        private void DrawBlendShapeCandidates(FaceMotion.Data.FaceMotionAnimationData animation, ref bool hoveringCandidate)
         {
             if (!ReferenceEquals(_addedBindingsAnimation, animation))
             {
@@ -216,94 +245,16 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             var added = _addedBlendBindings;
-            DrawTopLevelCategory("Face", new[]
-            {
-                AvatarCandidateSnapshot.BlendShapeCategory.Eye,
-                AvatarCandidateSnapshot.BlendShapeCategory.Blink,
-                AvatarCandidateSnapshot.BlendShapeCategory.Brow,
-                AvatarCandidateSnapshot.BlendShapeCategory.Mouth,
-                AvatarCandidateSnapshot.BlendShapeCategory.FaceOther
-            }, animation, added, ref hoveringCandidate);
-            DrawTopLevelCategory("Hair", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Hair }, animation, added, ref hoveringCandidate);
-            DrawTopLevelCategory("Body", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Body }, animation, added, ref hoveringCandidate);
-            DrawTopLevelCategory("Clothes", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Clothes }, animation, added, ref hoveringCandidate);
-            DrawTopLevelCategory("Other", new[] { AvatarCandidateSnapshot.BlendShapeCategory.Other }, animation, added, ref hoveringCandidate);
-        }
-
-        private void DrawTopLevelCategory(
-            string topLevel,
-            AvatarCandidateSnapshot.BlendShapeCategory[] categories,
-            FaceMotion.Data.FaceMotionAnimationData animation,
-            HashSet<string> addedBlendBindings,
-            ref bool hoveringCandidate)
-        {
-            int total = CountVisible(categories);
-            if (total == 0 || !MatchesTopLevelFilter(topLevel))
-            {
-                return;
-            }
-
-            bool open = DrawPersistentFoldout("Top." + topLevel, FaceMotionUiText.Get("category" + topLevel) + " (" + total + ")", total >= LargeCategoryThreshold);
-            if (!open)
-            {
-                return;
-            }
-
-            EditorGUI.indentLevel++;
-            if (string.Equals(topLevel, "Face", StringComparison.Ordinal))
-            {
-                for (int i = 0; i < categories.Length; i++)
-                {
-                    DrawFaceCategory(categories[i], animation, addedBlendBindings, ref hoveringCandidate);
-                }
-            }
-            else
-            {
-                DrawCandidates(categories[0], animation, addedBlendBindings, ref hoveringCandidate);
-            }
-
-            EditorGUI.indentLevel--;
-        }
-
-        private void DrawFaceCategory(
-            AvatarCandidateSnapshot.BlendShapeCategory category,
-            FaceMotion.Data.FaceMotionAnimationData animation,
-            HashSet<string> addedBlendBindings,
-            ref bool hoveringCandidate)
-        {
-            int total = CountVisible(category);
-            if (total == 0)
-            {
-                return;
-            }
-
-            bool open = DrawPersistentFoldout("Face." + category, FaceMotionUiText.Get("category" + category) + " (" + total + ")", total >= LargeCategoryThreshold);
-            if (!open)
-            {
-                return;
-            }
-
-            EditorGUI.indentLevel++;
-            DrawCandidates(category, animation, addedBlendBindings, ref hoveringCandidate);
-            EditorGUI.indentLevel--;
-        }
-
-        private void DrawCandidates(
-            AvatarCandidateSnapshot.BlendShapeCategory category,
-            FaceMotion.Data.FaceMotionAnimationData animation,
-            HashSet<string> addedBlendBindings,
-            ref bool hoveringCandidate)
-        {
             for (int i = 0; i < _blendCandidates.Count; i++)
             {
                 var candidate = _blendCandidates[i];
-                if (!FilterAllowsCandidate(candidate) || candidate.Category != category)
+                if (!FilterAllowsCandidate(candidate) || !MatchesCategorySelection(candidate, _blendCategoryFilter, _blendFaceCategoryFilter))
                 {
                     continue;
                 }
 
-                bool alreadyAdded = addedBlendBindings != null
-                    && addedBlendBindings.Contains(BlendBindingKey(candidate.RendererPath, candidate.BlendShapeName));
+                bool alreadyAdded = added != null
+                    && added.Contains(BlendBindingKey(candidate.RendererPath, candidate.BlendShapeName));
                 string label = candidate.BlendShapeName + "  (" + candidate.RendererPath + ")";
                 if (alreadyAdded)
                 {
@@ -329,44 +280,14 @@ namespace FaceMotion.Editor.UI.Panels
                 }
 
                 EditorGUI.EndDisabledGroup();
-                if (_previewOverride != null && Event.current != null && Event.current.type == EventType.Repaint
-                    && GUILayoutUtility.GetLastRect().Contains(Event.current.mousePosition))
+                Event current = Event.current;
+                if (_previewOverride != null && IsCandidateHoverEvent(current)
+                    && GUILayoutUtility.GetLastRect().Contains(current.mousePosition))
                 {
-                    _previewOverride.SetHover(candidate.ToBinding());
+                    SetHoverPreview(candidate.ToBinding());
                     hoveringCandidate = true;
                 }
             }
-        }
-
-        private bool DrawPersistentFoldout(string suffix, string label, bool defaultClosed)
-        {
-            string key = _blendBrowserFoldoutPrefix + suffix;
-            bool saved = EditorPrefs.GetBool(key, !defaultClosed);
-            bool forceOpen = !string.IsNullOrEmpty(_blendCandidateSearch);
-            bool visible = forceOpen ? true : saved;
-            bool changed = EditorGUILayout.Foldout(visible, label, true);
-            if (!forceOpen && changed != saved)
-            {
-                EditorPrefs.SetBool(key, changed);
-            }
-
-            return forceOpen || changed;
-        }
-
-        private int CountVisible(AvatarCandidateSnapshot.BlendShapeCategory[] categories)
-        {
-            int count = 0;
-            for (int i = 0; i < categories.Length; i++)
-            {
-                count += CountVisible(categories[i]);
-            }
-
-            return count;
-        }
-
-        private int CountVisible(AvatarCandidateSnapshot.BlendShapeCategory category)
-        {
-            return _blendCategoryCounts[(int)category];
         }
 
         private bool FilterAllowsCandidate(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
@@ -389,14 +310,26 @@ namespace FaceMotion.Editor.UI.Panels
             return true;
         }
 
-        private bool MatchesTopLevelFilter(string topLevel)
+        internal static bool MatchesCategorySelection(
+            AvatarCandidateSnapshot.BlendShapeCandidate candidate,
+            int categoryFilter,
+            int faceCategoryFilter)
         {
-            return _blendCategoryFilter == 0
-                || (_blendCategoryFilter == 1 && topLevel == "Face")
-                || (_blendCategoryFilter == 2 && topLevel == "Hair")
-                || (_blendCategoryFilter == 3 && topLevel == "Body")
-                || (_blendCategoryFilter == 4 && topLevel == "Clothes")
-                || (_blendCategoryFilter == 5 && topLevel == "Other");
+            if (candidate == null || categoryFilter == 0)
+            {
+                return candidate != null;
+            }
+
+            if (categoryFilter == 1)
+            {
+                return candidate.TopLevelCategory == "Face"
+                    && (faceCategoryFilter == 0 || (int)candidate.Category == faceCategoryFilter - 1);
+            }
+
+            return (categoryFilter == 2 && candidate.TopLevelCategory == "Hair")
+                || (categoryFilter == 3 && candidate.TopLevelCategory == "Body")
+                || (categoryFilter == 4 && candidate.TopLevelCategory == "Clothes")
+                || (categoryFilter == 5 && candidate.TopLevelCategory == "Other");
         }
 
         private static HashSet<string> BuildAddedBlendShapeBindings(FaceMotion.Data.FaceMotionAnimationData animation)
@@ -495,6 +428,7 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (!ReferenceEquals(_candidateSource, candidates))
             {
+                ClearHoverPreview();
                 _candidateSource = candidates;
                 _lastBlendCandidateSearch = null;
                 _lastTransformCandidateSearch = null;
@@ -504,6 +438,52 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             return true;
+        }
+
+        private void SetHoverPreview(BlendShapeBinding binding)
+        {
+            ApplyHoverPreviewChange(_previewOverride, binding, _requestPreviewRepaint);
+        }
+
+        private void ClearHoverPreview()
+        {
+            ApplyHoverPreviewChange(_previewOverride, null, _requestPreviewRepaint);
+        }
+
+        internal static bool ApplyHoverPreviewChange(
+            PreviewOverrideState previewOverride,
+            BlendShapeBinding? binding,
+            Action requestPreviewRepaint)
+        {
+            if (previewOverride == null)
+            {
+                return false;
+            }
+
+            bool changed = binding.HasValue
+                ? previewOverride.SetHover(binding.Value)
+                : previewOverride.Clear();
+            if (changed)
+            {
+                requestPreviewRepaint?.Invoke();
+            }
+
+            return changed;
+        }
+
+        internal static bool IsCandidateHoverEvent(Event current)
+        {
+            return current != null
+                && (current.type == EventType.MouseEnterWindow
+                    || current.type == EventType.MouseMove
+                    || current.type == EventType.Repaint);
+        }
+
+        internal static bool ShouldClearHoverPreview(Event current, bool hoveringCandidate)
+        {
+            return current != null
+                && (current.type == EventType.MouseLeaveWindow
+                    || (!hoveringCandidate && IsCandidateHoverEvent(current)));
         }
 
         private void RefreshBlendView()
@@ -516,28 +496,6 @@ namespace FaceMotion.Editor.UI.Panels
             _blendListDirty = false;
             _lastBlendCandidateSearch = _blendCandidateSearch;
             _blendCandidates = _candidateSource.FilterBlendShapes(_blendCandidateSearch);
-            Array.Clear(_blendCategoryCounts, 0, _blendCategoryCounts.Length);
-            Array.Clear(_blendTopLevelCounts, 0, _blendTopLevelCounts.Length);
-            for (int i = 0; i < _blendCandidates.Count; i++)
-            {
-                var candidate = _blendCandidates[i];
-                if (!FilterAllowsCandidate(candidate))
-                {
-                    continue;
-                }
-
-                _blendCategoryCounts[(int)candidate.Category]++;
-                _blendTopLevelCounts[TopLevelIndex(candidate.TopLevelCategory)]++;
-            }
-        }
-
-        private static int TopLevelIndex(string topLevel)
-        {
-            return topLevel == "Hair" ? 1
-                : topLevel == "Body" ? 2
-                : topLevel == "Clothes" ? 3
-                : topLevel == "Other" ? 4
-                : 0;
         }
 
         private void RefreshTransformCandidatesIfNeeded()

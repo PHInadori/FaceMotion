@@ -24,6 +24,7 @@ namespace FaceMotion.Editor.ModularAvatar
         private const string Prefix = "FaceMotion MA ";
         private static readonly Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest> SessionManifests = new Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest>();
         internal static Action<string> PlanFailureInjector;
+        internal static Action<string> ApplyFailureInjector;
 
         public bool HasExistingIntegration(VRCAvatarDescriptor avatar)
         {
@@ -48,27 +49,94 @@ namespace FaceMotion.Editor.ModularAvatar
             }
         }
 
+        public ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests)
+        {
+            var plans = new List<ModularAvatarIntegrationPlan>();
+            if (requests == null || requests.Count == 0) return new ModularAvatarIntegrationBatchPlan(plans);
+            var reservedParameters = new HashSet<string>(StringComparer.Ordinal);
+            var reservedObjects = new HashSet<string>(StringComparer.Ordinal);
+            var reservedRoots = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < requests.Count; i++)
+            {
+                var request = requests[i];
+                var stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
+                var suffix = 1;
+                string parameter;
+                string objectName;
+                string rootName;
+                do
+                {
+                    var discriminator = suffix == 1 ? string.Empty : "_" + suffix;
+                    parameter = "FaceMotion_" + stem + discriminator;
+                    objectName = Prefix + stem + discriminator;
+                    rootName = "FaceMotionMA_" + stem + discriminator;
+                    suffix++;
+                }
+                while (reservedParameters.Contains(parameter) || reservedObjects.Contains(objectName) || reservedRoots.Contains(rootName) || RootIsOccupiedByOtherIntegration(request == null ? null : request.Avatar, request == null ? null : request.OutputFolder, parameter, rootName));
+                reservedParameters.Add(parameter); reservedObjects.Add(objectName); reservedRoots.Add(rootName);
+                plans.Add(PlanCore(request, parameter, objectName, rootName, true));
+            }
+            return new ModularAvatarIntegrationBatchPlan(plans);
+        }
+
+        public ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan)
+        {
+            var results = new List<ModularAvatarIntegrationResult>();
+            var diagnostics = new List<FaceMotionDiagnostic>();
+            if (plan == null || !plan.IsValid) return new ModularAvatarIntegrationBatchResult(false, results, diagnostics);
+            var created = new List<ModularAvatarIntegrationManifest>();
+            try
+            {
+                for (var i = 0; i < plan.Items.Count; i++)
+                {
+                    var item = plan.Items[i];
+                    var existing = FindManifest(item.Request.Avatar, item.ParameterName) ?? FindRemovalCandidateManifest(item.Request.Avatar, item.ParameterName);
+                    // A matching owned item is already the desired batch state. Do not reapply it:
+                    // later-item failure must never replace an earlier existing integration.
+                    var result = existing == null
+                        ? Apply(item)
+                        : new ModularAvatarIntegrationResult(true, existing, new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarApplied, "Existing Modular Avatar batch item is already applied.") });
+                    results.Add(result);
+                    for (var d = 0; d < result.Diagnostics.Count; d++) diagnostics.Add(result.Diagnostics[d]);
+                    if (!result.Succeeded) throw new InvalidOperationException("A Modular Avatar batch item could not be applied.");
+                    if (existing == null && result.Manifest is ModularAvatarIntegrationManifest manifest) created.Add(manifest);
+                    ApplyFailureInjector?.Invoke("after-batch-item-" + i);
+                }
+                return new ModularAvatarIntegrationBatchResult(true, results, diagnostics);
+            }
+            catch (Exception exception)
+            {
+                for (var i = created.Count - 1; i >= 0; i--) RollbackCreated(created[i]);
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarApply, exception.Message));
+                return new ModularAvatarIntegrationBatchResult(false, results, diagnostics);
+            }
+        }
+
         private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request)
+        {
+            var stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
+            return PlanCore(request, "FaceMotion_" + stem, Prefix + stem, "FaceMotionMA_" + stem, false);
+        }
+
+        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName, bool allowOtherManifests)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarAvatar, "Select a VRCAvatarDescriptor."));
             if (request != null && request.Avatar != null && EditorUtility.IsPersistent(request.Avatar)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarPrefabAsset, "Modular Avatar integration cannot modify a prefab asset.", "Instantiate the avatar in a scene before integrating."));
             if (request == null || request.Clip == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarClip, "Select an AnimationClip before integrating."));
             if (request == null || !IsAssetFolder(request.OutputFolder)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarPath, "Output folder must be an existing folder under Assets."));
-            var stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
-            var parameter = "FaceMotion_" + stem;
             if (parameter.Length > 256) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarParameterName, "The generated parameter name exceeds VRChat's 256 character limit."));
             if (request != null && request.Avatar != null)
             {
-                var existing = FindManifest(request.Avatar) ?? FindRemovalCandidateManifest(request.Avatar);
-                if (existing != null && existing.ParameterName != parameter) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifestConflict, "This avatar is already managed by FaceMotion Modular Avatar integration. Remove it before changing the animation name."));
+                var existing = FindManifest(request.Avatar, parameter) ?? FindRemovalCandidateManifest(request.Avatar, parameter);
+                if (!allowOtherManifests && existing == null && (FindManifest(request.Avatar) != null || FindRemovalCandidateManifest(request.Avatar) != null)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifestConflict, "This avatar is already managed by FaceMotion Modular Avatar integration. Remove it before changing the animation name."));
                 if (request.Clip != null)
                 {
                     ValidateAmbiguousClipBindings(request.Avatar, request.Clip, diagnostics);
                     ValidateConflicts(request.Avatar, request.Clip, parameter, existing, diagnostics);
                 }
             }
-            return new ModularAvatarIntegrationPlan(request, parameter, Prefix + stem, diagnostics);
+            return new ModularAvatarIntegrationPlan(request, parameter, objectName, rootName, diagnostics);
         }
 
         private static FaceMotionDiagnostic UnexpectedPlanDiagnostic(Exception exception, ModularAvatarIntegrationRequest request)
@@ -94,7 +162,7 @@ namespace FaceMotion.Editor.ModularAvatar
         {
             if (plan == null || !plan.IsValid) return new ModularAvatarIntegrationResult(false, null, plan == null ? new[] { Error(FaceMotionDiagnosticCodes.ModularAvatarPlan, "No valid integration plan was supplied.") } : plan.Diagnostics);
             var avatar = plan.Request.Avatar;
-            var existing = FindManifest(avatar) ?? FindRemovalCandidateManifest(avatar);
+            var existing = FindManifest(avatar, plan.ParameterName) ?? FindRemovalCandidateManifest(avatar, plan.ParameterName);
             if (existing != null)
             {
                 var migration = ModularAvatarIntegrationManifestMigration.TryMigrateOnUse(existing, avatar);
@@ -151,7 +219,7 @@ namespace FaceMotion.Editor.ModularAvatar
             }
             else
             {
-                var candidate = plan.Request.OutputFolder + "/FaceMotionMA_" + Sanitize(plan.Request.DisplayName);
+                var candidate = plan.Request.OutputFolder + "/" + plan.RootName;
                 if (AssetDatabase.IsValidFolder(candidate)) candidate = AssetDatabase.GenerateUniqueAssetPath(candidate);
                 root = candidate;
                 if (!AssetDatabase.IsValidFolder(root) && string.IsNullOrEmpty(AssetDatabase.CreateFolder(plan.Request.OutputFolder, Path.GetFileName(root)))) throw new InvalidOperationException("Could not create the FaceMotion MA output folder.");
@@ -176,7 +244,7 @@ namespace FaceMotion.Editor.ModularAvatar
                 var toOff = on.AddTransition(off); toOff.hasExitTime = false; toOff.duration = 0f; toOff.AddCondition(AnimatorConditionMode.IfNot, 0, plan.ParameterName);
                 controller.AddLayer(new AnimatorControllerLayer { name = plan.ObjectName, defaultWeight = 1, stateMachine = machine });
                 var menu = ScriptableObject.CreateInstance<VRCExpressionsMenu>(); menu.name = plan.ObjectName;
-                menu.controls = new List<VRCExpressionsMenu.Control> { new VRCExpressionsMenu.Control { name = "Play", type = VRCExpressionsMenu.Control.ControlType.Toggle, parameter = new VRCExpressionsMenu.Control.Parameter { name = plan.ParameterName }, value = 1 } };
+                menu.controls = new List<VRCExpressionsMenu.Control> { new VRCExpressionsMenu.Control { name = MenuLabel(plan), type = VRCExpressionsMenu.Control.ControlType.Toggle, parameter = new VRCExpressionsMenu.Control.Parameter { name = plan.ParameterName }, value = 1 } };
                 AssetDatabase.CreateAsset(menu, root + "/Menu.asset"); owned.Add(root + "/Menu.asset");
                 node = new GameObject(plan.ObjectName); Undo.RegisterCreatedObjectUndo(node, "Apply FaceMotion Modular Avatar integration"); node.transform.SetParent(plan.Request.Avatar.transform, false);
                 var merge = node.AddComponent<ModularAvatarMergeAnimator>(); merge.animator = controller; merge.layerType = VRCAvatarDescriptor.AnimLayerType.FX; merge.deleteAttachedAnimator = false; merge.pathMode = MergeAnimatorPathMode.Absolute; merge.matchAvatarWriteDefaults = false;
@@ -192,6 +260,7 @@ namespace FaceMotion.Editor.ModularAvatar
                 AssetDatabase.CreateAsset(manifest, root + "/Manifest.asset");
                 SessionManifests[plan.Request.Avatar] = manifest;
                 EditorUtility.SetDirty(node); AssetDatabase.SaveAssets(); Undo.CollapseUndoOperations(undoGroup);
+                ApplyFailureInjector?.Invoke("after-create");
                 var applied = wasDetached ? Info(FaceMotionDiagnosticCodes.ModularAvatarDetached, "A detached integration was reconnected using its retained generated assets.") : Info(FaceMotionDiagnosticCodes.ModularAvatarApplied, "Modular Avatar merge animator, parameters, and menu installer were created.");
                 return new ModularAvatarIntegrationResult(true, manifest, new[] { applied });
             }
@@ -233,6 +302,31 @@ if (integrationObject == null)
             Undo.DestroyObjectImmediate(integrationObject);
             if (owner != null) SessionManifests.Remove(owner);
             Undo.CollapseUndoOperations(undoGroup); items.Add(Info(FaceMotionDiagnosticCodes.ModularAvatarRemoved, "FaceMotion-owned Modular Avatar hierarchy was removed. Generated assets and manifest were retained.")); diagnostics = items; return true;
+        }
+
+        // Batch rollback deliberately differs from user-facing Remove: it deletes only assets and
+        // hierarchy proven to have been created by the failed batch.
+        private static void RollbackCreated(ModularAvatarIntegrationManifest manifest)
+        {
+            if (manifest == null) return;
+            var owner = ResolveAvatar(manifest);
+            var node = ResolveIntegrationObject(manifest, owner);
+            if (node != null) UnityEngine.Object.DestroyImmediate(node);
+            if (owner != null && SessionManifests.TryGetValue(owner, out var session) && session == manifest) SessionManifests.Remove(owner);
+            var paths = manifest.OwnedAssetPaths ?? Array.Empty<string>();
+            var manifestPath = AssetDatabase.GetAssetPath(manifest);
+            var root = Path.GetDirectoryName(manifestPath)?.Replace('\\', '/');
+            for (var i = 0; i < paths.Length; i++)
+                if (GeneratedAssetOwnership.IsSafeOwnedAssetPath(paths[i], root) && GeneratedAssetOwnership.IsCanonicalGeneratedFileName(Path.GetFileName(paths[i]))) AssetDatabase.DeleteAsset(paths[i]);
+            if (!string.IsNullOrEmpty(manifestPath)) AssetDatabase.DeleteAsset(manifestPath);
+            GeneratedAssetOwnership.TryDeleteEmptyOwnedFolder(root, paths);
+            AssetDatabase.SaveAssets();
+        }
+
+        private static string MenuLabel(ModularAvatarIntegrationPlan plan)
+        {
+            string displayName = string.IsNullOrEmpty(plan.Request.DisplayName) ? "FaceMotion" : plan.Request.DisplayName;
+            return plan.ObjectName == Prefix + Sanitize(displayName) ? displayName : plan.ObjectName.Substring(Prefix.Length);
         }
 
         private static void ValidateConflicts(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, ModularAvatarIntegrationManifest owned, List<FaceMotionDiagnostic> diagnostics)
@@ -322,8 +416,9 @@ if (integrationObject == null)
                 { FaceMotionDiagnosticDetailKeys.Binding, description }
             };
         }
-        private static ModularAvatarIntegrationManifest FindManifest(VRCAvatarDescriptor avatar) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && ResolveIntegrationObject(session, avatar) != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && ResolveIntegrationObject(manifest, avatar) != null) return manifest; } return null; }
-        private static ModularAvatarIntegrationManifest FindRemovalCandidateManifest(VRCAvatarDescriptor avatar) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) return manifest; } return null; }
+        private static ModularAvatarIntegrationManifest FindManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter) && ResolveIntegrationObject(session, avatar) != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && ResolveIntegrationObject(manifest, avatar) != null) return manifest; } return null; }
+        private static ModularAvatarIntegrationManifest FindRemovalCandidateManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter)) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) return manifest; } return null; }
+        private static bool RootIsOccupiedByOtherIntegration(VRCAvatarDescriptor avatar, string outputFolder, string parameter, string rootName) { var existing = FindManifest(avatar, parameter) ?? FindRemovalCandidateManifest(avatar, parameter); if (existing != null) return Path.GetFileName(Path.GetDirectoryName(AssetDatabase.GetAssetPath(existing))) != rootName; return !string.IsNullOrEmpty(outputFolder) && AssetDatabase.IsValidFolder(outputFolder + "/" + rootName); }
         internal static VRCAvatarDescriptor ResolveAvatar(ModularAvatarIntegrationManifest manifest) { if (manifest == null) return null; if (manifest.Avatar != null) return manifest.Avatar; return GlobalObjectId.TryParse(manifest.AvatarGlobalId, out var id) ? GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as VRCAvatarDescriptor : null; }
         internal static GameObject ResolveIntegrationObject(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor owner)
         {

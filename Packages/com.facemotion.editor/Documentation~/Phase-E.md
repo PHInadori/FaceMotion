@@ -1,5 +1,9 @@
 # Phase E: Presets and Generated Motion
 
+> Historical record. Preset and random-generation authoring described below has
+> been removed from the current product. Serialized models remain for
+> compatibility and migration only.
+
 Phase E.3 supplies eight avatar-neutral built-ins with fixed IDs and pulse timing: `builtin.smile` (`mouth.smile`, optional `eye.smile.left` +0.04s and `eye.smile.right` +0.08s), `builtin.wink-left` (`eye.close.left`), `builtin.wink-right` (`eye.close.right`), `builtin.blink` (`eye.close.left`, `eye.close.right` +0.04s), `builtin.angry` (`brow.angry.left`, `brow.angry.right` +0.04s, optional `mouth.angry` +0.08s), `builtin.sad` (`brow.sad.left`, `brow.sad.right` +0.04s, optional `mouth.sad` +0.08s), `builtin.surprise` (`eye.wide.left`, `eye.wide.right` +0.04s, `mouth.open` +0.08s), and `builtin.embarrassed` (optional `cheek.blush.left`, `cheek.blush.right` +0.04s, `mouth.smile` +0.08s, `eye.soft.left` +0.12s, `eye.soft.right` +0.16s). Every resolved target uses a fixed 0.00 -> 100.00 -> 0.00 pulse at stagger + 0.00s, +0.10s, and +0.25s. Required mappings enable a preset; unresolved optional mappings are safely omitted. Suggestions are candidates only: a user explicitly confirms each unique candidate into a persisted `AvatarMappingProfile`. Built-ins resolve confirmed bindings only, and ambiguity is never guessed.
 
 Blink, random blend shape, and random rotation output only `GeneratedMotion`, which has no timeline or Unity object reference. A seeded `System.Random` makes identical settings deterministic. Every application stores a canonical serializable settings snapshot and SHA-256 digest in its generation record; `GeneratedMotionRegenerator` can recreate pure motion from that record. Generated application creates provenance-marked keys and follows the existing conservative merge rule: all same-time collisions are skipped and manual keys are reported as protected.

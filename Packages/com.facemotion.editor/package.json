@@ -1,8 +1,8 @@
 {
   "name": "com.facemotion.editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "FaceMotion",
-  "description": "Unity Editor tooling for authoring animated facial motion for VRChat avatars. Timeline authoring, preview, presets and generated motion, AnimationClip export, and Direct or Modular Avatar VRChat integration.",
+  "description": "Unity Editor tooling for authoring animated facial motion for VRChat avatars. Timeline authoring, preview, AnimationClip export, and Direct or Modular Avatar VRChat integration.",
   "unity": "2022.3",
   "author": {
     "name": "PHInadori",

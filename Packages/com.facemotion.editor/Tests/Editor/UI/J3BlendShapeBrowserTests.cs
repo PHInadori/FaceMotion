@@ -1,4 +1,5 @@
 using FaceMotion.Data;
+using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.VRChat;
 using NUnit.Framework;
@@ -94,6 +95,35 @@ namespace FaceMotion.Editor.Tests
             var candidate = new AvatarCandidateSnapshot.BlendShapeCandidate("Body/Face", "Shape", category: category);
 
             Assert.That(candidate.TopLevelCategory, Is.EqualTo(expected));
+        }
+
+        [TestCase(AvatarCandidateSnapshot.BlendShapeCategory.Hair, 2)]
+        [TestCase(AvatarCandidateSnapshot.BlendShapeCategory.Body, 3)]
+        [TestCase(AvatarCandidateSnapshot.BlendShapeCategory.Clothes, 4)]
+        [TestCase(AvatarCandidateSnapshot.BlendShapeCategory.Other, 5)]
+        public void TopLevelCategoryButtons_FilterCandidates(AvatarCandidateSnapshot.BlendShapeCategory category, int categoryFilter)
+        {
+            var face = new AvatarCandidateSnapshot.BlendShapeCandidate("Face", "Smile", category: AvatarCandidateSnapshot.BlendShapeCategory.Mouth);
+            var selected = new AvatarCandidateSnapshot.BlendShapeCandidate("Selected", "Shape", category: category);
+
+            Assert.That(TrackListPanel.MatchesCategorySelection(face, 0, 0), Is.True);
+            Assert.That(TrackListPanel.MatchesCategorySelection(selected, 0, 0), Is.True);
+            Assert.That(TrackListPanel.MatchesCategorySelection(face, 1, 0), Is.True);
+            Assert.That(TrackListPanel.MatchesCategorySelection(selected, 1, 0), Is.False);
+            Assert.That(TrackListPanel.MatchesCategorySelection(face, categoryFilter, 0), Is.False);
+            Assert.That(TrackListPanel.MatchesCategorySelection(selected, categoryFilter, 0), Is.True);
+        }
+
+        [Test]
+        public void FaceSubcategoryButtons_OnlyRefineTheFaceCategory()
+        {
+            var eye = new AvatarCandidateSnapshot.BlendShapeCandidate("Face", "Iris", category: AvatarCandidateSnapshot.BlendShapeCategory.Eye);
+            var blink = new AvatarCandidateSnapshot.BlendShapeCandidate("Face", "Blink", category: AvatarCandidateSnapshot.BlendShapeCategory.Blink);
+
+            Assert.That(TrackListPanel.MatchesCategorySelection(eye, 1, 1), Is.True);
+            Assert.That(TrackListPanel.MatchesCategorySelection(blink, 1, 1), Is.False);
+            Assert.That(TrackListPanel.MatchesCategorySelection(blink, 1, 2), Is.True);
+            Assert.That(TrackListPanel.MatchesCategorySelection(blink, 0, 1), Is.True);
         }
 
         [Test]

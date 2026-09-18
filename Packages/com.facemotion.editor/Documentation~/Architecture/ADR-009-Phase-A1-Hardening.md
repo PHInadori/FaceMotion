@@ -3,6 +3,10 @@
 - Status: Accepted
 - Date: 2026-09-14
 
+> Historical note: generated-motion behavior described below is no longer a
+> current authoring workflow. Its serialized provenance is retained for
+> compatibility and migration.
+
 ## Context
 
 Phase A completed the first working domain. Before Phase B the following contracts needed to be locked down because they are serialized or cross-cutting:

@@ -3,6 +3,9 @@
 - Status: Accepted
 - Date: 2026-09-14
 
+> Historical note: the preset and random preview modes described below were
+> removed from the current product.
+
 ## Context
 
 Facial motion must be previewed without leaving scene or prefab changes and without allowing independent preview modes to fight over values.

@@ -1,5 +1,9 @@
 # Phase E Manual Presets And Generation Checklist
 
+> Historical checklist. The preset and random-generation authoring workflow
+> tested below was removed from the current product. Do not use this checklist
+> for current-release validation.
+
 | Check | PASS / FAIL | Notes |
 | --- | --- | --- |
 | Open a project, select an animation, select an avatar, and rebuild its index |  |  |

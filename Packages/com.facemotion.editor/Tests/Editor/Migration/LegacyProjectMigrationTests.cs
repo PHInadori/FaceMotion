@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.Serialization;
-using FaceMotion.Generation;
 using FaceMotion.Serialization;
 using FaceMotion.Timeline;
 using FaceMotion.Versioning;
@@ -102,7 +101,7 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void MigrateLegacy_MissingAnimationTrackKeyAndGenerationIds_AreGenerated()
+        public void MigrateLegacy_MissingAnimationTrackAndKeyIds_AreGenerated()
         {
             var source = CreateLegacyProject();
             var animation = FaceMotionAnimationData.Create("Legacy");
@@ -110,12 +109,9 @@ namespace FaceMotion.Editor.Tests
             var key = track.BlendShape.Keys[0];
             animation.Timeline.AddTrack(track);
             source.AddAnimation(animation);
-            var record = GenerationRecord.Create(animation.AnimationId, GeneratorType.Blink, "builtin.blink", 1, "hash", null, new GenerationSettingsSnapshot().Serialize());
-            source.AddGenerationRecord(record);
             ReflectionUtil.SetField(animation, "_animationId", string.Empty);
             ReflectionUtil.SetField(track, "_trackId", string.Empty);
             ReflectionUtil.SetField(key, "_keyId", string.Empty);
-            ReflectionUtil.SetField(record, "_generationId", string.Empty);
 
             var result = Migrate(source);
 
@@ -124,7 +120,6 @@ namespace FaceMotion.Editor.Tests
             Assert.That(StableId.IsValid(migrated.Animations[0].AnimationId), Is.True);
             Assert.That(StableId.IsValid(migrated.Animations[0].Timeline.Tracks[0].TrackId), Is.True);
             Assert.That(StableId.IsValid(migrated.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].KeyId), Is.True);
-            Assert.That(StableId.IsValid(migrated.Generations[0].GenerationId), Is.True);
             Assert.That(TestHelpers.FindDiagnostic(result.Diagnostics, FaceMotionDiagnosticCodes.IdRepaired), Is.Not.Null);
         }
 
@@ -443,7 +438,7 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void MigrateLegacy_NullAnimationTrackAndGenerationEntries_AreRemoved()
+        public void MigrateLegacy_NullAnimationAndTrackEntries_AreRemoved_GenerationEntriesArePreserved()
         {
             var source = CreateLegacyProject();
             var animation = FaceMotionAnimationData.Create("Legacy");
@@ -458,7 +453,8 @@ namespace FaceMotion.Editor.Tests
 
             Assert.That(result.Success, Is.True);
             Assert.That(result.Project.Animations.Count, Is.EqualTo(1));
-            Assert.That(result.Project.Generations, Is.Empty);
+            Assert.That(result.Project.Generations.Count, Is.EqualTo(1));
+            Assert.That(result.Project.Generations[0], Is.Null);
         }
 
         [Test]
@@ -472,19 +468,8 @@ namespace FaceMotion.Editor.Tests
             track.BlendShape.AddKey(key);
             animation.Timeline.AddTrack(track);
             source.AddAnimation(animation);
-            var snapshot = new GenerationSettingsSnapshot
-            {
-                FormatVersion = 1,
-                GeneratorType = GeneratorType.Blink,
-                SourcePresetId = "builtin.blink",
-                Seed = 7,
-                StartTime = 0f,
-                Duration = 1f,
-                MinInterval = 0.2f,
-                MaxInterval = 0.5f,
-                ClosedValue = 0f
-            };
-            var record = GenerationRecord.Create(animation.AnimationId, GeneratorType.Blink, "builtin.blink", FaceMotionVersions.LegacyGeneratorAlgorithmVersion, "hash", generationId, snapshot.Serialize());
+            const string snapshot = "{\"formatVersion\":1,\"generatorType\":1,\"sourcePresetId\":\"builtin.blink\",\"seed\":7}";
+            var record = GenerationRecord.Create(animation.AnimationId, GeneratorType.Blink, "builtin.blink", 0, "hash", generationId, snapshot);
             source.AddGenerationRecord(record);
 
             var result = Migrate(source);
@@ -497,32 +482,8 @@ namespace FaceMotion.Editor.Tests
             Assert.That(result.Project.Generations.Count, Is.EqualTo(1));
             var migratedRecord = result.Project.Generations[0];
             Assert.That(migratedRecord.GenerationId, Is.EqualTo(generationId));
-            Assert.That(migratedRecord.AlgorithmVersion, Is.EqualTo(FaceMotionVersions.LegacyGeneratorAlgorithmVersion), "A legacy algorithm version must never be lifted.");
-            var migratedSnapshot = JsonUtility.FromJson<GenerationSettingsSnapshot>(migratedRecord.SettingsSnapshot);
-            Assert.That(migratedSnapshot, Is.Not.Null);
-            Assert.That(migratedSnapshot.FormatVersion, Is.EqualTo(1), "The settings snapshot survives migration in a current-format JSON.");
-            Assert.That(migratedSnapshot.GeneratorType, Is.EqualTo(GeneratorType.Blink));
-            Assert.That(migratedSnapshot.Seed, Is.EqualTo(7));
-            Assert.That(TestHelpers.FindDiagnostic(result.Diagnostics, FaceMotionDiagnosticCodes.PartialRecovery), Is.Not.Null);
-        }
-
-        [Test]
-        public void MigrateLegacy_UnknownSettingsSnapshotFormat_WarnsButKeepsTheRecord()
-        {
-            var source = CreateLegacyProject();
-            var animation = FaceMotionAnimationData.Create("Legacy");
-            animation.Timeline.AddTrack(CreateLegacyBlendTrack());
-            source.AddAnimation(animation);
-            string generationId = StableId.New();
-            var record = GenerationRecord.Create(animation.AnimationId, GeneratorType.Preset, "builtin.talk", 1, "hash", generationId, new GenerationSettingsSnapshot { FormatVersion = 99 }.Serialize());
-            source.AddGenerationRecord(record);
-
-            var result = Migrate(source);
-
-            Assert.That(result.Success, Is.True);
-            Assert.That(result.Project.Generations.Count, Is.EqualTo(1));
-            Assert.That(result.Project.Generations[0].GenerationId, Is.EqualTo(generationId));
-            Assert.That(TestHelpers.FindDiagnostic(result.Diagnostics, FaceMotionDiagnosticCodes.PartialRecovery), Is.Not.Null);
+            Assert.That(migratedRecord.AlgorithmVersion, Is.EqualTo(0));
+            Assert.That(migratedRecord.SettingsSnapshot, Is.EqualTo(snapshot));
         }
 
         [Test]

@@ -19,6 +19,16 @@ VRChat 統合は `VRChat 統合` panel で行います。通常は **VRChatへ�
 
 再実行は owned AnimationClip の GUID と既存 managed integration を再利用します。Direct と MA を切り替える場合は cross-backend warning を確認してください。`詳細設定` foldout には manual export path、AnimationClip、backend、Plan/Validate、Apply の workflow が残されています。
 
+## Batch Integration
+
+複数の Animation をまとめて一括統合できます。Animation list で複数 Animation の checkbox を選択し、`VRChat 統合` panel から batch 統合を実行します。
+
+- Batch Export: 選択した Animation をそれぞれ output path へ export します。複数 Animation が同じ export path に解決される場合は block します。
+- Batch Plan / Apply: 選択した Animation ごとに Direct または MA の integration を適用します。
+- Direct batch は copy-on-write の asset set を 1 組作成し、失敗時は全体を rollback します。
+- MA batch は Animation ごとに manifest を持つ integration root を作成し、再実行は既存の matching item に idempotent に再適用します。
+- 各 Animation の結果 summary と、部分失敗時の diagnostic を表示します。parameter 名は Animation 名から生成されるため、一意で 256 文字以下である必要があります。
+
 ## Direct workflow
 
 1. scene Avatar、AnimationClip、`Assets` 配下の output folder を選択します。

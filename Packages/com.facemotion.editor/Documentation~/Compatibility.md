@@ -10,12 +10,12 @@ The tool persists the following ScriptableObject assets:
 
 | Asset | Role |
 |---|---|
-| `FaceMotionProject` | Root project asset: animation list, timelines, tracks, keys, and the project-level generation registry. |
+| `FaceMotionProject` | Root project asset: animation list, timelines, tracks, keys, and legacy generation provenance retained for compatibility. |
 | `AvatarMappingProfile` | Avatar-specific binding table (blend shape / transform bindings), separately stored from projects. |
 | `DirectIntegrationManifest` | Ownership and rollback data for a direct (copy-on-write) VRChat integration. |
 | `ModularAvatarIntegrationManifest` | Ownership and rollback data for a Modular Avatar integration. |
 
-Presets and fingerprints use their own version fields; this document covers the four assets above.
+Legacy preset data and fingerprints use their own version fields; this document covers the four assets above. Preset and random-generation authoring have been removed from the current UI; their serialized data remains supported for migration and compatibility.
 
 ## Current schema version
 

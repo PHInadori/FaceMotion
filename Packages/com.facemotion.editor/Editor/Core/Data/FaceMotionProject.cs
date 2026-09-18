@@ -229,11 +229,6 @@ namespace FaceMotion.Data
                 _generations = new List<GenerationRecord>();
             }
 
-            RemoveNulls(_generations);
-            for (int i = 0; i < _generations.Count; i++)
-            {
-                _generations[i].NormalizeBuiltinPresetIds();
-            }
         }
 
         internal void SetSchemaVersionForMigration(int version)

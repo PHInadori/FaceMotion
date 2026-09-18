@@ -41,6 +41,52 @@ namespace FaceMotion.Editor
         }
     }
 
+    /// <summary>Adds a newly bound blend-shape track with its scene-derived value at frame zero.</summary>
+    public sealed class AddBlendShapeTrackWithInitialKeyCommand : IProjectCommand
+    {
+        private readonly string _animationId;
+        private readonly string _rendererPath;
+        private readonly string _blendShapeName;
+        private readonly float _initialValue;
+
+        public AddBlendShapeTrackWithInitialKeyCommand(string animationId, string rendererPath, string blendShapeName, float initialValue)
+        {
+            _animationId = animationId;
+            _rendererPath = rendererPath ?? string.Empty;
+            _blendShapeName = blendShapeName ?? string.Empty;
+            _initialValue = initialValue;
+        }
+
+        public string CreatedTrackId { get; private set; }
+        public string UndoLabel => "Add Blend Shape Track";
+
+        public bool Validate(FaceMotionProject project, out FaceMotionDiagnostic error)
+        {
+            if (float.IsNaN(_initialValue) || float.IsInfinity(_initialValue))
+            {
+                error = CommandDiagnostics.InvalidArgument("Initial blend shape value must be finite.", _blendShapeName);
+                return false;
+            }
+            if (!project.TryGetAnimation(_animationId, out var animation) || animation.Timeline == null)
+            {
+                error = CommandDiagnostics.TargetNotFound("animation", _animationId);
+                return false;
+            }
+            error = null;
+            return true;
+        }
+
+        public void Execute(FaceMotionProject project)
+        {
+            if (!project.TryGetAnimation(_animationId, out var animation) || animation.Timeline == null) return;
+            var track = FaceTrackData.CreateBlendShape(_rendererPath, _blendShapeName);
+            track.BlendShape.AddKey(FloatKeyframeData.Create(0f, _initialValue, InterpolationType.Linear));
+            track.BlendShape.SortKeys();
+            animation.Timeline.AddTrack(track);
+            CreatedTrackId = track.TrackId;
+        }
+    }
+
     /// <summary>Adds a transform track (position, rotation, or scale) to an animation.</summary>
     public sealed class AddTransformTrackCommand : IProjectCommand
     {

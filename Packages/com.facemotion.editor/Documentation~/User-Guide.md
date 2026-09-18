@@ -2,7 +2,9 @@
 
 ## Window と Project
 
-FaceMotion window は **Tools/FaceMotion/FaceMotion ウィンドウを開く** から開きます。上部の workflow guidance は、avatar → animation → track → key → preview/integrate の次の操作を示します。`FaceMotion Project` は animation、track、keyframe、generation record を保存する asset です。`アニメーション` の **+ 新規アニメーション** で編集対象を作り、timeline settings の `長さ`、`フレームレート`、`ループ` を設定します。左下の shortcut help では timeline、preview camera、key 操作を確認できます。
+FaceMotion window は **Tools/FaceMotion/FaceMotion ウィンドウを開く** から開きます。上部の workflow guidance は、avatar → animation → track → key → preview/integrate の次の操作を示します。`FaceMotion Project` は animation、track、keyframe を保存する asset です。`アニメーション` の **+ 新規アニメーション** で編集対象を作り、timeline settings の `長さ`、`フレームレート`、`ループ` を設定します。左下の shortcut help では timeline、preview camera、key 操作を確認できます。
+
+選択中の Animation には `アニメーション名` フィールドがあります。ここで編集した名前は VRChat の menu label と parameter 名にそのまま使われ、空文字は設定できません。Animation list の各項目の checkbox で複数選択でき、Batch Integration（一括統合）の対象にできます。
 
 ## Avatar と Track
 
@@ -15,7 +17,7 @@ avatar root を選択すると binding 候補を取得できます。`トラッ�
 | Rotation | authored Euler rotation |
 | Scale | Transform local scale |
 
-`+ ブレンドシェイプ` は Face / Hair / Body / Clothes / Other、Eye / Blink / Brow / Mouth の tree、search、confidence 表示から候補を選びます。VRChat Blink、LipSync、FX、Modular Avatar の conflict は key を追加する前に確認できます。`+ ブレンドシェイプ` と `+ トランスフォーム` で候補が曖昧な場合は推測せず、`詳細な手動バインディング` で renderer/transform path を確認してください。
+`+ ブレンドシェイプ` は Face / Hair / Body / Clothes / Other、Eye / Blink / Brow / Mouth のカテゴリボタン、search、confidence 表示から候補を選びます。VRChat Blink、LipSync、FX、Modular Avatar の conflict は key を追加する前に確認できます。BlendShape Track を追加すると、scene 内 avatar の現在の BlendShape weight を 0 秒の初期 key として自動生成します（avatar 未選択や読み取り不能な場合は 0）。`+ ブレンドシェイプ` と `+ トランスフォーム` で候補が曖昧な場合は推測せず、`詳細な手動バインディング` で renderer/transform path を確認してください。
 
 ## Keyframe と interpolation
 
@@ -36,20 +38,16 @@ BlendShape、Position、Scale は補間値を評価します。Rotation は Eule
 
 ## Preview と Scene Apply
 
-`プレビュー` は avatar clone を使うため、生成モーションを scene へ自動適用しません。play / pause / stop、loop、scrub は realtime に更新されます。Alt+left drag で orbit、middle drag で pan、wheel または Alt+right drag で zoom、F で focus できます。
+`プレビュー` は avatar clone を使うため、編集中のアニメーションを scene へ自動適用しません。play / pause / stop、loop、scrub は realtime に更新されます。Alt+left drag で orbit、middle drag で pan、wheel または Alt+right drag で zoom、F で focus できます。
 
 **シーンに適用** は別の明示操作です。開始時に avatar baseline を取得し、各更新で baseline を復元してから enabled track の値を適用します。**シーン適用を停止**、window close、assembly reload、Play Mode transition では baseline を復元します。これは source FaceMotion clip binding の確認用であり、avatar の全状態を完全 reset する機能ではありません。
-
-## Preset と Random Motion
-
-標準 preset は Smile、Wink Left、Wink Right、Blink、Angry、Sad、Surprise、Embarrassed です。logical target が一意に解決できる場合だけ適用できます。
-
-Blink、Random Blend Shape、Random Rotation は seed を指定して生成します。同じ algorithm version、settings、seed、binding なら同じ生成結果を期待できます。algorithm version または settings を変えると結果も変わるため、既存の手動 key を確認してから regenerate してください。生成操作は manual key を保護します。
 
 ## VRChat 統合
 
 通常は `VRChat 統合` の **VRChatへ追加** を使います。選択 animation の owned `.anim` を必要に応じて export し、Export → Plan → Validate → Apply を順に実行します。FaceMotion 所有でない clip は上書きせず、再実行は owned clip の GUID と managed integration を再利用します。詳細な手動設定は `詳細設定` foldout から使用できます。詳細は [VRChat Integration](VRChat-Integration.md) を参照してください。
 
+メニューに表示される label は Animation の `アニメーション名` です。複数 Animation をまとめて統合する場合は、Animation list で checkbox を選択して Batch Integration を実行します（詳細は [VRChat Integration](VRChat-Integration.md)）。
+
 ## Undo
 
-Project、animation、track、key、generation、scene apply に関わる editor 操作は Unity Undo の対象です。生成・Apply 後も、まず Inspector と diagnostic を確認してから project を保存してください。
+Project、animation、track、key、scene apply に関わる editor 操作は Unity Undo の対象です。Apply 後も、まず Inspector と diagnostic を確認してから project を保存してください。

@@ -61,6 +61,46 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void RenameAnimation_TrimUndoRedo_PreservesStableAnimationId()
+        {
+            using (var temp = new TempFaceMotionAsset())
+            {
+                var project = FaceMotionProject.CreateNew();
+                var animation = FaceMotionAnimationData.Create("Animation");
+                project.AddAnimation(animation);
+                string assetPath = temp.AssetPath("RenameAnimation");
+                AssetDatabase.CreateAsset(project, assetPath);
+                string id = animation.AnimationId;
+
+                using (var transaction = new UnityUndoTransaction())
+                {
+                    Assert.That(ProjectCommandExecutor.TryExecute(new RenameAnimationCommand(id, "  にっこり  "), project, transaction, out var error), Is.True);
+                    Assert.That(error, Is.Null);
+                }
+                Assert.That(animation.DisplayName, Is.EqualTo("にっこり"));
+                Assert.That(animation.AnimationId, Is.EqualTo(id));
+
+                Undo.PerformUndo();
+                Assert.That(animation.DisplayName, Is.EqualTo("Animation"));
+                Undo.PerformRedo();
+                Assert.That(animation.DisplayName, Is.EqualTo("にっこり"));
+                Assert.That(animation.AnimationId, Is.EqualTo(id));
+            }
+        }
+
+        [Test]
+        public void RenameAnimation_EmptyNameIsRejectedWithoutMutation()
+        {
+            var project = FaceMotionProject.CreateNew();
+            var animation = FaceMotionAnimationData.Create("Animation");
+            project.AddAnimation(animation);
+
+            Assert.That(new RenameAnimationCommand(animation.AnimationId, "   ").Validate(project, out var error), Is.False);
+            Assert.That(error, Is.Not.Null);
+            Assert.That(animation.DisplayName, Is.EqualTo("Animation"));
+        }
+
+        [Test]
         public void RemoveAnimation_UndoRedo_RestoresIdenticalData()
         {
             using (var temp = new TempFaceMotionAsset())

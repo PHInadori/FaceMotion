@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.0] - 2026-09-18
+
+### Added
+
+- Batch VRChat integration: check multiple animations and export, plan, validate, and apply them together per animation.
+- Direct batch integration with one copy-on-write asset set and rollback on failure.
+- Modular Avatar batch integration with per-animation merge animator manifests and idempotent reruns.
+- Batch preflight and per-animation result summaries with partial-apply diagnostics.
+- User-editable animation names that are used directly as parameter and VRChat menu labels; generic "Play" labels are removed.
+- Automatic selection of the avatar's current BlendShape value as the initial 0-second keyframe when a BlendShape track is created.
+- Category-button BlendShape browser navigation with face-subcategory buttons alongside search, safety, and conflict display.
+
+### Changed / Improved
+
+- Hover Preview responsiveness, including immediate repaint on window entry and corrected enter delay.
+- Idle-performance: reduced EditorApplication.update subscriptions and confined preview rendering to repaints with a playback-update gate.
+- Timeline GUIContent allocation reduction.
+- BlendShape browser navigation and filtering.
+- Animation authoring workflow and VRChat menu clarity.
+
+### Removed
+
+- Preset generation UI (standard preset application).
+- Random BlendShape and random rotation generation UI.
+- Active Phase E generation implementation and generation-only tests.
+- Unused preset/random generation UI strings and current-state documentation.
+
+### Compatibility
+
+- Legacy serialized generation records (`_generations`, `GenerationRecord`, `GeneratorType`, key provenance) remain readable; older FaceMotionProject assets load without a schema migration.
+- No schema, migration, or integration-backend version bump is required.
+
 ## [0.2.0] - 2026-09-17
 
 ### Added

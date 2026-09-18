@@ -13,6 +13,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Unity.Profiling;
 
 namespace FaceMotion.Editor.UI.Window
 {
@@ -61,7 +62,6 @@ namespace FaceMotion.Editor.UI.Window
         private TrackListPanel _trackListPanel;
         private KeyframeInspectorPanel _inspectorPanel;
         private DiagnosticsPanel _diagnosticsPanel;
-        private GenerationPanel _generationPanel;
         private ExportPanel _exportPanel;
         private OneClickIntegrationPanel _integrationPanel;
         private PreviewPanel _previewPanel;
@@ -78,6 +78,8 @@ namespace FaceMotion.Editor.UI.Window
         private int _pendingAvatarRestoreAttempts;
         private string _lastPreviewAnimationId;
         private readonly PreviewRepaintScheduler _previewRepaint = new PreviewRepaintScheduler();
+        private readonly PlaybackUpdateGate _playbackUpdateGate = new PlaybackUpdateGate();
+        private static readonly ProfilerMarker WindowOnGuiMarker = new ProfilerMarker("FaceMotion.Window.OnGUI");
 
         // Unity's MenuItem attribute requires a compile-time constant, so it uses the Japanese default.
         [MenuItem("Tools/FaceMotion/FaceMotion ウィンドウを開く")]
@@ -105,22 +107,21 @@ namespace FaceMotion.Editor.UI.Window
             _projectPanel = new ProjectPanel(_session, _project);
             _avatarPanel = new AvatarPanel(_session, _avatar);
             _animationListPanel = new AnimationListPanel(_session, _animations);
-            _trackListPanel = new TrackListPanel(_session, _tracks, _previewSession.Override);
+            _trackListPanel = new TrackListPanel(_session, _tracks, _previewSession.Override, RequestPreviewRepaint);
             _inspectorPanel = new KeyframeInspectorPanel(_session, _keys);
             _diagnosticsPanel = new DiagnosticsPanel(_session);
-            _generationPanel = new GenerationPanel(_session);
             _exportPanel = new ExportPanel(_session);
             _integrationPanel = new OneClickIntegrationPanel(_session);
             _previewPanel = new PreviewPanel(_session, _previewSession, _sceneApplySession, _playback);
             _shortcutHelpPanel = new ShortcutHelpPanel();
             _leftColumnRatio = Mathf.Clamp(EditorPrefs.GetFloat(LeftColumnRatioKey, DefaultLeftColumnRatio), 0.1f, MaximumLeftColumnRatio);
             _previewHeightRatio = Mathf.Clamp(EditorPrefs.GetFloat(PreviewHeightRatioKey, DefaultPreviewHeightRatio), 0.1f, MaximumPreviewHeightRatio);
+            wantsMouseMove = true;
 
             RestoreSessionState();
             _lastPreviewAnimationId = _session.SelectedAnimationId;
 
             _session.Changed += OnSessionChanged;
-            EditorApplication.update += OnEditorUpdate;
             EditorApplication.hierarchyChanged += OnHierarchyChanged;
             Undo.undoRedoPerformed += OnUndoRedoPerformed;
             AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
@@ -134,7 +135,7 @@ namespace FaceMotion.Editor.UI.Window
         {
             EditorApplication.delayCall -= FlushPreviewRepaint;
             _previewRepaint.Cancel();
-            EditorApplication.update -= OnEditorUpdate;
+            SetPlaybackUpdateActive(false);
             EditorApplication.hierarchyChanged -= OnHierarchyChanged;
             Undo.undoRedoPerformed -= OnUndoRedoPerformed;
             AssemblyReloadEvents.beforeAssemblyReload -= OnBeforeAssemblyReload;
@@ -159,6 +160,7 @@ namespace FaceMotion.Editor.UI.Window
 
             EditorPrefs.SetFloat(LeftColumnRatioKey, _leftColumnRatio);
             EditorPrefs.SetFloat(PreviewHeightRatioKey, _previewHeightRatio);
+            wantsMouseMove = false;
         }
 
         private void OnGUI()
@@ -167,6 +169,9 @@ namespace FaceMotion.Editor.UI.Window
             {
                 return;
             }
+
+            using (WindowOnGuiMarker.Auto())
+            {
 
             Event current = Event.current;
             if (current != null && (current.type == EventType.MouseDown || current.type == EventType.MouseDrag
@@ -196,7 +201,8 @@ namespace FaceMotion.Editor.UI.Window
 
             DrawLeftColumn(leftRect);
             DrawSplitter(splitterRect, area);
-            DrawRightColumn(rightRect);
+                DrawRightColumn(rightRect);
+            }
         }
 
         /// <summary>Computes an adaptive column width while preserving usable panel and timeline minima.</summary>
@@ -319,8 +325,6 @@ namespace FaceMotion.Editor.UI.Window
             _animationListPanel.OnGUI();
             EditorGUILayout.Space();
             _trackListPanel.OnGUI();
-            EditorGUILayout.Space();
-            _generationPanel.OnGUI();
             EditorGUILayout.Space();
             _exportPanel.OnGUI();
             EditorGUILayout.Space();
@@ -579,6 +583,7 @@ namespace FaceMotion.Editor.UI.Window
         private void OnEditorUpdate()
         {
             _playback?.Tick(EditorApplication.timeSinceStartup);
+            SetPlaybackUpdateActive(_playback != null && _playback.IsPlaying);
         }
 
         private void OnHierarchyChanged()
@@ -614,7 +619,25 @@ namespace FaceMotion.Editor.UI.Window
                 _session.ViewState.CurrentTime,
                 Event.current == null ? "<none>" : Event.current.type.ToString());
             SynchronizePreviewFromSession();
+            SetPlaybackUpdateActive(_playback != null && _playback.IsPlaying);
             RequestPreviewRepaint();
+        }
+
+        private void SetPlaybackUpdateActive(bool active)
+        {
+            if (!_playbackUpdateGate.Synchronize(active))
+            {
+                return;
+            }
+
+            if (_playbackUpdateGate.IsRegistered)
+            {
+                EditorApplication.update += OnEditorUpdate;
+            }
+            else
+            {
+                EditorApplication.update -= OnEditorUpdate;
+            }
         }
 
         private void RequestPreviewRepaint()

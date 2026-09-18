@@ -20,6 +20,7 @@ namespace FaceMotion.Editor.UI.Panels
         private const string AdvancedFoldoutKey = "FaceMotion.Window.v2.OneClickAdvancedFoldout";
         private readonly FaceMotionEditorSession _session;
         private readonly OneClickIntegrationController _controller;
+        private readonly BatchIntegrationController _batchController;
         private readonly DirectVRChatIntegrationPanel _advanced;
         private bool _advancedFoldout;
 
@@ -27,6 +28,7 @@ namespace FaceMotion.Editor.UI.Panels
         {
             _session = session;
             _controller = new OneClickIntegrationController(session);
+            _batchController = new BatchIntegrationController(session);
             _advanced = new DirectVRChatIntegrationPanel(session);
             _advancedFoldout = EditorPrefs.GetBool(AdvancedFoldoutKey, false);
         }
@@ -55,8 +57,37 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             DrawResult();
+            DrawBatch();
             EditorGUILayout.Space();
             DrawAdvancedFoldout();
+        }
+
+        private void DrawBatch()
+        {
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("batchIntegration"), EditorStyles.boldLabel);
+            int count = _session.BatchAnimationIds.Count;
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("batchCheckedCount"), count.ToString());
+            bool ready = count > 0 && _session.ActiveAvatarRoot != null;
+            using (new EditorGUI.DisabledScope(!ready))
+            {
+                if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("batchAddToVrchat"), FaceMotionUiText.Get("tooltipBatchAddToVrchat")), GUILayout.Height(28f))) RunBatch();
+            }
+            if (!ready) EditorGUILayout.HelpBox(count == 0 ? FaceMotionUiText.Get("batchSelectAnimations") : FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
+
+            var result = _batchController.LastResult;
+            if (result == null) return;
+            EditorGUILayout.LabelField(result.Succeeded ? FaceMotionUiText.Get("batchResultSucceeded") : FaceMotionUiText.Get("batchResultFailed"), EditorStyles.boldLabel);
+            for (int i = 0; i < result.Items.Count; i++)
+            {
+                var item = result.Items[i];
+                EditorGUILayout.LabelField((item.Succeeded ? "OK  " : "FAIL  ") + item.DisplayName, EditorStyles.miniLabel);
+            }
+            for (int i = 0; i < result.Diagnostics.Count; i++)
+            {
+                var diagnostic = result.Diagnostics[i];
+                if (diagnostic.Blocking) EditorGUILayout.HelpBox(DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic), MessageType.Error);
+            }
         }
 
         private void DrawPreflight()
@@ -195,6 +226,32 @@ namespace FaceMotion.Editor.UI.Panels
             finally
             {
                 EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private void RunBatch()
+        {
+            try
+            {
+                _batchController.Execute((stage, current, total) => EditorUtility.DisplayProgressBar(
+                    "FaceMotion Batch Integration",
+                    BatchProgressLabel(stage) + " " + current + " / " + total,
+                    total <= 0 ? 0f : (float)current / total));
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private static string BatchProgressLabel(BatchIntegrationStage stage)
+        {
+            switch (stage)
+            {
+                case BatchIntegrationStage.Plan: return FaceMotionUiText.Get("oneClickStagePlan");
+                case BatchIntegrationStage.Validate: return FaceMotionUiText.Get("oneClickStageValidate");
+                case BatchIntegrationStage.Apply: return FaceMotionUiText.Get("oneClickStageApply");
+                default: return FaceMotionUiText.Get("oneClickStageExport");
             }
         }
 

@@ -1,5 +1,9 @@
 # Phase E.3 Implementation Inventory
 
+> Historical inventory. The preset and random-generation authoring workflow
+> listed below was removed from the current product. Serialized models remain
+> for compatibility and migration only.
+
 ## Implemented
 
 | Requirement | Evidence |

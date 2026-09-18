@@ -16,7 +16,7 @@ namespace FaceMotion.Editor.Tests
     /// </summary>
     public sealed class DiagnosticsContractsTests
     {
-        private const int ExpectedCodeCount = 147;
+        private const int ExpectedCodeCount = 152;
 
         [Test]
         public void Codes_ConstantsMatchRegisteredKeys_NoDuplicates()
