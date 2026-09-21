@@ -17,7 +17,16 @@ namespace FaceMotion.Editor.UI.Panels
             "shortcutTimelineZoom",
             "shortcutDeleteKey",
             "shortcutPreviewCamera",
-            "shortcutFocus"
+            "shortcutFocus",
+            "shortcutSelectKey",
+            "shortcutToggleMultiSelect",
+            "shortcutRangeSelect",
+            "shortcutClearSelection",
+            "shortcutMoveKeys",
+            "shortcutCopyKeys",
+            "shortcutPasteKeys",
+            "shortcutDuplicateKeys",
+            "shortcutMultiKeyInspector"
         };
 
         public void OnGUI()

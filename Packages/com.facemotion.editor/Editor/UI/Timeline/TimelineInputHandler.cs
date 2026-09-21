@@ -29,12 +29,23 @@ namespace FaceMotion.Editor.UI.Timeline
             _tracks = tracks ?? throw new ArgumentNullException(nameof(tracks));
         }
 
-        public bool HandleEvent(Event e, Rect plotRect, TimelineLayoutSnapshot layout)
+        public bool HandleEvent(
+            Event e,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout)
         {
-            return HandleEvent(e, plotRect, layout, false);
+            return HandleEvent(
+                e,
+                plotRect,
+                layout,
+                false);
         }
 
-        public bool HandleEvent(Event e, Rect plotRect, TimelineLayoutSnapshot layout, bool textControlOwnsKeyboard)
+        public bool HandleEvent(
+            Event e,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout,
+            bool textControlOwnsKeyboard)
         {
             if (e == null || layout == null)
             {
@@ -44,16 +55,31 @@ namespace FaceMotion.Editor.UI.Timeline
             switch (e.type)
             {
                 case EventType.MouseMove:
-                    UpdateHover(e.mousePosition, plotRect, layout);
+                    UpdateHover(
+                        e.mousePosition,
+                        plotRect,
+                        layout);
+
                     return false;
 
                 case EventType.ScrollWheel:
-                    if ((e.control || e.command) && plotRect.Contains(e.mousePosition))
+                    if ((e.control || e.command) &&
+                        plotRect.Contains(e.mousePosition))
                     {
-                        int sign = e.delta.y < 0f ? 1 : e.delta.y > 0f ? -1 : 0;
+                        int sign =
+                            e.delta.y < 0f
+                                ? 1
+                                : e.delta.y > 0f
+                                    ? -1
+                                    : 0;
+
                         if (sign != 0)
                         {
-                            ZoomAt(e.mousePosition.x, plotRect, sign);
+                            ZoomAt(
+                                e.mousePosition.x,
+                                plotRect,
+                                sign);
+
                             return true;
                         }
                     }
@@ -63,15 +89,24 @@ namespace FaceMotion.Editor.UI.Timeline
                 case EventType.MouseDown:
                     if (e.button == 0)
                     {
-                        OnLeftMouseDown(plotRect, layout, e.mousePosition, e.control || e.command);
+                        OnLeftMouseDown(
+                            plotRect,
+                            layout,
+                            e.mousePosition,
+                            e.control || e.command,
+                            e.shift);
+
                         return true;
                     }
 
                     if (e.button == 2)
                     {
-                        if (plotRect.Contains(e.mousePosition))
+                        if (plotRect.Contains(
+                                e.mousePosition))
                         {
-                            _session.ViewState.DragMode = TimelineDragMode.Pan;
+                            _session.ViewState.DragMode =
+                                TimelineDragMode.Pan;
+
                             return true;
                         }
                     }
@@ -79,21 +114,36 @@ namespace FaceMotion.Editor.UI.Timeline
                     return false;
 
                 case EventType.MouseDrag:
-                    if (_session.ViewState.DragMode == TimelineDragMode.MoveKeys)
+                    if (_session.ViewState.DragMode ==
+                        TimelineDragMode.MoveKeys)
                     {
-                        _keys.UpdateKeyDragAt(e.mousePosition.x, _keyDragAnchorPixelX, _session.ViewState.PixelsPerSecond);
+                        _keys.UpdateKeyDragAt(
+                            e.mousePosition.x,
+                            _keyDragAnchorPixelX,
+                            _session.ViewState.PixelsPerSecond);
+
                         return true;
                     }
 
-                    if (_session.ViewState.DragMode == TimelineDragMode.Scrub)
+                    if (_session.ViewState.DragMode ==
+                        TimelineDragMode.Scrub)
                     {
-                        ScrubTo(PixelToTime(e.mousePosition.x, plotRect));
+                        ScrubTo(
+                            PixelToTime(
+                                e.mousePosition.x,
+                                plotRect));
+
                         return true;
                     }
 
-                    if (_session.ViewState.DragMode == TimelineDragMode.Pan)
+                    if (_session.ViewState.DragMode ==
+                        TimelineDragMode.Pan)
                     {
-                        ScrollBy(e.delta.x / _session.ViewState.PixelsPerSecond, plotRect.width);
+                        ScrollBy(
+                            e.delta.x /
+                            _session.ViewState.PixelsPerSecond,
+                            plotRect.width);
+
                         return true;
                     }
 
@@ -102,34 +152,42 @@ namespace FaceMotion.Editor.UI.Timeline
                 case EventType.MouseUp:
                     if (e.button == 0)
                     {
-                        if (_session.ViewState.DragMode == TimelineDragMode.MoveKeys)
+                        if (_session.ViewState.DragMode ==
+                            TimelineDragMode.MoveKeys)
                         {
                             _keys.EndKeyDrag();
                         }
 
-                        _session.ViewState.DragMode = TimelineDragMode.None;
+                        _session.ViewState.DragMode =
+                            TimelineDragMode.None;
+
                         return true;
                     }
 
                     if (e.button == 2)
                     {
-                        _session.ViewState.DragMode = TimelineDragMode.None;
+                        _session.ViewState.DragMode =
+                            TimelineDragMode.None;
+
                         return true;
                     }
 
                     return false;
 
                 case EventType.KeyDown:
-                    // Let IMGUI text controls own deletion while they are editing.
-                    if (!CanHandleKeyboardShortcut(EditorGUIUtility.editingTextField, textControlOwnsKeyboard))
+                    // Let IMGUI text controls own keyboard shortcuts
+                    // while they are editing.
+                    if (!CanHandleKeyboardShortcut(
+                            EditorGUIUtility.editingTextField,
+                            textControlOwnsKeyboard))
                     {
                         return false;
                     }
 
-                    if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace)
+                    if (e.keyCode == KeyCode.Delete ||
+                        e.keyCode == KeyCode.Backspace)
                     {
-                        _keys.DeleteSelectedKeys();
-                        return true;
+                        return _keys.DeleteSelectedKeys();
                     }
 
                     if (e.control || e.command)
@@ -148,19 +206,31 @@ namespace FaceMotion.Editor.UI.Timeline
 
                         if (e.keyCode == KeyCode.V)
                         {
-                            _keys.PasteAt(_session.ViewState.CurrentTime);
-                            return true;
+                            var result =
+                                _keys.PasteAt(
+                                    _session.ViewState.CurrentTime);
+
+                            return result.Succeeded ||
+                                   result.Skipped > 0;
+                        }
+
+                        if (e.keyCode == KeyCode.D)
+                        {
+                            return _keys.DuplicateSelection();
                         }
                     }
 
                     if (e.keyCode == KeyCode.Escape)
                     {
-                        if (_session.ViewState.DragMode == TimelineDragMode.MoveKeys)
+                        if (_session.ViewState.DragMode ==
+                            TimelineDragMode.MoveKeys)
                         {
                             _keys.CancelKeyDrag();
                         }
 
-                        _session.ViewState.DragMode = TimelineDragMode.None;
+                        _session.ViewState.DragMode =
+                            TimelineDragMode.None;
+
                         return true;
                     }
 
@@ -181,213 +251,417 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public void ScrubTo(float time)
         {
-            FaceMotionPreviewTrace.Trace("A.ScrubTo", "requested={0}", time);
-            _session.SetCurrentTime(_keys.SnapTime(time));
+            FaceMotionPreviewTrace.Trace(
+                "A.ScrubTo",
+                "requested={0}",
+                time);
+
+            _session.SetCurrentTime(
+                _keys.SnapTime(time));
         }
 
-        public void SelectRow(TimelineRow row)
+        public void SelectRow(
+            TimelineRow row)
         {
-            if (row == null || row.Track == null)
+            if (row == null ||
+                row.Track == null)
             {
                 return;
             }
 
-            _tracks.Select(row.Track.TrackId);
+            _tracks.Select(
+                row.Track.TrackId);
         }
 
-        public void SelectRowAt(float y, TimelineLayoutSnapshot layout)
+        public void SelectRowAt(
+            float y,
+            TimelineLayoutSnapshot layout)
         {
-            SelectRow(TimelineHitTest.FindRowAt(layout, y));
+            SelectRow(
+                TimelineHitTest.FindRowAt(
+                    layout,
+                    y));
         }
 
-        public void ToggleKey(string keyId)
+        public void ToggleKey(
+            string keyId)
         {
             if (string.IsNullOrEmpty(keyId))
             {
                 return;
             }
 
-            if (_session.Selection.Contains(keyId))
+            if (_session.Selection.Contains(
+                    keyId))
             {
-                _session.Selection.Deselect(keyId);
+                _session.Selection.Deselect(
+                    keyId);
             }
             else
             {
-                _session.Selection.Select(keyId);
+                _session.Selection.Select(
+                    keyId);
             }
 
             _session.NotifyChanged();
         }
 
-        public void SelectKeySingle(string keyId)
+        public void SelectKeySingle(
+            string keyId)
         {
             if (string.IsNullOrEmpty(keyId))
             {
                 return;
             }
 
-            _session.Selection.SetSingle(keyId);
+            _session.Selection.SetSingle(
+                keyId);
+
             _session.NotifyChanged();
         }
 
-        public void ZoomAt(float anchorPixelX, Rect plotRect)
+        public void ZoomAt(
+            float anchorPixelX,
+            Rect plotRect)
         {
-            ZoomAt(anchorPixelX, plotRect, 1);
+            ZoomAt(
+                anchorPixelX,
+                plotRect,
+                1);
         }
 
-        public void ZoomAt(float anchorPixelX, Rect plotRect, int sign)
+        public void ZoomAt(
+            float anchorPixelX,
+            Rect plotRect,
+            int sign)
         {
             if (sign == 0)
             {
                 return;
             }
 
-            float oldPps = _session.ViewState.PixelsPerSecond;
-            float anchorTime = TimelineGeometry.PixelToTime(anchorPixelX, _session.ViewState.ScrollTime, oldPps, plotRect.x);
-            float zoom = _session.ViewState.Zoom;
-            float factor = ToolbarZoomFactor(sign);
-            float newZoom = TimelineViewState.ClampZoom(zoom * factor);
-            _session.ViewState.Zoom = newZoom;
-            _session.ViewState.ScrollTime = TimelineGeometry.ComputeZoomedScroll(newZoom, anchorPixelX, anchorTime, plotRect.x);
+            float oldPps =
+                _session.ViewState.PixelsPerSecond;
+
+            float anchorTime =
+                TimelineGeometry.PixelToTime(
+                    anchorPixelX,
+                    _session.ViewState.ScrollTime,
+                    oldPps,
+                    plotRect.x);
+
+            float zoom =
+                _session.ViewState.Zoom;
+
+            float factor =
+                ToolbarZoomFactor(sign);
+
+            float newZoom =
+                TimelineViewState.ClampZoom(
+                    zoom * factor);
+
+            _session.ViewState.Zoom =
+                newZoom;
+
+            _session.ViewState.ScrollTime =
+                TimelineGeometry.ComputeZoomedScroll(
+                    newZoom,
+                    anchorPixelX,
+                    anchorTime,
+                    plotRect.x);
+
             ClampScroll(plotRect);
             _session.NotifyChanged();
         }
 
-        /// <summary>Clamped zoom-step used by a single Wheel/Zoom request step.</summary>
-        public static float ToolbarZoomFactor(int sign)
+        /// <summary>
+        /// Clamped zoom-step used by a single Wheel/Zoom request step.
+        /// </summary>
+        public static float ToolbarZoomFactor(
+            int sign)
         {
-            return sign >= 0 ? 1.2f : 1f / 1.2f;
+            return sign >= 0
+                ? 1.2f
+                : 1f / 1.2f;
         }
 
-        internal static bool CanHandleKeyboardShortcut(bool editingTextField, bool textControlOwnsKeyboard = false)
+        internal static bool CanHandleKeyboardShortcut(
+            bool editingTextField,
+            bool textControlOwnsKeyboard = false)
         {
-            return !editingTextField && !textControlOwnsKeyboard;
+            return !editingTextField &&
+                   !textControlOwnsKeyboard;
         }
 
-        public void ZoomStep(int sign, Rect plotRect)
+        public void ZoomStep(
+            int sign,
+            Rect plotRect)
         {
-            float oldPps = _session.ViewState.PixelsPerSecond;
-            float anchorTime = TimelineGeometry.PixelToTime(plotRect.center.x, _session.ViewState.ScrollTime, oldPps, plotRect.x);
-            float zoom = TimelineViewState.ClampZoom(_session.ViewState.Zoom * ToolbarZoomFactor(sign));
-            _session.ViewState.Zoom = zoom;
-            _session.ViewState.ScrollTime = TimelineGeometry.ComputeZoomedScroll(zoom, plotRect.center.x, anchorTime, plotRect.x);
+            float oldPps =
+                _session.ViewState.PixelsPerSecond;
+
+            float anchorTime =
+                TimelineGeometry.PixelToTime(
+                    plotRect.center.x,
+                    _session.ViewState.ScrollTime,
+                    oldPps,
+                    plotRect.x);
+
+            float zoom =
+                TimelineViewState.ClampZoom(
+                    _session.ViewState.Zoom *
+                    ToolbarZoomFactor(sign));
+
+            _session.ViewState.Zoom =
+                zoom;
+
+            _session.ViewState.ScrollTime =
+                TimelineGeometry.ComputeZoomedScroll(
+                    zoom,
+                    plotRect.center.x,
+                    anchorTime,
+                    plotRect.x);
+
             ClampScroll(plotRect);
             _session.NotifyChanged();
         }
 
-        public void ScrollBy(float deltaSeconds, float plotWidth)
+        public void ScrollBy(
+            float deltaSeconds,
+            float plotWidth)
         {
-            _session.ViewState.ScrollTime = _session.ViewState.ScrollTime - deltaSeconds;
-            ClampScrollTo(GetSelectedDuration(), plotWidth);
+            _session.ViewState.ScrollTime =
+                _session.ViewState.ScrollTime -
+                deltaSeconds;
+
+            ClampScrollTo(
+                GetSelectedDuration(),
+                plotWidth);
+
             _session.NotifyChanged();
         }
 
-        public void FitToContent(float plotWidth)
+        public void FitToContent(
+            float plotWidth)
         {
-            float duration = GetSelectedDuration();
-            _session.ViewState.Zoom = TimelineGeometry.FitZoom(duration, plotWidth);
-            _session.ViewState.ScrollTime = 0f;
+            float duration =
+                GetSelectedDuration();
+
+            _session.ViewState.Zoom =
+                TimelineGeometry.FitZoom(
+                    duration,
+                    plotWidth);
+
+            _session.ViewState.ScrollTime =
+                0f;
+
             _session.NotifyChanged();
         }
 
         // ----- Private helpers -----------------------------------------------------------
 
-        private void OnLeftMouseDown(Rect plotRect, TimelineLayoutSnapshot layout, Vector2 p, bool add)
+        private void OnLeftMouseDown(
+            Rect plotRect,
+            TimelineLayoutSnapshot layout,
+            Vector2 p,
+            bool add,
+            bool shift)
         {
-            bool inLabel = p.x < plotRect.x;
-            _session.ViewState.DragMode = TimelineDragMode.None;
+            bool inLabel =
+                p.x < plotRect.x;
+
+            _session.ViewState.DragMode =
+                TimelineDragMode.None;
 
             if (inLabel)
             {
-                SelectRowAt(p.y, layout);
+                SelectRowAt(
+                    p.y,
+                    layout);
+
                 return;
             }
 
-            bool inRuler = p.y < plotRect.y + TimelineGeometry.RulerHeight;
+            bool inRuler =
+                p.y <
+                plotRect.y +
+                TimelineGeometry.RulerHeight;
+
             if (inRuler)
             {
-                _session.ViewState.DragMode = TimelineDragMode.Scrub;
-                ScrubTo(PixelToTime(p.x, plotRect));
+                _session.ViewState.DragMode =
+                    TimelineDragMode.Scrub;
+
+                ScrubTo(
+                    PixelToTime(
+                        p.x,
+                        plotRect));
+
                 return;
             }
 
-            if (TimelineHitTest.TryFindKeyAt(layout, plotRect.x, p.x, p.y, out var row, out string keyId, out _))
+            if (TimelineHitTest.TryFindKeyAt(
+                    layout,
+                    plotRect.x,
+                    p.x,
+                    p.y,
+                    out var row,
+                    out string keyId,
+                    out _))
             {
-                if (add)
+                // Shift takes precedence over Ctrl/Cmd.
+                // K5 does not implement additive Shift-range.
+                if (shift)
                 {
-                    ToggleKey(keyId);
+                    string anchor =
+                        _session.Selection.PrimaryKeyId;
+
+                    _keys.SelectRange(
+                        anchor,
+                        keyId);
+
                     if (_keys.HasSelection)
                     {
-                        BeginMoveDrag(p.x);
+                        BeginMoveDrag(
+                            p.x);
+                    }
+                }
+                else if (add)
+                {
+                    ToggleKey(
+                        keyId);
+
+                    if (_keys.HasSelection)
+                    {
+                        BeginMoveDrag(
+                            p.x);
                     }
                 }
                 else
                 {
-                    SelectKeySingle(keyId);
-                    BeginMoveDrag(p.x);
+                    SelectKeySingle(
+                        keyId);
+
+                    BeginMoveDrag(
+                        p.x);
                 }
 
                 return;
             }
 
-            SelectRowAt(p.y, layout);
-            _session.ViewState.DragMode = TimelineDragMode.Scrub;
-            ScrubTo(PixelToTime(p.x, plotRect));
+            // Empty plot-area click clears the key selection.
+            // Label/ruler/key clicks intentionally keep their existing behavior.
+            if (_session.Selection.Count > 0)
+            {
+                _session.Selection.Clear();
+                _session.NotifyChanged();
+            }
+
+            SelectRowAt(
+                p.y,
+                layout);
+
+            _session.ViewState.DragMode =
+                TimelineDragMode.Scrub;
+
+            ScrubTo(
+                PixelToTime(
+                    p.x,
+                    plotRect));
         }
 
-        private void BeginMoveDrag(float anchorPixelX)
+        private void BeginMoveDrag(
+            float anchorPixelX)
         {
             if (!_keys.HasSelection)
             {
                 return;
             }
 
-            _session.ViewState.DragMode = TimelineDragMode.MoveKeys;
-            _keyDragAnchorPixelX = anchorPixelX;
+            _session.ViewState.DragMode =
+                TimelineDragMode.MoveKeys;
+
+            _keyDragAnchorPixelX =
+                anchorPixelX;
+
             _keys.BeginKeyDrag();
         }
 
-        private void UpdateHover(Vector2 p, Rect plotRect, TimelineLayoutSnapshot layout)
+        private void UpdateHover(
+            Vector2 p,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout)
         {
             string hovered = null;
+
             if (plotRect.Contains(p))
             {
-                if (TimelineHitTest.TryFindKeyAt(layout, plotRect.x, p.x, p.y, out _, out string keyId, out _))
+                if (TimelineHitTest.TryFindKeyAt(
+                        layout,
+                        plotRect.x,
+                        p.x,
+                        p.y,
+                        out _,
+                        out string keyId,
+                        out _))
                 {
-                    hovered = keyId;
+                    hovered =
+                        keyId;
                 }
             }
 
-            if (!string.Equals(hovered, _session.ViewState.HoveredKeyId, StringComparison.Ordinal))
+            if (!string.Equals(
+                    hovered,
+                    _session.ViewState.HoveredKeyId,
+                    StringComparison.Ordinal))
             {
-                _session.ViewState.HoveredKeyId = hovered;
+                _session.ViewState.HoveredKeyId =
+                    hovered;
+
                 _session.NotifyChanged();
             }
         }
 
-        private float PixelToTime(float x, Rect plotRect)
+        private float PixelToTime(
+            float x,
+            Rect plotRect)
         {
-            return TimelineGeometry.PixelToTime(x, _session.ViewState.ScrollTime, _session.ViewState.PixelsPerSecond, plotRect.x);
+            return TimelineGeometry.PixelToTime(
+                x,
+                _session.ViewState.ScrollTime,
+                _session.ViewState.PixelsPerSecond,
+                plotRect.x);
         }
 
         private float GetSelectedDuration()
         {
-            var animation = _session.GetSelectedAnimation();
-            return animation == null || animation.Timeline == null ? 1f : animation.Timeline.Duration;
+            var animation =
+                _session.GetSelectedAnimation();
+
+            return animation == null ||
+                   animation.Timeline == null
+                ? 1f
+                : animation.Timeline.Duration;
         }
 
-        private void ClampScroll(Rect plotRect)
+        private void ClampScroll(
+            Rect plotRect)
         {
-            ClampScrollTo(GetSelectedDuration(), plotRect.width);
+            ClampScrollTo(
+                GetSelectedDuration(),
+                plotRect.width);
         }
 
-        private void ClampScrollTo(float duration, float plotWidth)
+        private void ClampScrollTo(
+            float duration,
+            float plotWidth)
         {
-            _session.ViewState.ScrollTime = TimelineGeometry.ClampScrollTime(
-                _session.ViewState.ScrollTime,
-                duration,
-                plotWidth,
-                _session.ViewState.PixelsPerSecond);
+            _session.ViewState.ScrollTime =
+                TimelineGeometry.ClampScrollTime(
+                    _session.ViewState.ScrollTime,
+                    duration,
+                    plotWidth,
+                    _session.ViewState.PixelsPerSecond);
         }
     }
 }

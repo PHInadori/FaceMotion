@@ -51,24 +51,40 @@ namespace FaceMotion.Editor.UI.Controllers
         public float SnapTime(float time)
         {
             float duration = _session.GetSelectedDuration();
+
             if (_session.ViewState.SnapEnabled)
             {
-                return FrameSnapper.Snap(time, _session.GetSelectedFrameRate(), duration);
+                return FrameSnapper.Snap(
+                    time,
+                    _session.GetSelectedFrameRate(),
+                    duration);
             }
 
             return Mathf.Clamp(time, 0f, duration);
         }
 
         /// <summary>Adds or updates a key at the shared playhead using the inspector values.</summary>
-        public string AddKeyAtCurrentTime(float floatValue, Vector3 vectorValue, InterpolationType interpolation)
+        public string AddKeyAtCurrentTime(
+            float floatValue,
+            Vector3 vectorValue,
+            InterpolationType interpolation)
         {
-            return AddKeyAt(_session.ViewState.CurrentTime, floatValue, vectorValue, interpolation);
+            return AddKeyAt(
+                _session.ViewState.CurrentTime,
+                floatValue,
+                vectorValue,
+                interpolation);
         }
 
         /// <summary>Adds or updates a key at the given time using the inspector values.</summary>
-        public string AddKeyAt(float time, float floatValue, Vector3 vectorValue, InterpolationType interpolation)
+        public string AddKeyAt(
+            float time,
+            float floatValue,
+            Vector3 vectorValue,
+            InterpolationType interpolation)
         {
             var animation = _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 SetOutcome(ControllerDiagnostics.NoSelection("animation"));
@@ -76,6 +92,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             var track = _session.GetSelectedTrack();
+
             if (track == null)
             {
                 SetOutcome(ControllerDiagnostics.NoSelection("track"));
@@ -87,9 +104,16 @@ namespace FaceMotion.Editor.UI.Controllers
             if (track.Kind == TrackKind.BlendShape)
             {
                 string existing = FindKeyAtTime(track, time);
+
                 if (existing != null)
                 {
-                    if (!UICommandRunner.Run(_session, new UpdateFloatKeyValueCommand(animation.AnimationId, track.TrackId, existing, floatValue)).Succeeded)
+                    if (!UICommandRunner.Run(
+                            _session,
+                            new UpdateFloatKeyValueCommand(
+                                animation.AnimationId,
+                                track.TrackId,
+                                existing,
+                                floatValue)).Succeeded)
                     {
                         return null;
                     }
@@ -101,7 +125,13 @@ namespace FaceMotion.Editor.UI.Controllers
 
                 var add = UICommandRunner.Run(
                     _session,
-                    new AddFloatKeyCommand(animation.AnimationId, track.TrackId, time, floatValue, interpolation));
+                    new AddFloatKeyCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        time,
+                        floatValue,
+                        interpolation));
+
                 if (!add.Succeeded)
                 {
                     return null;
@@ -110,9 +140,16 @@ namespace FaceMotion.Editor.UI.Controllers
             else if (TrackKinds.IsTransform(track.Kind))
             {
                 string existing = FindKeyAtTime(track, time);
+
                 if (existing != null)
                 {
-                    if (!UICommandRunner.Run(_session, new UpdateVector3KeyValueCommand(animation.AnimationId, track.TrackId, existing, vectorValue)).Succeeded)
+                    if (!UICommandRunner.Run(
+                            _session,
+                            new UpdateVector3KeyValueCommand(
+                                animation.AnimationId,
+                                track.TrackId,
+                                existing,
+                                vectorValue)).Succeeded)
                     {
                         return null;
                     }
@@ -124,7 +161,13 @@ namespace FaceMotion.Editor.UI.Controllers
 
                 var add = UICommandRunner.Run(
                     _session,
-                    new AddVector3KeyCommand(animation.AnimationId, track.TrackId, time, vectorValue, interpolation));
+                    new AddVector3KeyCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        time,
+                        vectorValue,
+                        interpolation));
+
                 if (!add.Succeeded)
                 {
                     return null;
@@ -136,6 +179,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             string created = FindKeyAtTime(track, time);
+
             if (created != null)
             {
                 _session.Selection.SetSingle(created);
@@ -148,6 +192,7 @@ namespace FaceMotion.Editor.UI.Controllers
         public bool DeleteSelectedKeys()
         {
             var animation = _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 SetOutcome(ControllerDiagnostics.NoSelection("animation"));
@@ -155,12 +200,18 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             List<KeyTarget> targets = CollectSelectedTargets(animation);
+
             if (targets.Count == 0)
             {
                 return false;
             }
 
-            var result = UICommandRunner.Run(_session, new RemoveKeysCommand(animation.AnimationId, targets));
+            var result = UICommandRunner.Run(
+                _session,
+                new RemoveKeysCommand(
+                    animation.AnimationId,
+                    targets));
+
             if (result.Succeeded)
             {
                 _session.Selection.Clear();
@@ -171,9 +222,12 @@ namespace FaceMotion.Editor.UI.Controllers
         }
 
         /// <summary>Moves the whole selection by an offset in one Undo step.</summary>
-        public bool MoveSelectedKeysBy(float deltaTime, bool snapEnabled)
+        public bool MoveSelectedKeysBy(
+            float deltaTime,
+            bool snapEnabled)
         {
             var animation = _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 SetOutcome(ControllerDiagnostics.NoSelection("animation"));
@@ -181,14 +235,19 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             List<TrackMoveInput> inputs = BuildMoveInputs(animation);
-            if (inputs.Count == 0 || !HasAnySelectedKeys(inputs))
+
+            if (inputs.Count == 0 ||
+                !HasAnySelectedKeys(inputs))
             {
                 return false;
             }
 
             float duration = animation.Timeline.Duration;
             float frameRate = animation.Timeline.FrameRate;
-            var commands = new List<IProjectCommand>(inputs.Count);
+
+            var commands =
+                new List<IProjectCommand>(inputs.Count);
+
             for (int i = 0; i < inputs.Count; i++)
             {
                 if (inputs[i].KeyIds.Count == 0)
@@ -196,14 +255,21 @@ namespace FaceMotion.Editor.UI.Controllers
                     continue;
                 }
 
-                float[] planned = KeyMovePlanner.PlanTrack(
-                    inputs[i].CurrentTimes,
-                    inputs[i].Occupied,
-                    deltaTime,
-                    duration,
-                    frameRate,
-                    snapEnabled);
-                commands.Add(new MoveKeysToTimesCommand(animation.AnimationId, inputs[i].TrackId, inputs[i].KeyIds, planned));
+                float[] planned =
+                    KeyMovePlanner.PlanTrack(
+                        inputs[i].CurrentTimes,
+                        inputs[i].Occupied,
+                        deltaTime,
+                        duration,
+                        frameRate,
+                        snapEnabled);
+
+                commands.Add(
+                    new MoveKeysToTimesCommand(
+                        animation.AnimationId,
+                        inputs[i].TrackId,
+                        inputs[i].KeyIds,
+                        planned));
             }
 
             if (commands.Count == 0)
@@ -211,12 +277,16 @@ namespace FaceMotion.Editor.UI.Controllers
                 return false;
             }
 
-            return UICommandRunner.RunBatch(_session, commands, "Move Keys").Succeeded;
+            return UICommandRunner.RunBatch(
+                _session,
+                commands,
+                "Move Keys").Succeeded;
         }
 
         public bool CanBeginKeyDrag()
         {
-            return _session.ActiveProject != null && HasSelection;
+            return _session.ActiveProject != null &&
+                   HasSelection;
         }
 
         public void BeginKeyDrag()
@@ -228,12 +298,20 @@ namespace FaceMotion.Editor.UI.Controllers
                 return;
             }
 
-            _drag.Begin(_session.ActiveProject, "Move Keys");
-            _dragInputs = BuildMoveInputs(_session.GetSelectedAnimation());
+            _drag.Begin(
+                _session.ActiveProject,
+                "Move Keys");
+
+            _dragInputs =
+                BuildMoveInputs(
+                    _session.GetSelectedAnimation());
+
             _legacyDragDelta = 0f;
         }
 
-        public void UpdateKeyDrag(float pixelDelta, float pixelsPerSecond)
+        public void UpdateKeyDrag(
+            float pixelDelta,
+            float pixelsPerSecond)
         {
             if (!_drag.IsBegun)
             {
@@ -241,19 +319,33 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             _legacyDragDelta += pixelDelta;
-            UpdateKeyDragAt(_legacyDragDelta, 0f, pixelsPerSecond);
+
+            UpdateKeyDragAt(
+                _legacyDragDelta,
+                0f,
+                pixelsPerSecond);
         }
 
         /// <summary>Moves from the pointer's absolute position relative to its mouse-down anchor.</summary>
-        public void UpdateKeyDragAt(float pointerPixelX, float anchorPixelX, float pixelsPerSecond)
+        public void UpdateKeyDragAt(
+            float pointerPixelX,
+            float anchorPixelX,
+            float pixelsPerSecond)
         {
             if (!_drag.IsBegun)
             {
                 return;
             }
 
-            float deltaTime = pixelsPerSecond > 0f ? (pointerPixelX - anchorPixelX) / pixelsPerSecond : 0f;
-            ApplyDragMove(deltaTime, _session.ViewState.SnapEnabled);
+            float deltaTime =
+                pixelsPerSecond > 0f
+                    ? (pointerPixelX - anchorPixelX) /
+                      pixelsPerSecond
+                    : 0f;
+
+            ApplyDragMove(
+                deltaTime,
+                _session.ViewState.SnapEnabled);
         }
 
         public void EndKeyDrag()
@@ -270,36 +362,58 @@ namespace FaceMotion.Editor.UI.Controllers
             _session.RefreshAll();
         }
 
-        public bool SetKeyTime(string keyId, float time)
+        public bool SetKeyTime(
+            string keyId,
+            float time)
         {
             var animation = _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 return false;
             }
 
-            var track = FindTrackForKey(animation, keyId);
+            var track =
+                FindTrackForKey(
+                    animation,
+                    keyId);
+
             if (track == null)
             {
                 return false;
             }
 
             time = SnapTime(time);
-            var result = UICommandRunner.Run(
-                _session,
-                new MoveKeysToTimesCommand(animation.AnimationId, track.TrackId, new[] { keyId }, new[] { time }));
+
+            var result =
+                UICommandRunner.Run(
+                    _session,
+                    new MoveKeysToTimesCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        new[] { keyId },
+                        new[] { time }));
+
             return result.Succeeded;
         }
 
-        public bool SetKeyValue(string keyId, float floatValue, Vector3 vectorValue)
+        public bool SetKeyValue(
+            string keyId,
+            float floatValue,
+            Vector3 vectorValue)
         {
             var animation = _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 return false;
             }
 
-            var track = FindTrackForKey(animation, keyId);
+            var track =
+                FindTrackForKey(
+                    animation,
+                    keyId);
+
             if (track == null)
             {
                 return false;
@@ -307,32 +421,60 @@ namespace FaceMotion.Editor.UI.Controllers
 
             if (track.Kind == TrackKind.BlendShape)
             {
-                return UICommandRunner.Run(_session, new UpdateFloatKeyValueCommand(animation.AnimationId, track.TrackId, keyId, floatValue)).Succeeded;
+                return UICommandRunner.Run(
+                    _session,
+                    new UpdateFloatKeyValueCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        floatValue)).Succeeded;
             }
 
             if (TrackKinds.IsTransform(track.Kind))
             {
-                return UICommandRunner.Run(_session, new UpdateVector3KeyValueCommand(animation.AnimationId, track.TrackId, keyId, vectorValue)).Succeeded;
+                return UICommandRunner.Run(
+                    _session,
+                    new UpdateVector3KeyValueCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        vectorValue)).Succeeded;
             }
 
             return false;
         }
 
-        public bool SetKeyInterpolation(string keyId, InterpolationType interpolation)
+        public bool SetKeyInterpolation(
+            string keyId,
+            InterpolationType interpolation)
         {
-            var animation = _session.GetSelectedAnimation();
+            var animation =
+                _session.GetSelectedAnimation();
+
             if (animation == null)
             {
                 return false;
             }
 
-            var track = FindTrackForKey(animation, keyId);
+            var track =
+                FindTrackForKey(
+                    animation,
+                    keyId);
+
             if (track == null)
             {
                 return false;
             }
 
-            var result = UICommandRunner.Run(_session, new SetKeyInterpolationCommand(animation.AnimationId, track.TrackId, keyId, interpolation));
+            var result =
+                UICommandRunner.Run(
+                    _session,
+                    new SetKeyInterpolationCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        interpolation));
+
             return result.Succeeded;
         }
 
@@ -347,71 +489,328 @@ namespace FaceMotion.Editor.UI.Controllers
             Vector3 vectorValue,
             InterpolationType interpolation)
         {
-            var animation = _session.GetSelectedAnimation();
+            var animation =
+                _session.GetSelectedAnimation();
+
             if (animation == null)
             {
-                SetOutcome(ControllerDiagnostics.NoSelection("animation"));
+                SetOutcome(
+                    ControllerDiagnostics.NoSelection(
+                        "animation"));
+
                 return false;
             }
 
-            var track = FindTrackForKey(animation, keyId);
+            var track =
+                FindTrackForKey(
+                    animation,
+                    keyId);
+
             if (track == null)
             {
-                SetOutcome(ControllerDiagnostics.NoSelection("key"));
+                SetOutcome(
+                    ControllerDiagnostics.NoSelection(
+                        "key"));
+
                 return false;
             }
 
             time = SnapTime(time);
-            var commands = new List<IProjectCommand>
-            {
-                new MoveKeysToTimesCommand(animation.AnimationId, track.TrackId, new[] { keyId }, new[] { time }),
-                new SetKeyInterpolationCommand(animation.AnimationId, track.TrackId, keyId, interpolation)
-            };
+
+            var commands =
+                new List<IProjectCommand>
+                {
+                    new MoveKeysToTimesCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        new[] { keyId },
+                        new[] { time }),
+
+                    new SetKeyInterpolationCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        interpolation)
+                };
 
             if (track.Kind == TrackKind.BlendShape)
             {
-                commands.Insert(1, new UpdateFloatKeyValueCommand(animation.AnimationId, track.TrackId, keyId, floatValue));
+                commands.Insert(
+                    1,
+                    new UpdateFloatKeyValueCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        floatValue));
             }
             else if (TrackKinds.IsTransform(track.Kind))
             {
-                commands.Insert(1, new UpdateVector3KeyValueCommand(animation.AnimationId, track.TrackId, keyId, vectorValue));
+                commands.Insert(
+                    1,
+                    new UpdateVector3KeyValueCommand(
+                        animation.AnimationId,
+                        track.TrackId,
+                        keyId,
+                        vectorValue));
             }
             else
             {
                 return false;
             }
 
-            return UICommandRunner.RunBatch(_session, commands, "Edit Key").Succeeded;
+            return UICommandRunner.RunBatch(
+                _session,
+                commands,
+                "Edit Key").Succeeded;
         }
 
         public void SelectAllKeys()
         {
-            var animation = _session.GetSelectedAnimation();
-            if (animation == null || animation.Timeline == null)
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null)
             {
                 return;
             }
 
-            var ids = new List<string>();
+            var ids =
+                new List<string>();
+
             foreach (var track in animation.Timeline.Tracks)
             {
-                CollectKeyIds(track, ids);
+                CollectKeyIds(
+                    track,
+                    ids);
             }
 
             _session.Selection.SetSelection(ids);
             _session.NotifyChanged();
         }
 
-        public void CopySelection()
+        /// <summary>
+        /// Shift-click range selection. The range computation lives here
+        /// (TimelineSelection is state-only).
+        /// Anchor = PrimaryKeyId. Same-track, time-ordered, inclusive.
+        /// No anchor or a different track yields a single-key selection.
+        /// The original anchor remains primary for a valid range.
+        /// </summary>
+        public void SelectRange(
+            string anchorKeyId,
+            string clickedKeyId)
         {
-            var animation = _session.GetSelectedAnimation();
-            if (animation == null || animation.Timeline == null || !HasSelection)
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null ||
+                string.IsNullOrEmpty(clickedKeyId))
             {
                 return;
             }
 
-            var items = new List<TimelineClipboard.ClipboardItem>();
-            float minTime = float.PositiveInfinity;
+            // No valid anchor -> normal single selection.
+            if (string.IsNullOrEmpty(anchorKeyId))
+            {
+                _session.Selection.SetSingle(
+                    clickedKeyId);
+
+                _session.NotifyChanged();
+                return;
+            }
+
+            var anchorTrack =
+                FindTrackForKey(
+                    animation,
+                    anchorKeyId);
+
+            var clickedTrack =
+                FindTrackForKey(
+                    animation,
+                    clickedKeyId);
+
+            // Missing key or cross-track Shift-click:
+            // fall back to normal single selection.
+            if (anchorTrack == null ||
+                clickedTrack == null ||
+                !string.Equals(
+                    anchorTrack.TrackId,
+                    clickedTrack.TrackId,
+                    StringComparison.Ordinal))
+            {
+                _session.Selection.SetSingle(
+                    clickedKeyId);
+
+                _session.NotifyChanged();
+                return;
+            }
+
+            var ordered =
+                CollectOrderedKeyTimes(
+                    anchorTrack);
+
+            int anchorIndex =
+                IndexOfOrderedKey(
+                    ordered,
+                    anchorKeyId);
+
+            int clickedIndex =
+                IndexOfOrderedKey(
+                    ordered,
+                    clickedKeyId);
+
+            if (anchorIndex < 0 ||
+                clickedIndex < 0)
+            {
+                _session.Selection.SetSingle(
+                    clickedKeyId);
+
+                _session.NotifyChanged();
+                return;
+            }
+
+            int lo =
+                Mathf.Min(
+                    anchorIndex,
+                    clickedIndex);
+
+            int hi =
+                Mathf.Max(
+                    anchorIndex,
+                    clickedIndex);
+
+            var range =
+                new List<string>(
+                    hi - lo + 1);
+
+            for (int i = lo; i <= hi; i++)
+            {
+                range.Add(
+                    ordered[i].KeyId);
+            }
+
+            _session.Selection.SetSelection(
+                range);
+
+            // Keep the original anchor stable so repeated Shift-clicks
+            // extend from the same starting key.
+            _session.Selection.SetPrimaryKeyId(
+                anchorKeyId);
+
+            _session.NotifyChanged();
+        }
+
+        private struct OrderedTrackKey
+        {
+            public string KeyId;
+
+            public float Time;
+        }
+
+        private static List<OrderedTrackKey> CollectOrderedKeyTimes(
+            FaceTrackData track)
+        {
+            var result =
+                new List<OrderedTrackKey>();
+
+            if (track == null)
+            {
+                return result;
+            }
+
+            if (track.Kind == TrackKind.BlendShape &&
+                track.BlendShape != null)
+            {
+                foreach (var key in track.BlendShape.Keys)
+                {
+                    if (key != null)
+                    {
+                        result.Add(
+                            new OrderedTrackKey
+                            {
+                                KeyId = key.KeyId,
+                                Time = key.Time
+                            });
+                    }
+                }
+            }
+            else if (TrackKinds.IsTransform(track.Kind) &&
+                     track.Transform != null)
+            {
+                foreach (var key in track.Transform.Keys)
+                {
+                    if (key != null)
+                    {
+                        result.Add(
+                            new OrderedTrackKey
+                            {
+                                KeyId = key.KeyId,
+                                Time = key.Time
+                            });
+                    }
+                }
+            }
+
+            result.Sort(
+                (a, b) =>
+                {
+                    int compare =
+                        a.Time.CompareTo(
+                            b.Time);
+
+                    if (compare != 0)
+                    {
+                        return compare;
+                    }
+
+                    return string.Compare(
+                        a.KeyId,
+                        b.KeyId,
+                        StringComparison.Ordinal);
+                });
+
+            return result;
+        }
+
+        private static int IndexOfOrderedKey(
+            List<OrderedTrackKey> ordered,
+            string keyId)
+        {
+            for (int i = 0;
+                 i < ordered.Count;
+                 i++)
+            {
+                if (string.Equals(
+                        ordered[i].KeyId,
+                        keyId,
+                        StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        public void CopySelection()
+        {
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null ||
+                !HasSelection)
+            {
+                return;
+            }
+
+            var items =
+                new List<TimelineClipboard.ClipboardItem>();
+
+            float minTime =
+                float.PositiveInfinity;
+
             foreach (var track in animation.Timeline.Tracks)
             {
                 if (track == null)
@@ -419,25 +818,53 @@ namespace FaceMotion.Editor.UI.Controllers
                     continue;
                 }
 
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+                if (track.Kind == TrackKind.BlendShape &&
+                    track.BlendShape != null)
                 {
                     foreach (var key in track.BlendShape.Keys)
                     {
-                        if (key != null && _session.Selection.Contains(key.KeyId))
+                        if (key != null &&
+                            _session.Selection.Contains(
+                                key.KeyId))
                         {
-                            items.Add(NewItem(track, key.KeyId, key.Time, key.Interpolation, key.Value, Vector3.zero));
-                            minTime = Mathf.Min(minTime, key.Time);
+                            items.Add(
+                                NewItem(
+                                    track,
+                                    key.KeyId,
+                                    key.Time,
+                                    key.Interpolation,
+                                    key.Value,
+                                    Vector3.zero));
+
+                            minTime =
+                                Mathf.Min(
+                                    minTime,
+                                    key.Time);
                         }
                     }
                 }
-                else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+                else if (TrackKinds.IsTransform(track.Kind) &&
+                         track.Transform != null)
                 {
                     foreach (var key in track.Transform.Keys)
                     {
-                        if (key != null && _session.Selection.Contains(key.KeyId))
+                        if (key != null &&
+                            _session.Selection.Contains(
+                                key.KeyId))
                         {
-                            items.Add(NewItem(track, key.KeyId, key.Time, key.Interpolation, 0f, key.Value));
-                            minTime = Mathf.Min(minTime, key.Time);
+                            items.Add(
+                                NewItem(
+                                    track,
+                                    key.KeyId,
+                                    key.Time,
+                                    key.Interpolation,
+                                    0f,
+                                    key.Value));
+
+                            minTime =
+                                Mathf.Min(
+                                    minTime,
+                                    key.Time);
                         }
                     }
                 }
@@ -448,22 +875,329 @@ namespace FaceMotion.Editor.UI.Controllers
                 return;
             }
 
-            for (int i = 0; i < items.Count; i++)
+            for (int i = 0;
+                 i < items.Count;
+                 i++)
             {
-                items[i].RelativeTime = items[i].RelativeTime - minTime;
+                items[i].RelativeTime =
+                    items[i].RelativeTime -
+                    minTime;
             }
 
             _session.Clipboard.Set(items);
             _session.NotifyChanged();
         }
 
-        public PasteResult PasteAt(float time)
+        /// <summary>
+        /// Duplicates the current selection exactly one frame later.
+        /// The whole group keeps its relative spacing, values, interpolation and tracks.
+        /// Duplicate is rejected as a whole when it would exceed the timeline duration
+        /// or collide with an existing key. The user clipboard is never modified.
+        /// </summary>
+        public bool DuplicateSelection()
         {
-            var result = new PasteResult();
-            var animation = _session.GetSelectedAnimation();
-            if (animation == null || animation.Timeline == null)
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null ||
+                !HasSelection)
             {
-                SetOutcome(ControllerDiagnostics.NoSelection("animation"));
+                return false;
+            }
+
+            var timeline =
+                animation.Timeline;
+
+            float frameRate =
+                timeline.FrameRate > 0f
+                    ? timeline.FrameRate
+                    : 60f;
+
+            float delta =
+                1f / frameRate;
+
+            float maxTime =
+                float.NegativeInfinity;
+
+            bool foundAny = false;
+
+            // First pass:
+            // Find the latest selected key so the entire group can be
+            // rejected before mutation rather than individually clamped.
+            foreach (var track in timeline.Tracks)
+            {
+                if (track == null)
+                {
+                    continue;
+                }
+
+                if (track.Kind == TrackKind.BlendShape &&
+                    track.BlendShape != null)
+                {
+                    foreach (var key in track.BlendShape.Keys)
+                    {
+                        if (key != null &&
+                            _session.Selection.Contains(
+                                key.KeyId))
+                        {
+                            foundAny = true;
+
+                            maxTime =
+                                Mathf.Max(
+                                    maxTime,
+                                    key.Time);
+                        }
+                    }
+                }
+                else if (TrackKinds.IsTransform(track.Kind) &&
+                         track.Transform != null)
+                {
+                    foreach (var key in track.Transform.Keys)
+                    {
+                        if (key != null &&
+                            _session.Selection.Contains(
+                                key.KeyId))
+                        {
+                            foundAny = true;
+
+                            maxTime =
+                                Mathf.Max(
+                                    maxTime,
+                                    key.Time);
+                        }
+                    }
+                }
+            }
+
+            if (!foundAny)
+            {
+                return false;
+            }
+
+            // Preserve group shape.
+            // Never clamp only the trailing keys.
+            if (maxTime + delta >
+                timeline.Duration + TimeTolerance)
+            {
+                return false;
+            }
+
+            var specs =
+                new List<PasteKeySpec>();
+
+            var sourceIds =
+                new List<string>();
+
+            var occupiedPerTrack =
+                new Dictionary<string, List<float>>(
+                    StringComparer.Ordinal);
+
+            string previousPrimary =
+                _session.Selection.PrimaryKeyId;
+
+            // Second pass:
+            // Apply exactly the same +1-frame delta to every source key.
+            foreach (var track in timeline.Tracks)
+            {
+                if (track == null)
+                {
+                    continue;
+                }
+
+                if (!occupiedPerTrack.TryGetValue(
+                        track.TrackId,
+                        out var occupied))
+                {
+                    occupied =
+                        CollectTrackTimes(
+                            track);
+
+                    occupiedPerTrack.Add(
+                        track.TrackId,
+                        occupied);
+                }
+
+                if (track.Kind == TrackKind.BlendShape &&
+                    track.BlendShape != null)
+                {
+                    foreach (var key in track.BlendShape.Keys)
+                    {
+                        if (key == null ||
+                            !_session.Selection.Contains(
+                                key.KeyId))
+                        {
+                            continue;
+                        }
+
+                        float targetTime =
+                            key.Time + delta;
+
+                        // Same collision tolerance as PasteAt.
+                        // Reject the entire duplicate instead of creating
+                        // only part of the requested group.
+                        if (ContainsTime(
+                                occupied,
+                                targetTime))
+                        {
+                            return false;
+                        }
+
+                        occupied.Add(
+                            targetTime);
+
+                        specs.Add(
+                            new PasteKeySpec
+                            {
+                                TrackId =
+                                    track.TrackId,
+
+                                Kind =
+                                    track.Kind,
+
+                                Time =
+                                    targetTime,
+
+                                FloatValue =
+                                    key.Value,
+
+                                VectorValue =
+                                    Vector3.zero,
+
+                                Interpolation =
+                                    key.Interpolation
+                            });
+
+                        sourceIds.Add(
+                            key.KeyId);
+                    }
+                }
+                else if (TrackKinds.IsTransform(track.Kind) &&
+                         track.Transform != null)
+                {
+                    foreach (var key in track.Transform.Keys)
+                    {
+                        if (key == null ||
+                            !_session.Selection.Contains(
+                                key.KeyId))
+                        {
+                            continue;
+                        }
+
+                        float targetTime =
+                            key.Time + delta;
+
+                        if (ContainsTime(
+                                occupied,
+                                targetTime))
+                        {
+                            return false;
+                        }
+
+                        occupied.Add(
+                            targetTime);
+
+                        specs.Add(
+                            new PasteKeySpec
+                            {
+                                TrackId =
+                                    track.TrackId,
+
+                                Kind =
+                                    track.Kind,
+
+                                Time =
+                                    targetTime,
+
+                                FloatValue =
+                                    0f,
+
+                                VectorValue =
+                                    key.Value,
+
+                                Interpolation =
+                                    key.Interpolation
+                            });
+
+                        sourceIds.Add(
+                            key.KeyId);
+                    }
+                }
+            }
+
+            if (specs.Count == 0)
+            {
+                return false;
+            }
+
+            var command =
+                new PasteKeysCommand(
+                    animation.AnimationId,
+                    specs);
+
+            var run =
+                UICommandRunner.Run(
+                    _session,
+                    command);
+
+            if (!run.Succeeded ||
+                command.CreatedKeyIds == null ||
+                command.CreatedKeyIds.Count == 0)
+            {
+                return false;
+            }
+
+            string newPrimary =
+                command.CreatedKeyIds[0];
+
+            if (previousPrimary != null &&
+                command.CreatedKeyIds.Count ==
+                sourceIds.Count)
+            {
+                for (int i = 0;
+                     i < sourceIds.Count;
+                     i++)
+                {
+                    if (string.Equals(
+                            sourceIds[i],
+                            previousPrimary,
+                            StringComparison.Ordinal))
+                    {
+                        newPrimary =
+                            command.CreatedKeyIds[i];
+
+                        break;
+                    }
+                }
+            }
+
+            _session.Selection.SetSelection(
+                command.CreatedKeyIds);
+
+            _session.Selection.SetPrimaryKeyId(
+                newPrimary);
+
+            _session.NotifyChanged();
+
+            return true;
+        }
+
+        public PasteResult PasteAt(
+            float time)
+        {
+            var result =
+                new PasteResult();
+
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null)
+            {
+                SetOutcome(
+                    ControllerDiagnostics.NoSelection(
+                        "animation"));
+
                 return result;
             }
 
@@ -472,58 +1206,115 @@ namespace FaceMotion.Editor.UI.Controllers
                 return result;
             }
 
-            float duration = animation.Timeline.Duration;
-            float frameRate = animation.Timeline.FrameRate;
-            float cursor = SnapTime(time);
+            float cursor =
+                SnapTime(time);
 
-            var specs = new List<PasteKeySpec>(_session.Clipboard.Count);
-            var occupiedPerTrack = new Dictionary<string, List<float>>(StringComparer.Ordinal);
+            var specs =
+                new List<PasteKeySpec>(
+                    _session.Clipboard.Count);
+
+            var occupiedPerTrack =
+                new Dictionary<string, List<float>>(
+                    StringComparer.Ordinal);
+
             int skipped = 0;
-            for (int i = 0; i < _session.Clipboard.Count; i++)
+
+            for (int i = 0;
+                 i < _session.Clipboard.Count;
+                 i++)
             {
-                TimelineClipboard.ClipboardItem item = _session.Clipboard.Items[i];
-                if (!animation.Timeline.TryGetTrack(item.TrackId, out var track) || track.Kind != item.Kind)
+                TimelineClipboard.ClipboardItem item =
+                    _session.Clipboard.Items[i];
+
+                if (!animation.Timeline.TryGetTrack(
+                        item.TrackId,
+                        out var track) ||
+                    track.Kind != item.Kind)
                 {
-                    SetOutcome(ControllerDiagnostics.PasteTrackMissing(item.TrackId));
+                    SetOutcome(
+                        ControllerDiagnostics.PasteTrackMissing(
+                            item.TrackId));
+
                     return result;
                 }
 
-                float absolute = cursor + item.RelativeTime;
-                float targetTime = SnapTime(absolute);
+                float absolute =
+                    cursor +
+                    item.RelativeTime;
 
-                if (!occupiedPerTrack.TryGetValue(item.TrackId, out var occupied))
+                float targetTime =
+                    SnapTime(
+                        absolute);
+
+                if (!occupiedPerTrack.TryGetValue(
+                        item.TrackId,
+                        out var occupied))
                 {
-                    occupied = CollectTrackTimes(track);
-                    occupiedPerTrack.Add(item.TrackId, occupied);
+                    occupied =
+                        CollectTrackTimes(
+                            track);
+
+                    occupiedPerTrack.Add(
+                        item.TrackId,
+                        occupied);
                 }
 
-                if (ContainsTime(occupied, targetTime))
+                if (ContainsTime(
+                        occupied,
+                        targetTime))
                 {
                     skipped++;
                     continue;
                 }
 
-                occupied.Add(targetTime);
-                specs.Add(new PasteKeySpec
-                {
-                    TrackId = item.TrackId,
-                    Kind = item.Kind,
-                    Time = targetTime,
-                    FloatValue = item.FloatValue,
-                    VectorValue = item.VectorValue,
-                    Interpolation = item.Interpolation
-                });
+                occupied.Add(
+                    targetTime);
+
+                specs.Add(
+                    new PasteKeySpec
+                    {
+                        TrackId =
+                            item.TrackId,
+
+                        Kind =
+                            item.Kind,
+
+                        Time =
+                            targetTime,
+
+                        FloatValue =
+                            item.FloatValue,
+
+                        VectorValue =
+                            item.VectorValue,
+
+                        Interpolation =
+                            item.Interpolation
+                    });
             }
 
             if (specs.Count == 0)
             {
-                result.Skipped = skipped;
-                SetOutcome(ControllerDiagnostics.PasteCollision(skipped));
+                result.Skipped =
+                    skipped;
+
+                SetOutcome(
+                    ControllerDiagnostics.PasteCollision(
+                        skipped));
+
                 return result;
             }
 
-            var command = new PasteKeysCommand(animation.AnimationId, specs);
-            var run = UICommandRunner.Run(_session, command);
+            var command =
+                new PasteKeysCommand(
+                    animation.AnimationId,
+                    specs);
+
+            var run =
+                UICommandRunner.Run(
+                    _session,
+                    command);
+
             if (!run.Succeeded)
             {
                 return result;
@@ -532,15 +1323,22 @@ namespace FaceMotion.Editor.UI.Controllers
             result.Succeeded = true;
             result.Pasted = specs.Count;
             result.Skipped = skipped;
-            if (command.CreatedKeyIds != null && command.CreatedKeyIds.Count > 0)
+
+            if (command.CreatedKeyIds != null &&
+                command.CreatedKeyIds.Count > 0)
             {
-                result.PastedKeyId = command.CreatedKeyIds[0];
-                _session.Selection.SetSelection(command.CreatedKeyIds);
+                result.PastedKeyId =
+                    command.CreatedKeyIds[0];
+
+                _session.Selection.SetSelection(
+                    command.CreatedKeyIds);
             }
 
             if (skipped > 0)
             {
-                SetOutcome(ControllerDiagnostics.PasteCollision(skipped));
+                SetOutcome(
+                    ControllerDiagnostics.PasteCollision(
+                        skipped));
             }
             else
             {
@@ -550,38 +1348,59 @@ namespace FaceMotion.Editor.UI.Controllers
             return result;
         }
 
-        private void ApplyDragMove(float deltaTime, bool snapEnabled)
+        private void ApplyDragMove(
+            float deltaTime,
+            bool snapEnabled)
         {
-            var animation = _session.GetSelectedAnimation();
-            if (animation == null || animation.Timeline == null)
+            var animation =
+                _session.GetSelectedAnimation();
+
+            if (animation == null ||
+                animation.Timeline == null)
             {
                 return;
             }
 
-            List<TrackMoveInput> inputs = _dragInputs ?? BuildMoveInputs(animation);
+            List<TrackMoveInput> inputs =
+                _dragInputs ??
+                BuildMoveInputs(animation);
+
             if (inputs.Count == 0)
             {
                 return;
             }
 
-            float duration = animation.Timeline.Duration;
-            float frameRate = animation.Timeline.FrameRate;
+            float duration =
+                animation.Timeline.Duration;
+
+            float frameRate =
+                animation.Timeline.FrameRate;
+
             bool changed = false;
-            for (int i = 0; i < inputs.Count; i++)
+
+            for (int i = 0;
+                 i < inputs.Count;
+                 i++)
             {
                 if (inputs[i].KeyIds.Count == 0)
                 {
                     continue;
                 }
 
-                float[] planned = KeyMovePlanner.PlanTrack(
-                    inputs[i].CurrentTimes,
-                    inputs[i].Occupied,
-                    deltaTime,
-                    duration,
-                    frameRate,
-                    snapEnabled);
-                TrackKeyMover.Move(inputs[i].Track, inputs[i].KeyIds, planned);
+                float[] planned =
+                    KeyMovePlanner.PlanTrack(
+                        inputs[i].CurrentTimes,
+                        inputs[i].Occupied,
+                        deltaTime,
+                        duration,
+                        frameRate,
+                        snapEnabled);
+
+                TrackKeyMover.Move(
+                    inputs[i].Track,
+                    inputs[i].KeyIds,
+                    planned);
+
                 changed = true;
             }
 
@@ -597,22 +1416,31 @@ namespace FaceMotion.Editor.UI.Controllers
 
             public string TrackId;
 
-            public readonly List<string> KeyIds = new List<string>();
+            public readonly List<string> KeyIds =
+                new List<string>();
 
-            public readonly List<float> CurrentTimes = new List<float>();
+            public readonly List<float> CurrentTimes =
+                new List<float>();
 
-            public readonly List<float> Occupied = new List<float>();
+            public readonly List<float> Occupied =
+                new List<float>();
         }
 
-        private List<TrackMoveInput> BuildMoveInputs(FaceMotionAnimationData animation)
+        private List<TrackMoveInput> BuildMoveInputs(
+            FaceMotionAnimationData animation)
         {
-            var inputs = new List<TrackMoveInput>();
+            var inputs =
+                new List<TrackMoveInput>();
+
             if (animation.Timeline == null)
             {
                 return inputs;
             }
 
-            var byTrack = new Dictionary<string, TrackMoveInput>(StringComparer.Ordinal);
+            var byTrack =
+                new Dictionary<string, TrackMoveInput>(
+                    StringComparer.Ordinal);
+
             foreach (var track in animation.Timeline.Tracks)
             {
                 if (track == null)
@@ -620,11 +1448,24 @@ namespace FaceMotion.Editor.UI.Controllers
                     continue;
                 }
 
-                var input = new TrackMoveInput { Track = track, TrackId = track.TrackId };
-                byTrack[track.TrackId] = input;
-                inputs.Add(input);
+                var input =
+                    new TrackMoveInput
+                    {
+                        Track =
+                            track,
 
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+                        TrackId =
+                            track.TrackId
+                    };
+
+                byTrack[track.TrackId] =
+                    input;
+
+                inputs.Add(
+                    input);
+
+                if (track.Kind == TrackKind.BlendShape &&
+                    track.BlendShape != null)
                 {
                     foreach (var key in track.BlendShape.Keys)
                     {
@@ -633,18 +1474,24 @@ namespace FaceMotion.Editor.UI.Controllers
                             continue;
                         }
 
-                        if (_session.Selection.Contains(key.KeyId))
+                        if (_session.Selection.Contains(
+                                key.KeyId))
                         {
-                            input.KeyIds.Add(key.KeyId);
-                            input.CurrentTimes.Add(key.Time);
+                            input.KeyIds.Add(
+                                key.KeyId);
+
+                            input.CurrentTimes.Add(
+                                key.Time);
                         }
                         else
                         {
-                            input.Occupied.Add(key.Time);
+                            input.Occupied.Add(
+                                key.Time);
                         }
                     }
                 }
-                else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+                else if (TrackKinds.IsTransform(track.Kind) &&
+                         track.Transform != null)
                 {
                     foreach (var key in track.Transform.Keys)
                     {
@@ -653,14 +1500,19 @@ namespace FaceMotion.Editor.UI.Controllers
                             continue;
                         }
 
-                        if (_session.Selection.Contains(key.KeyId))
+                        if (_session.Selection.Contains(
+                                key.KeyId))
                         {
-                            input.KeyIds.Add(key.KeyId);
-                            input.CurrentTimes.Add(key.Time);
+                            input.KeyIds.Add(
+                                key.KeyId);
+
+                            input.CurrentTimes.Add(
+                                key.Time);
                         }
                         else
                         {
-                            input.Occupied.Add(key.Time);
+                            input.Occupied.Add(
+                                key.Time);
                         }
                     }
                 }
@@ -669,9 +1521,12 @@ namespace FaceMotion.Editor.UI.Controllers
             return inputs;
         }
 
-        private static bool HasAnySelectedKeys(List<TrackMoveInput> inputs)
+        private static bool HasAnySelectedKeys(
+            List<TrackMoveInput> inputs)
         {
-            for (int i = 0; i < inputs.Count; i++)
+            for (int i = 0;
+                 i < inputs.Count;
+                 i++)
             {
                 if (inputs[i].KeyIds.Count > 0)
                 {
@@ -682,9 +1537,12 @@ namespace FaceMotion.Editor.UI.Controllers
             return false;
         }
 
-        private List<KeyTarget> CollectSelectedTargets(FaceMotionAnimationData animation)
+        private List<KeyTarget> CollectSelectedTargets(
+            FaceMotionAnimationData animation)
         {
-            var targets = new List<KeyTarget>();
+            var targets =
+                new List<KeyTarget>();
+
             if (animation.Timeline == null)
             {
                 return targets;
@@ -697,13 +1555,24 @@ namespace FaceMotion.Editor.UI.Controllers
                     continue;
                 }
 
-                var ids = new List<string>();
-                CollectKeyIds(track, ids);
-                for (int i = 0; i < ids.Count; i++)
+                var ids =
+                    new List<string>();
+
+                CollectKeyIds(
+                    track,
+                    ids);
+
+                for (int i = 0;
+                     i < ids.Count;
+                     i++)
                 {
-                    if (_session.Selection.Contains(ids[i]))
+                    if (_session.Selection.Contains(
+                            ids[i]))
                     {
-                        targets.Add(new KeyTarget(track.TrackId, ids[i]));
+                        targets.Add(
+                            new KeyTarget(
+                                track.TrackId,
+                                ids[i]));
                     }
                 }
             }
@@ -711,36 +1580,44 @@ namespace FaceMotion.Editor.UI.Controllers
             return targets;
         }
 
-        private static void CollectKeyIds(FaceTrackData track, List<string> ids)
+        private static void CollectKeyIds(
+            FaceTrackData track,
+            List<string> ids)
         {
             if (track == null)
             {
                 return;
             }
 
-            if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+            if (track.Kind == TrackKind.BlendShape &&
+                track.BlendShape != null)
             {
                 foreach (var key in track.BlendShape.Keys)
                 {
                     if (key != null)
                     {
-                        ids.Add(key.KeyId);
+                        ids.Add(
+                            key.KeyId);
                     }
                 }
             }
-            else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+            else if (TrackKinds.IsTransform(track.Kind) &&
+                     track.Transform != null)
             {
                 foreach (var key in track.Transform.Keys)
                 {
                     if (key != null)
                     {
-                        ids.Add(key.KeyId);
+                        ids.Add(
+                            key.KeyId);
                     }
                 }
             }
         }
 
-        private static FaceTrackData FindTrackForKey(FaceMotionAnimationData animation, string keyId)
+        private static FaceTrackData FindTrackForKey(
+            FaceMotionAnimationData animation,
+            string keyId)
         {
             if (animation.Timeline == null)
             {
@@ -754,21 +1631,31 @@ namespace FaceMotion.Editor.UI.Controllers
                     continue;
                 }
 
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+                if (track.Kind == TrackKind.BlendShape &&
+                    track.BlendShape != null)
                 {
                     foreach (var key in track.BlendShape.Keys)
                     {
-                        if (key != null && string.Equals(key.KeyId, keyId, StringComparison.Ordinal))
+                        if (key != null &&
+                            string.Equals(
+                                key.KeyId,
+                                keyId,
+                                StringComparison.Ordinal))
                         {
                             return track;
                         }
                     }
                 }
-                else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+                else if (TrackKinds.IsTransform(track.Kind) &&
+                         track.Transform != null)
                 {
                     foreach (var key in track.Transform.Keys)
                     {
-                        if (key != null && string.Equals(key.KeyId, keyId, StringComparison.Ordinal))
+                        if (key != null &&
+                            string.Equals(
+                                key.KeyId,
+                                keyId,
+                                StringComparison.Ordinal))
                         {
                             return track;
                         }
@@ -779,23 +1666,33 @@ namespace FaceMotion.Editor.UI.Controllers
             return null;
         }
 
-        private static string FindKeyAtTime(FaceTrackData track, float time)
+        private static string FindKeyAtTime(
+            FaceTrackData track,
+            float time)
         {
-            if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+            if (track.Kind == TrackKind.BlendShape &&
+                track.BlendShape != null)
             {
                 foreach (var key in track.BlendShape.Keys)
                 {
-                    if (key != null && Math.Abs(key.Time - time) <= TimeTolerance)
+                    if (key != null &&
+                        Math.Abs(
+                            key.Time - time) <=
+                        TimeTolerance)
                     {
                         return key.KeyId;
                     }
                 }
             }
-            else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+            else if (TrackKinds.IsTransform(track.Kind) &&
+                     track.Transform != null)
             {
                 foreach (var key in track.Transform.Keys)
                 {
-                    if (key != null && Math.Abs(key.Time - time) <= TimeTolerance)
+                    if (key != null &&
+                        Math.Abs(
+                            key.Time - time) <=
+                        TimeTolerance)
                     {
                         return key.KeyId;
                     }
@@ -805,31 +1702,38 @@ namespace FaceMotion.Editor.UI.Controllers
             return null;
         }
 
-        private static List<float> CollectTrackTimes(FaceTrackData track)
+        private static List<float> CollectTrackTimes(
+            FaceTrackData track)
         {
-            var times = new List<float>();
+            var times =
+                new List<float>();
+
             if (track == null)
             {
                 return times;
             }
 
-            if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+            if (track.Kind == TrackKind.BlendShape &&
+                track.BlendShape != null)
             {
                 foreach (var key in track.BlendShape.Keys)
                 {
                     if (key != null)
                     {
-                        times.Add(key.Time);
+                        times.Add(
+                            key.Time);
                     }
                 }
             }
-            else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+            else if (TrackKinds.IsTransform(track.Kind) &&
+                     track.Transform != null)
             {
                 foreach (var key in track.Transform.Keys)
                 {
                     if (key != null)
                     {
-                        times.Add(key.Time);
+                        times.Add(
+                            key.Time);
                     }
                 }
             }
@@ -837,11 +1741,17 @@ namespace FaceMotion.Editor.UI.Controllers
             return times;
         }
 
-        private static bool ContainsTime(List<float> times, float target)
+        private static bool ContainsTime(
+            List<float> times,
+            float target)
         {
-            for (int i = 0; i < times.Count; i++)
+            for (int i = 0;
+                 i < times.Count;
+                 i++)
             {
-                if (Math.Abs(times[i] - target) <= TimeTolerance)
+                if (Math.Abs(
+                        times[i] - target) <=
+                    TimeTolerance)
                 {
                     return true;
                 }
@@ -860,18 +1770,32 @@ namespace FaceMotion.Editor.UI.Controllers
         {
             return new TimelineClipboard.ClipboardItem
             {
-                TrackId = track.TrackId,
-                Kind = track.Kind,
-                RelativeTime = time,
-                FloatValue = floatValue,
-                VectorValue = vectorValue,
-                Interpolation = interpolation
+                TrackId =
+                    track.TrackId,
+
+                Kind =
+                    track.Kind,
+
+                RelativeTime =
+                    time,
+
+                FloatValue =
+                    floatValue,
+
+                VectorValue =
+                    vectorValue,
+
+                Interpolation =
+                    interpolation
             };
         }
 
-        private void SetOutcome(FaceMotion.Diagnostics.FaceMotionDiagnostic diagnostic)
+        private void SetOutcome(
+            FaceMotion.Diagnostics.FaceMotionDiagnostic diagnostic)
         {
-            _session.SetLastOperationDiagnostic(diagnostic);
+            _session.SetLastOperationDiagnostic(
+                diagnostic);
+
             _session.RecomputeDiagnostics();
             _session.NotifyChanged();
         }

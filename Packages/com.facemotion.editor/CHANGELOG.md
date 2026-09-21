@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.0] - 2026-09-21
+
+### Added
+
+- Timeline and editor performance and responsiveness improvements: faster playback and preview rendering, lower GUI allocation overhead, and more responsive hover feedback.
+- Batch VRChat Integration: process multiple animations together with per-animation export → plan → validate → apply, plus preflight and per-animation result summaries.
+- Authoring simplification: BlendShape category buttons, user-editable animation names used as parameter / menu label, clearer menu labels, and a new-track initial key that uses the avatar's current live value.
+- Multi-Key Timeline Editing: Ctrl/Cmd+Click multi-select toggle, Shift+Click same-track range select (Shift takes precedence), blank-plot click to clear selection, drag to move selected keys, multi-key delete, Ctrl/Cmd+C / Ctrl/Cmd+V copy / paste, and Ctrl/Cmd+D duplicate (+1 frame).
+
+### Changed
+
+- Key Inspector is read-only with a selection count when multiple keys are selected.
+
+### Removed
+
+- Active Preset / Random Motion feature stack; retained only passive serialized compatibility where applicable.
+
 ## [0.3.0] - 2026-09-18
 
 ### Added

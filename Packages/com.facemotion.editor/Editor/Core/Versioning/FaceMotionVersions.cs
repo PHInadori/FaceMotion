@@ -2,7 +2,7 @@ namespace FaceMotion.Versioning
 {
     public static class FaceMotionVersions
     {
-        public const string ToolVersion = "0.3.0";
+        public const string ToolVersion = "0.4.0";
         public const int ProjectSchemaVersion = 1;
         public const int IntegrationManifestVersion = 1;
         public const int IntegrationBackendVersion = 1;

@@ -45,8 +45,6 @@ Serialized domain types use stable namespaces under `FaceMotion`:
 - `FaceMotion.Data`
 - `FaceMotion.Timeline`
 - `FaceMotion.Animation`
-- `FaceMotion.Presets`
-- `FaceMotion.RandomMotion`
 - `FaceMotion.Diagnostics`
 - `FaceMotion.Serialization`
 - `FaceMotion.Versioning`

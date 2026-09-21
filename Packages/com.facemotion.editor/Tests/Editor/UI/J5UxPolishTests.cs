@@ -27,6 +27,8 @@ namespace FaceMotion.Editor.Tests
             "guidanceHintTrack", "guidanceHintKey", "guidanceHintReady", "guidanceCompleteBadge",
             "emptyAnimations", "emptyTracks", "emptyKeys",
             "shortcutHelpTitle", "shortcutTimelineZoom", "shortcutDeleteKey", "shortcutPreviewCamera", "shortcutFocus",
+            "shortcutSelectKey", "shortcutToggleMultiSelect", "shortcutRangeSelect", "shortcutClearSelection",
+            "shortcutMoveKeys", "shortcutCopyKeys", "shortcutPasteKeys", "shortcutDuplicateKeys", "shortcutMultiKeyInspector",
             "tooltipBackend", "tooltipDuration", "tooltipFrameRate", "tooltipLoop", "tooltipTrack",
             "tooltipAddToVrchat", "tooltipAdvancedSettings",
             "backendModularAvatarDescription", "backendDirectDescription",
@@ -160,7 +162,7 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void ShortcutHelp_ExposesExpectedShortcuts_Localized()
         {
-            Assert.That(ShortcutHelpPanel.ShortcutKeys, Has.Length.EqualTo(4));
+            Assert.That(ShortcutHelpPanel.ShortcutKeys, Has.Length.EqualTo(13));
             for (int i = 0; i < ShortcutHelpPanel.ShortcutKeys.Length; i++)
             {
                 string key = ShortcutHelpPanel.ShortcutKeys[i];

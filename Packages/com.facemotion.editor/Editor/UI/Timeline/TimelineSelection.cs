@@ -12,7 +12,26 @@ namespace FaceMotion.Editor.UI.Timeline
         private readonly HashSet<string> _keyIds = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<string> _order = new List<string>();
 
+        private string _primaryKeyId;
+
         public int Count => _keyIds.Count;
+
+        /// <summary>
+        /// Stable anchor key for range gestures. It identifies which key was the range start
+        /// (the first key of a shift gesture). It is state only: the shift-range computation
+        /// lives in the input/controller layer and the result is passed to SetSelection.
+        /// </summary>
+        public string PrimaryKeyId => _primaryKeyId;
+
+        /// <summary>Sets the range anchor. The anchor must already be part of the selection;
+        /// an unknown id leaves the anchor unchanged.</summary>
+        public void SetPrimaryKeyId(string keyId)
+        {
+            if (keyId != null && _keyIds.Contains(keyId))
+            {
+                _primaryKeyId = keyId;
+            }
+        }
 
         public IReadOnlyList<string> KeyIds => _order;
 
@@ -25,6 +44,7 @@ namespace FaceMotion.Editor.UI.Timeline
         {
             _keyIds.Clear();
             _order.Clear();
+            _primaryKeyId = null;
         }
 
         public void Select(string keyId)
