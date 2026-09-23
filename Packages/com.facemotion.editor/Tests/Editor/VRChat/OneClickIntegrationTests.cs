@@ -330,6 +330,85 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void ResolveExportPath_NewAnimationsUseReadableDisplayNamePaths()
+        {
+            _animation.DisplayName = "shirome";
+            var second = FaceMotionAnimationData.Create("yorokobi");
+            _project.AddAnimation(second);
+            try
+            {
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(_animation), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/shirome.anim"));
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(second), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/yorokobi.anim"));
+                Assert.That(
+                    OneClickIntegrationService.ResolveExportPath(
+                        new OneClickIntegrationRequest(_avatar, _animation, _project, null),
+                        new List<FaceMotionDiagnostic>()),
+                    Is.EqualTo("Assets/FaceMotion/Exports/shirome.anim"));
+            }
+            finally
+            {
+                ExportedClipRegistry.Remove(second.AnimationId);
+            }
+        }
+
+        [Test]
+        public void ResolveExportPath_DuplicateNamesUseDeterministicNumericSuffixes()
+        {
+            _animation.DisplayName = "smile";
+            var second = FaceMotionAnimationData.Create("smile");
+            _project.AddAnimation(second);
+            try
+            {
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(_animation), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/smile.anim"));
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(second), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/smile_2.anim"));
+            }
+            finally
+            {
+                ExportedClipRegistry.Remove(second.AnimationId);
+            }
+        }
+
+        [Test]
+        public void SanitizeExportFileName_PreservesJapaneseAndRemovesUnsafeCharacters()
+        {
+            Assert.That(OneClickIntegrationService.SanitizeExportFileName("喜び"), Is.EqualTo("喜び"));
+            Assert.That(OneClickIntegrationService.SanitizeExportFileName("  Happy / \\ : * ? \" < > |  Face  "), Is.EqualTo("Happy Face"));
+            Assert.That(OneClickIntegrationService.SanitizeExportFileName(" /\\:*?\"<>| "), Is.EqualTo("FaceMotion"));
+        }
+
+        [Test]
+        public void ResolveExportPath_DuplicateAnimationGetsFreshUniqueDefaultPath()
+        {
+            _animation.DisplayName = "yorokobi";
+            var duplicate = _project.DuplicateAnimation(_animation.AnimationId);
+            try
+            {
+                Assert.That(duplicate, Is.Not.Null);
+                Assert.That(duplicate.AnimationId, Is.Not.EqualTo(_animation.AnimationId));
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(_animation), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/yorokobi.anim"));
+                Assert.That(OneClickIntegrationService.ResolveExportPath(Request(duplicate), new List<FaceMotionDiagnostic>()), Is.EqualTo(Out + "/yorokobi_2.anim"));
+            }
+            finally
+            {
+                if (duplicate != null) ExportedClipRegistry.Remove(duplicate.AnimationId);
+            }
+        }
+
+        [Test]
+        public void ResolveExportPath_ManualPathSurvivesRename()
+        {
+            string manualPath = Out + "/Hand Authored.anim";
+            ExportedClipRegistry.Record(_animation.AnimationId, manualPath);
+            var rename = new FaceMotion.Editor.RenameAnimationCommand(_animation.AnimationId, "renamed");
+
+            Assert.That(rename.Validate(_project, out _), Is.True);
+            rename.Execute(_project);
+
+            Assert.That(_animation.DisplayName, Is.EqualTo("renamed"));
+            Assert.That(OneClickIntegrationService.ResolveExportPath(Request(), new List<FaceMotionDiagnostic>()), Is.EqualTo(manualPath));
+        }
+
+        [Test]
         public void BackendStore_ResolvesDirectWhenModularAvatarIsMissing()
         {
             Assert.That(IntegrationBackendSelectionStore.ResolveInitial(false, IntegrationBackendSelection.Direct, false), Is.EqualTo(IntegrationBackendSelection.Direct));

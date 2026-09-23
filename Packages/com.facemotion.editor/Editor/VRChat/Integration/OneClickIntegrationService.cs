@@ -275,20 +275,106 @@ namespace FaceMotion.Editor.VRChat.Integration
             }
         }
 
-        internal static string ResolveExportPath(OneClickIntegrationRequest request, List<FaceMotionDiagnostic> diagnostics)
+        public static string ResolveExportPath(OneClickIntegrationRequest request, List<FaceMotionDiagnostic> diagnostics)
         {
             if (ExportedClipRegistry.TryGetPath(request.Animation.AnimationId, out string saved))
             {
                 return saved;
             }
 
-            string path = DefaultOutputFolder + "/" + BuildStem(request) + ".anim";
+            string path = ResolveDefaultExportPath(request);
             if (request.Animation.AnimationId == null)
             {
                 diagnostics?.Add(OneClickBlocking(FaceMotionDiagnosticCodes.OneClickForeignClip));
             }
 
             return path;
+        }
+
+        /// <summary>
+        /// Produces a readable, deterministic default path without persisting it. Existing registry
+        /// entries always win, which preserves both manually selected destinations and old projects.
+        /// Unregistered animations are allocated in project order so duplicate names receive _2, _3,
+        /// and so on instead of an opaque ID suffix.
+        /// </summary>
+        internal static string ResolveDefaultExportPath(OneClickIntegrationRequest request)
+        {
+            string folder = string.IsNullOrWhiteSpace(request?.OutputFolder)
+                ? DefaultOutputFolder
+                : request.OutputFolder.TrimEnd('/', '\\');
+            var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var project = request?.Project;
+            var target = request?.Animation;
+
+            if (project != null)
+            {
+                for (int i = 0; i < project.Animations.Count; i++)
+                {
+                    var animation = project.Animations[i];
+                    if (animation == null) continue;
+
+                    if (ExportedClipRegistry.TryGetPath(animation.AnimationId, out string saved))
+                    {
+                        reserved.Add(saved);
+                        if (object.ReferenceEquals(animation, target)) return saved;
+                        continue;
+                    }
+
+                    string candidate = NextAvailablePath(folder, SanitizeExportFileName(animation.DisplayName), reserved);
+                    if (object.ReferenceEquals(animation, target)) return candidate;
+                    reserved.Add(candidate);
+                }
+            }
+
+            return NextAvailablePath(folder, SanitizeExportFileName(target == null ? null : target.DisplayName), reserved);
+        }
+
+        internal static string SanitizeExportFileName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "FaceMotion";
+
+            var builder = new System.Text.StringBuilder(value.Length);
+            bool pendingSpace = false;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (char.IsWhiteSpace(c))
+                {
+                    pendingSpace = builder.Length > 0;
+                    continue;
+                }
+
+                if (IsInvalidExportFileNameCharacter(c)) continue;
+                if (pendingSpace)
+                {
+                    builder.Append(' ');
+                    pendingSpace = false;
+                }
+                builder.Append(c);
+            }
+
+            string result = builder.ToString().Trim().Trim('.');
+            return string.IsNullOrWhiteSpace(result) ? "FaceMotion" : result;
+        }
+
+        private static string NextAvailablePath(string folder, string fileName, HashSet<string> reserved)
+        {
+            string basePath = folder + "/" + fileName;
+            string path = basePath + ".anim";
+            int suffix = 2;
+            while (reserved.Contains(path))
+            {
+                path = basePath + "_" + suffix + ".anim";
+                suffix++;
+            }
+            return path;
+        }
+
+        private static bool IsInvalidExportFileNameCharacter(char value)
+        {
+            return char.IsControl(value)
+                || value == '<' || value == '>' || value == ':' || value == '"'
+                || value == '/' || value == '\\' || value == '|' || value == '?' || value == '*';
         }
 
         internal static string BuildStem(OneClickIntegrationRequest request)

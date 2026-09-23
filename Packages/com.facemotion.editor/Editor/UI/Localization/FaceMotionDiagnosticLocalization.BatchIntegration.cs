@@ -11,8 +11,8 @@ namespace FaceMotion.Editor.UI.Localization
                 Fields("一括統合の対象がありません", "チェックしたアニメーションがないため、一括統合を開始できません。", "アニメーションリストで対象をチェックしてください。"),
                 Fields("No batch selection", "Batch integration cannot start because no animations are checked.", "Check one or more animations in the animation list."));
             Add(ja, en, FaceMotionDiagnosticCodes.BatchDuplicateExportPath,
-                Fields("出力クリップのパスが重複しています", "複数の対象が同じAnimationClip出力先へ解決されました。", "対象名または出力先を変更してください。"),
-                Fields("Duplicate export path", "Multiple batch items resolve to the same AnimationClip output path.", "Rename an animation or change its output path."));
+                Fields("出力クリップのパスが重複しています", "複数の対象が同じAnimationClip出力先を使用しています。下記の出力パスとアニメーション名を確認してください。", "対象名または出力先を変更してください。"),
+                Fields("Duplicate export path", "Multiple animations use the same AnimationClip export path. Review the export path and animation names below.", "Rename an animation or change its output path."));
             Add(ja, en, FaceMotionDiagnosticCodes.BatchPreflightFailed,
                 Fields("一括統合の事前検証に失敗しました", "適用前の検証で問題が見つかったため、VRChat統合は実行されませんでした。", "表示された診断を解決してから再実行してください。"),
                 Fields("Batch preflight failed", "A pre-apply validation problem stopped VRChat integration.", "Resolve the listed diagnostics and run the batch again."));

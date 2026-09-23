@@ -62,7 +62,6 @@ namespace FaceMotion.Editor.VRChat.Integration
             var backend = IntegrationBackendSelectionStore.Load();
             if (backend == IntegrationBackendSelection.ModularAvatar && ModularAvatarIntegrationBackendLocator.Create() == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.OneClickBackendUnavailable, "The selected Modular Avatar backend is unavailable."));
 
-            var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < items.Count; i++)
             {
                 var item = items[i];
@@ -70,12 +69,8 @@ namespace FaceMotion.Editor.VRChat.Integration
                 item.ExportPath = preflight.ExportPath;
                 item.Diagnostics.AddRange(preflight.Diagnostics);
                 diagnostics.AddRange(preflight.Diagnostics);
-                if (!string.IsNullOrEmpty(item.ExportPath) && !paths.Add(item.ExportPath))
-                {
-                    var collision = Error(FaceMotionDiagnosticCodes.BatchDuplicateExportPath, "Multiple batch animations resolve to the same export path: " + item.ExportPath);
-                    item.Diagnostics.Add(collision); diagnostics.Add(collision);
-                }
             }
+            AddDuplicateExportPathDiagnostics(items, diagnostics);
             if (HasBlocking(diagnostics)) return Result(BatchIntegrationStage.Validate, false, backend, items, diagnostics, null);
 
             // Export every validated candidate before backend planning; no backend Apply runs unless all plans validate.
@@ -149,8 +144,40 @@ namespace FaceMotion.Editor.VRChat.Integration
         {
             return OneClickIntegrationService.BuildStem(new OneClickIntegrationRequest(request.Avatar, animation, request.Project, request.OutputFolder));
         }
+        private static void AddDuplicateExportPathDiagnostics(List<PreparedItem> items, List<FaceMotionDiagnostic> diagnostics)
+        {
+            var paths = new Dictionary<string, List<PreparedItem>>(StringComparer.OrdinalIgnoreCase);
+            for (int i = 0; i < items.Count; i++)
+            {
+                var item = items[i];
+                if (string.IsNullOrEmpty(item.ExportPath)) continue;
+                if (!paths.TryGetValue(item.ExportPath, out var collisions))
+                {
+                    collisions = new List<PreparedItem>();
+                    paths.Add(item.ExportPath, collisions);
+                }
+                collisions.Add(item);
+            }
+
+            foreach (var pair in paths)
+            {
+                if (pair.Value.Count < 2) continue;
+                string names = string.Join("\n", pair.Value.ConvertAll(item => "- " + (string.IsNullOrEmpty(item.Animation.DisplayName) ? "(unnamed)" : item.Animation.DisplayName)));
+                var details = new Dictionary<string, string>
+                {
+                    { FaceMotionDiagnosticDetailKeys.ConflictExportPath, pair.Key },
+                    { FaceMotionDiagnosticDetailKeys.ConflictAnimationNames, names }
+                };
+                var collision = Error(
+                    FaceMotionDiagnosticCodes.BatchDuplicateExportPath,
+                    "Export path is used by multiple animations:\n" + pair.Key + "\n" + names,
+                    details);
+                for (int i = 0; i < pair.Value.Count; i++) pair.Value[i].Diagnostics.Add(collision);
+                diagnostics.Add(collision);
+            }
+        }
         private static bool HasBlocking(IReadOnlyList<FaceMotionDiagnostic> diagnostics) { return OneClickIntegrationService.HasBlocking(diagnostics); }
-        private static FaceMotionDiagnostic Error(string code, string message) { return new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Error, message, "batch-integration", true, "Resolve the batch diagnostics and run again."); }
+        private static FaceMotionDiagnostic Error(string code, string message, IReadOnlyDictionary<string, string> details = null) { return new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Error, message, "batch-integration", true, "Resolve the batch diagnostics and run again.", details); }
 
         private sealed class PreparedItem
         {

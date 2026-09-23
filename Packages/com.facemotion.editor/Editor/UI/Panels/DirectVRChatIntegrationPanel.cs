@@ -171,6 +171,8 @@ namespace FaceMotion.Editor.UI.Panels
             AddDetail(lines, FaceMotionUiText.Get("hierarchyPath", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictObjectPath);
             AddDetail(lines, FaceMotionUiText.Get("animatorController", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictController);
             AddDetail(lines, FaceMotionUiText.Get("conflictAnimationClip", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictClip);
+            AddDetail(lines, FaceMotionUiText.Get("exportPath", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictExportPath);
+            AddDetail(lines, FaceMotionUiText.Get("animations", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictAnimationNames);
             AddDetail(lines, FaceMotionUiText.Get("component", systemLanguage), presentation, FaceMotionDiagnosticDetailKeys.ConflictComponent);
             AddField(lines, FaceMotionUiText.Get("impact", systemLanguage), presentation.Impact);
             AddField(lines, FaceMotionUiText.Get("resolution", systemLanguage), presentation.Resolution);

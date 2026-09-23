@@ -58,6 +58,8 @@ namespace FaceMotion.Diagnostics
         public const string ConflictComponent = "conflict-component";
         public const string ConflictController = "conflict-controller";
         public const string ConflictClip = "conflict-clip";
+        public const string ConflictExportPath = "conflict-export-path";
+        public const string ConflictAnimationNames = "conflict-animation-names";
         public const string BindingPath = "binding-path";
         public const string BindingProperty = "binding-property";
         public const string BindingType = "binding-type";

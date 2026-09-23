@@ -11,7 +11,8 @@ namespace FaceMotion.Editor.UI.Panels
     public sealed class ExportPanel
     {
         private readonly FaceMotionEditorSession _session;
-        private string _path = "Assets/FaceMotion/Exports/FaceMotion.anim";
+        private string _path;
+        private string _pathAnimationId;
 
         public ExportPanel(FaceMotionEditorSession session) { _session = session; }
 
@@ -23,6 +24,14 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAnimationToExport"), MessageType.Info);
                 return;
+            }
+
+            if (!string.Equals(_pathAnimationId, animation.AnimationId, System.StringComparison.Ordinal))
+            {
+                _path = OneClickIntegrationService.ResolveExportPath(
+                    new OneClickIntegrationRequest(null, animation, _session.ActiveProject, null),
+                    null);
+                _pathAnimationId = animation.AnimationId;
             }
 
             _path = EditorGUILayout.TextField(FaceMotionUiText.Get("assetPath"), _path);

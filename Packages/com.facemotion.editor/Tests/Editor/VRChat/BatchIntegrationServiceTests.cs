@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.VRChat.Integration;
+using FaceMotion.Editor.UI.Diagnostics;
+using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Integration;
 using NUnit.Framework;
 using UnityEditor;
@@ -79,6 +81,38 @@ namespace FaceMotion.Editor.Tests
             Assert.That(result.Succeeded, Is.True);
             Assert.That(_avatar.expressionParameters.parameters, Has.Length.EqualTo(2));
             Assert.That(_avatar.expressionParameters.parameters[0].name, Is.Not.EqualTo(_avatar.expressionParameters.parameters[1].name));
+        }
+
+        [Test]
+        public void Execute_DuplicateRegisteredPathsRemainBlockedAndNameEveryConflict()
+        {
+            string path = Folder + "/FaceMotion.anim";
+            ExportedClipRegistry.Record(_smile.AnimationId, path);
+            ExportedClipRegistry.Record(_frown.AnimationId, path);
+
+            var result = BatchIntegrationService.Execute(new BatchIntegrationRequest(_avatar, _project, new[] { _smile.AnimationId, _frown.AnimationId }, Folder));
+            FaceMotionDiagnostic duplicate = null;
+            for (int i = 0; i < result.Diagnostics.Count; i++)
+            {
+                if (result.Diagnostics[i].Code == FaceMotionDiagnosticCodes.BatchDuplicateExportPath)
+                {
+                    duplicate = result.Diagnostics[i];
+                    break;
+                }
+            }
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(duplicate, Is.Not.Null);
+            Assert.That(duplicate.Message, Does.Contain(path));
+            Assert.That(duplicate.Message, Does.Contain("Smile"));
+            Assert.That(duplicate.Message, Does.Contain("Frown"));
+            Assert.That(duplicate.Details[FaceMotionDiagnosticDetailKeys.ConflictExportPath], Is.EqualTo(path));
+            Assert.That(duplicate.Details[FaceMotionDiagnosticDetailKeys.ConflictAnimationNames], Does.Contain("Smile"));
+            Assert.That(duplicate.Details[FaceMotionDiagnosticDetailKeys.ConflictAnimationNames], Does.Contain("Frown"));
+            Assert.That(new FaceMotionDiagnosticPresentation(duplicate, FaceMotionDiagnosticLanguage.Japanese).Summary, Does.Contain("出力先"));
+            Assert.That(new FaceMotionDiagnosticPresentation(duplicate, FaceMotionDiagnosticLanguage.English).Summary, Does.Contain("export path"));
+            Assert.That(result.Items[0].Diagnostics, Has.Some.Matches<FaceMotionDiagnostic>(d => d.Code == FaceMotionDiagnosticCodes.BatchDuplicateExportPath));
+            Assert.That(result.Items[1].Diagnostics, Has.Some.Matches<FaceMotionDiagnostic>(d => d.Code == FaceMotionDiagnosticCodes.BatchDuplicateExportPath));
         }
     }
 }
