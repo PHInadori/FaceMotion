@@ -1,3 +1,4 @@
+using System;
 using FaceMotion.Editor.VRChat.Integration;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.UI.Diagnostics;
@@ -14,8 +15,9 @@ namespace FaceMotion.Editor.UI.Panels
     public sealed class DirectVRChatIntegrationPanel
     {
         private readonly FaceMotionEditorSession _session;
+        private readonly Action<VRCAvatarDescriptor> _invalidateManagedState;
         private AnimationClip _clip;
-        private string _folder = "Assets";
+        private string _folder = OneClickIntegrationService.DefaultOutputFolder;
         private DirectIntegrationPlan _plan;
         private OptionalIntegrationPlan _optionalPlan;
         private ModularAvatarIntegrationPlan _modularAvatarPlan;
@@ -23,9 +25,10 @@ namespace FaceMotion.Editor.UI.Panels
         private IModularAvatarIntegrationBackend _maBackend;
         private ModularAvatarIntegrationPresenceCache _maPresence;
 
-        public DirectVRChatIntegrationPanel(FaceMotionEditorSession session)
+        public DirectVRChatIntegrationPanel(FaceMotionEditorSession session, Action<VRCAvatarDescriptor> invalidateManagedState = null)
         {
             _session = session;
+            _invalidateManagedState = invalidateManagedState;
             _backend = IntegrationBackendSelectionStore.Load();
         }
 
@@ -42,6 +45,8 @@ namespace FaceMotion.Editor.UI.Panels
                 return _maBackend;
             }
         }
+
+        internal string OutputFolder => _folder;
 
         private ModularAvatarIntegrationPresenceCache Presence => _maPresence ?? (_maPresence = new ModularAvatarIntegrationPresenceCache(MaBackend, _session));
 
@@ -116,7 +121,7 @@ namespace FaceMotion.Editor.UI.Panels
                 using (new EditorGUI.DisabledScope(!_modularAvatarPlan.IsValid || MaBackend == null))
                     if (GUILayout.Button(FaceMotionUiText.Get("applyModularAvatarIntegration")))
                     {
-                        var result = MaBackend.Apply(_modularAvatarPlan);
+                        var result = ApplyModularAvatarIntegration(MaBackend, _modularAvatarPlan);
                         if (result.Diagnostics.Count > 0) _session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
                         _session.RecomputeDiagnostics(); _session.NotifyChanged();
                         if (result.Succeeded) Selection.activeObject = result.Manifest;
@@ -221,12 +226,48 @@ namespace FaceMotion.Editor.UI.Panels
                 && Presence.HasExistingIntegration(avatar, _modularAvatarPlan.ParameterName)
                 && GUILayout.Button(FaceMotionUiText.Get("removeModularAvatarIntegrationForCurrent")))
             {
-                RemoveAndRefresh(maBackend.RemoveAnimation(avatar, _modularAvatarPlan.ParameterName));
+                RemoveAndRefresh(RemoveModularAvatarIntegration(maBackend, avatar, _modularAvatarPlan.ParameterName));
             }
 
             if (GUILayout.Button(FaceMotionUiText.Get("removeAllModularAvatarIntegrations")))
             {
-                RemoveAndRefresh(maBackend.Remove(avatar));
+                RemoveAndRefresh(RemoveAllModularAvatarIntegrations(maBackend, avatar));
+            }
+        }
+
+        internal ModularAvatarIntegrationResult ApplyModularAvatarIntegration(IModularAvatarIntegrationBackend backend, ModularAvatarIntegrationPlan plan)
+        {
+            try
+            {
+                return backend.Apply(plan);
+            }
+            finally
+            {
+                _invalidateManagedState?.Invoke(plan == null || plan.Request == null ? null : plan.Request.Avatar);
+            }
+        }
+
+        internal ModularAvatarIntegrationResult RemoveModularAvatarIntegration(IModularAvatarIntegrationBackend backend, VRCAvatarDescriptor avatar, string parameter)
+        {
+            try
+            {
+                return backend.RemoveAnimation(avatar, parameter);
+            }
+            finally
+            {
+                _invalidateManagedState?.Invoke(avatar);
+            }
+        }
+
+        internal ModularAvatarIntegrationResult RemoveAllModularAvatarIntegrations(IModularAvatarIntegrationBackend backend, VRCAvatarDescriptor avatar)
+        {
+            try
+            {
+                return backend.Remove(avatar);
+            }
+            finally
+            {
+                _invalidateManagedState?.Invoke(avatar);
             }
         }
 

@@ -1,6 +1,6 @@
+using System;
 using System.Collections.Generic;
 using FaceMotion.Diagnostics;
-using FaceMotion.Data;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Session;
@@ -12,121 +12,226 @@ using VRC.SDK3.Avatars.Components;
 namespace FaceMotion.Editor.UI.Panels
 {
     /// <summary>
-    /// The one-click "VRChatへ追加" surface. It runs Export -> Plan -> Validate -> Apply,
-    /// shows a write-free preflight summary, reports which step failed, and keeps the
-    /// explicit Phase G workflow inside a 詳細設定 foldout. All workflow logic lives in
-    /// OneClickIntegrationService; this panel only paints and invokes.
+    /// The normal VRChat section ("VRChatへ反映"). It owns the desired-state checklist
+    /// (checkbox + name + applied status), the single primary Update button, and the
+    /// beginner result messages derived from structured reconciliation results. The explicit
+    /// per-animation manual workflow stays inside the window-owned Advanced foldout via
+    /// DrawAdvanced; this panel never renders a nested Advanced foldout.
     /// </summary>
     public sealed class OneClickIntegrationPanel
     {
-        private const string AdvancedFoldoutKey = "FaceMotion.Window.v2.OneClickAdvancedFoldout";
         private readonly FaceMotionEditorSession _session;
         private readonly OneClickIntegrationController _controller;
-        private readonly BatchIntegrationController _batchController;
         private readonly DirectVRChatIntegrationPanel _advanced;
         private ModularAvatarIntegrationPresenceCache _maPresence;
-        private bool _advancedFoldout;
+        private VrchatDesiredStateReconciliationResult _desiredResult;
+        private readonly ModularAvatarManagedStateCache _managedStateCache;
+        private readonly Action<VRCAvatarDescriptor> _refreshAvatarIndexAfterIntegration;
 
-        public OneClickIntegrationPanel(FaceMotionEditorSession session)
+        public OneClickIntegrationPanel(FaceMotionEditorSession session, ModularAvatarManagedStateCache managedStateCache, Action<VRCAvatarDescriptor> refreshAvatarIndexAfterIntegration = null)
         {
             _session = session;
-            _controller = new OneClickIntegrationController(session);
-            _batchController = new BatchIntegrationController(session);
-            _advanced = new DirectVRChatIntegrationPanel(session);
-            _advancedFoldout = EditorPrefs.GetBool(AdvancedFoldoutKey, false);
+            _controller = new OneClickIntegrationController(session, InvalidateManagedState);
+            _advanced = new DirectVRChatIntegrationPanel(session, InvalidateManagedState);
+            _managedStateCache = managedStateCache ?? throw new ArgumentNullException(nameof(managedStateCache));
+            _refreshAvatarIndexAfterIntegration = refreshAvatarIndexAfterIntegration;
         }
 
         private ModularAvatarIntegrationPresenceCache Presence => _maPresence ?? (_maPresence = new ModularAvatarIntegrationPresenceCache(_advanced.MaBackend, _session));
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("oneClickIntegration"), EditorStyles.boldLabel);
-            var animation = _session.GetSelectedAnimation();
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("vrchatApply"), EditorStyles.boldLabel);
             var avatar = _session.ActiveAvatarRoot == null
                 ? null
                 : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
 
+            if (avatar == null)
+            {
+                EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
+            }
+
+            DrawDesiredState();
+            EditorGUILayout.Space();
+        }
+
+        /// <summary>The one normal-primary action: reconcile the checked selection into VRChat.</summary>
+        internal static string UpdateVrchatSelectedLabel()
+        {
+            return FaceMotionUiText.Get("updateVrchatSelected");
+        }
+
+        /// <summary>Renders one checklist row; presentational, so it can be asserted without GUI.</summary>
+        internal static string ChecklistItemLabel(string displayName, VrchatIntegrationStatus status)
+        {
+            string name = string.IsNullOrEmpty(displayName) ? FaceMotionUiText.Get("unnamed") : displayName;
+            string state = status == VrchatIntegrationStatus.Applied
+                ? FaceMotionUiText.Get("applied")
+                : FaceMotionUiText.Get("notApplied");
+            return name + "    " + state;
+        }
+
+        /// <summary>The desired state may be empty: that removes every proven-owned integration.</summary>
+        internal static bool CanUpdateVrchat(bool projectAvailable, bool avatarAvailable, bool backendAvailable)
+        {
+            return projectAvailable && avatarAvailable && backendAvailable;
+        }
+
+        internal static string EmptyDesiredSelectionHint(int currentIntegrationCount)
+        {
+            return currentIntegrationCount > 0
+                ? FaceMotionUiText.Get("emptySelectionRemovesIntegrations")
+                : string.Empty;
+        }
+
+        private void DrawDesiredState()
+        {
+            EditorGUILayout.Space();
+            DrawDesiredAnimationChecklist();
+            int count = _session.BatchAnimationIds.Count;
+            bool projectAvailable = _session.ActiveProject != null;
+            bool avatarAvailable = _session.ActiveAvatarRoot != null;
+            bool backendAvailable = _advanced.MaBackend != null;
+            var avatar = avatarAvailable ? _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>() : null;
+            var snapshot = GetManagedSnapshot(avatar, _advanced.MaBackend);
+            int currentIntegrationCount = snapshot == null ? 0 : snapshot.Items.Count;
+            bool ready = CanUpdateVrchat(projectAvailable, avatarAvailable, backendAvailable);
+            using (new EditorGUI.DisabledScope(!ready))
+            {
+                if (GUILayout.Button(new GUIContent(UpdateVrchatSelectedLabel(), FaceMotionUiText.Get("tooltipUpdateVrchatSelected")), GUILayout.Height(28f)))
+                {
+                    RunDesiredState();
+                }
+            }
+
+            if (!ready)
+            {
+                string reason;
+                if (!backendAvailable) reason = FaceMotionUiText.Get("reflectRequiresModularAvatar");
+                else if (!avatarAvailable) reason = FaceMotionUiText.Get("selectAvatar");
+                else reason = FaceMotionUiText.Get("noProject");
+                EditorGUILayout.HelpBox(reason, MessageType.Info);
+            }
+            else if (count == 0)
+            {
+                string hint = EmptyDesiredSelectionHint(currentIntegrationCount);
+                if (!string.IsNullOrEmpty(hint)) EditorGUILayout.HelpBox(hint, MessageType.Info);
+            }
+
+            DrawDesiredStateResult();
+        }
+
+        private void DrawDesiredAnimationChecklist()
+        {
+            var animations = _session.ActiveProject == null ? null : _session.ActiveProject.Animations;
+            if (animations == null) return;
+            var avatar = _session.ActiveAvatarRoot == null ? null : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
+            var backend = _advanced.MaBackend;
+            var snapshot = GetManagedSnapshot(avatar, backend);
+            var statuses = VrchatIntegrationStatusService.Resolve(_session.ActiveProject, avatar, snapshot);
+            for (int i = 0; i < animations.Count; i++)
+            {
+                var animation = animations[i];
+                if (animation == null) continue;
+                bool selected = _session.IsBatchSelected(animation.AnimationId);
+                VrchatIntegrationStatus status = statuses != null
+                    && statuses.TryGetValue(animation.AnimationId, out var resolved)
+                        ? resolved
+                        : VrchatIntegrationStatus.NotApplied;
+                bool next = EditorGUILayout.ToggleLeft(ChecklistItemLabel(animation.DisplayName, status), selected);
+                if (next != selected) _session.SetBatchSelected(animation.AnimationId, next);
+            }
+        }
+
+        private ModularAvatarManagedStateSnapshot GetManagedSnapshot(VRCAvatarDescriptor avatar, IModularAvatarIntegrationBackend backend)
+        {
+            if (avatar == null || backend == null) return null;
+            return _managedStateCache.Get(backend, avatar);
+        }
+
+        private void DrawDesiredStateResult()
+        {
+            if (_desiredResult == null) return;
+            var presentation = DesiredStateResultPresenter.Build(_desiredResult);
+            if (presentation.HasBindingConflict)
+            {
+                string key = DesiredStateResultPresenter.ConflictBeginnerKey(presentation);
+                string message = string.IsNullOrEmpty(presentation.ConflictObjectName)
+                    ? FaceMotionUiText.Get(key)
+                    : string.Format(FaceMotionUiText.Get(key), presentation.ConflictObjectName);
+                EditorGUILayout.HelpBox(message, MessageType.Error);
+            }
+
+            switch (presentation.Kind)
+            {
+                case DesiredStateResultKind.Succeeded:
+                    EditorGUILayout.LabelField(FaceMotionUiText.Get(presentation.TitleKey), EditorStyles.boldLabel);
+                    if (presentation.AppliedCount > 0)
+                    {
+                        EditorGUILayout.LabelField(string.Format(FaceMotionUiText.Get(DesiredStateResultPresenter.CountSucceeded), presentation.AppliedCount));
+                    }
+
+                    break;
+                case DesiredStateResultKind.NoChange:
+                case DesiredStateResultKind.RemovalComplete:
+                    EditorGUILayout.HelpBox(FaceMotionUiText.Get(presentation.TitleKey), MessageType.Info);
+                    break;
+                default:
+                    EditorGUILayout.HelpBox(FaceMotionUiText.Get(presentation.TitleKey), MessageType.Error);
+                    break;
+            }
+
+            for (var i = 0; i < presentation.TechnicalDetails.Count; i++)
+            {
+                EditorGUILayout.HelpBox(presentation.TechnicalDetails[i], MessageType.Error);
+            }
+        }
+
+        private void RunDesiredState()
+        {
+            var avatar = _session.ActiveAvatarRoot == null ? null : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
+            var backend = _advanced.MaBackend;
+            if (avatar == null || backend == null) return;
+            var result = VrchatDesiredStateReconciliationService.Execute(
+                new VrchatDesiredStateReconciliationRequest(
+                    avatar,
+                    _session.ActiveProject,
+                    new List<string>(_session.BatchAnimationIds),
+                    _advanced.OutputFolder,
+                    backend,
+                    InvalidateManagedState));
+            _desiredResult = result;
+            SetDesiredStateOperationDiagnostic(_session, result);
+            _session.RecomputeDiagnostics();
+            _session.NotifyChanged();
+        }
+
+        /// <summary>Operation diagnostics must not outlive a successful replacement operation.</summary>
+        internal static void SetDesiredStateOperationDiagnostic(
+            FaceMotionEditorSession session,
+            VrchatDesiredStateReconciliationResult result)
+        {
+            if (session == null) return;
+            if (result == null || result.Succeeded || result.Diagnostics.Count == 0)
+            {
+                session.SetLastOperationDiagnostic(null);
+                return;
+            }
+
+            session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
+        }
+
+        /// <summary>Called by the window's single Advanced foldout.</summary>
+        public void DrawAdvanced()
+        {
+            var animation = _session.GetSelectedAnimation();
             if (animation == null)
             {
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAnimationToExport"), MessageType.Info);
                 DrawDisabledButton();
             }
-            else if (avatar == null)
-            {
-                EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
-                DrawDisabledButton();
-            }
-            else
-            {
-                DrawPreflight();
-            }
-
-            DrawResult();
-            DrawBatch();
-            EditorGUILayout.Space();
-            DrawAdvancedFoldout();
-        }
-
-        private void DrawBatch()
-        {
-            EditorGUILayout.Space();
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("batchIntegration"), EditorStyles.boldLabel);
-            int count = _session.BatchAnimationIds.Count;
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("batchCheckedCount"), count.ToString());
-            bool ready = count > 0 && _session.ActiveAvatarRoot != null;
-            using (new EditorGUI.DisabledScope(!ready))
-            {
-                if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("batchAddToVrchat"), FaceMotionUiText.Get("tooltipBatchAddToVrchat")), GUILayout.Height(28f))) RunBatch();
-            }
-            if (!ready) EditorGUILayout.HelpBox(count == 0 ? FaceMotionUiText.Get("batchSelectAnimations") : FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
-
-            if (ready) DrawBatchRemoval();
-
-            var result = _batchController.LastResult;
-            if (result == null) return;
-            EditorGUILayout.LabelField(result.Succeeded ? FaceMotionUiText.Get("batchResultSucceeded") : FaceMotionUiText.Get("batchResultFailed"), EditorStyles.boldLabel);
-            for (int i = 0; i < result.Items.Count; i++)
-            {
-                var item = result.Items[i];
-                EditorGUILayout.LabelField((item.Succeeded ? "OK  " : "FAIL  ") + item.DisplayName, EditorStyles.miniLabel);
-            }
-            for (int i = 0; i < result.Diagnostics.Count; i++)
-            {
-                var diagnostic = result.Diagnostics[i];
-                if (diagnostic.Blocking) EditorGUILayout.HelpBox(DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic), MessageType.Error);
-            }
-        }
-
-        private void DrawBatchRemoval()
-        {
-            var backend = _advanced.MaBackend;
-            if (backend == null) return;
-            var avatar = _session.ActiveAvatarRoot == null
-                ? null
-                : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
-            if (avatar == null || _session.ActiveProject == null || _session.BatchAnimationIds.Count == 0) return;
-
-            if (!GUILayout.Button(FaceMotionUiText.Get("removeModularAvatarIntegrationsBatch"))) return;
-
-            var parameters = new List<string>();
-            foreach (var id in _session.BatchAnimationIds)
-            {
-                if (!_session.ActiveProject.TryGetAnimation(id, out var animation) || animation == null) continue;
-                string parameter = OneClickIntegrationService.MaParameterName(
-                    new OneClickIntegrationRequest(avatar, animation, _session.ActiveProject, null));
-                if (!string.IsNullOrEmpty(parameter) && !parameters.Contains(parameter)) parameters.Add(parameter);
-            }
-            RemoveAndRefresh(backend.RemoveAnimations(avatar, parameters).Diagnostics);
-        }
-
-        private void RemoveAndRefresh(IReadOnlyList<FaceMotionDiagnostic> diagnostics)
-        {
-            if (diagnostics != null && diagnostics.Count > 0)
-            {
-                _session.SetLastOperationDiagnostic(diagnostics[diagnostics.Count - 1]);
-            }
-            _session.RecomputeDiagnostics();
-            _session.NotifyChanged();
+            else if (_session.ActiveAvatarRoot != null) { DrawPreflight(); DrawResult(); }
+            _advanced.OnGUI();
         }
 
         private void DrawPreflight()
@@ -174,7 +279,14 @@ namespace FaceMotion.Editor.UI.Panels
                     FaceMotionUiText.Get("removeModularAvatarIntegrationForCurrent"),
                     preflight.ParameterName)))
             {
-                RemoveAndRefresh(backend.RemoveAnimation(avatar, preflight.ParameterName).Diagnostics);
+                try
+                {
+                    RemoveAndRefresh(backend.RemoveAnimation(avatar, preflight.ParameterName).Diagnostics);
+                }
+                finally
+                {
+                    InvalidateManagedState(avatar);
+                }
             }
         }
 
@@ -258,22 +370,6 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
-        private void DrawAdvancedFoldout()
-        {
-            bool next = EditorGUILayout.Foldout(_advancedFoldout, new GUIContent(FaceMotionUiText.Get("advancedSettings"), FaceMotionUiText.Get("tooltipAdvancedSettings")), true);
-            if (next != _advancedFoldout)
-            {
-                _advancedFoldout = next;
-                EditorPrefs.SetBool(AdvancedFoldoutKey, next);
-            }
-
-            if (_advancedFoldout)
-            {
-                EditorGUILayout.Space();
-                _advanced.OnGUI();
-            }
-        }
-
         private void RunOneClick()
         {
             try
@@ -289,30 +385,20 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
-        private void RunBatch()
+        private void RemoveAndRefresh(IReadOnlyList<FaceMotionDiagnostic> diagnostics)
         {
-            try
+            if (diagnostics != null && diagnostics.Count > 0)
             {
-                _batchController.Execute((stage, current, total) => EditorUtility.DisplayProgressBar(
-                    "FaceMotion Batch Integration",
-                    BatchProgressLabel(stage) + " " + current + " / " + total,
-                    total <= 0 ? 0f : (float)current / total));
+                _session.SetLastOperationDiagnostic(diagnostics[diagnostics.Count - 1]);
             }
-            finally
-            {
-                EditorUtility.ClearProgressBar();
-            }
+            _session.RecomputeDiagnostics();
+            _session.NotifyChanged();
         }
 
-        private static string BatchProgressLabel(BatchIntegrationStage stage)
+        private void InvalidateManagedState(VRCAvatarDescriptor avatar)
         {
-            switch (stage)
-            {
-                case BatchIntegrationStage.Plan: return FaceMotionUiText.Get("oneClickStagePlan");
-                case BatchIntegrationStage.Validate: return FaceMotionUiText.Get("oneClickStageValidate");
-                case BatchIntegrationStage.Apply: return FaceMotionUiText.Get("oneClickStageApply");
-                default: return FaceMotionUiText.Get("oneClickStageExport");
-            }
+            _managedStateCache.Invalidate(avatar);
+            _refreshAvatarIndexAfterIntegration?.Invoke(avatar);
         }
 
         private static string ProgressLabel(OneClickStage stage)

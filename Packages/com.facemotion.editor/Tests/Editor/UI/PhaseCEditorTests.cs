@@ -140,6 +140,7 @@ namespace FaceMotion.Editor.Tests
             using (var fixture = AvatarFixture.Create())
             {
                 SetAvatar(fixture);
+                fixture.AddFork("HierarchyChange");
                 _avatar.MarkAvatarDirtyFromHierarchy();
                 Assert.That(_session.AvatarIndexDirty, Is.True);
             }

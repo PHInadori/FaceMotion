@@ -2,6 +2,7 @@ using FaceMotion.Editor.Preview;
 using FaceMotion.Editor.UI.Preview;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -17,14 +18,18 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly PreviewSession _preview;
         private readonly SceneApplySession _sceneApply;
         private readonly PreviewPlaybackController _playback;
+        private readonly Action _ensureAvatarIndex;
+        private readonly Action _previewRebuilt;
         private int _lastOverrideChangeCount;
 
-        public PreviewPanel(FaceMotionEditorSession session, PreviewSession preview, SceneApplySession sceneApply, PreviewPlaybackController playback)
+        public PreviewPanel(FaceMotionEditorSession session, PreviewSession preview, SceneApplySession sceneApply, PreviewPlaybackController playback, Action ensureAvatarIndex = null, Action previewRebuilt = null)
         {
             _session = session;
             _preview = preview;
             _sceneApply = sceneApply;
             _playback = playback;
+            _ensureAvatarIndex = ensureAvatarIndex;
+            _previewRebuilt = previewRebuilt;
         }
 
         public void OnGUI(Rect assignedRect, bool textControlOwnsKeyboard = false)
@@ -40,8 +45,10 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (GUI.Button(new Rect(layout.ControlsRect.x, layout.ControlsRect.y, 110f, 20f), _preview.IsActive ? FaceMotionUiText.Get("rebuildPreview") : FaceMotionUiText.Get("startPreview")))
             {
+                _ensureAvatarIndex?.Invoke();
                 _preview.RebuildAvatar(_session.ActiveAvatarRoot);
-                _preview.Evaluate(_session.GetSelectedAnimation(), _session.ViewState.CurrentTime);
+                _session.NotifyPoseChanged();
+                _previewRebuilt?.Invoke();
             }
 
             if (GUI.Button(new Rect(layout.ControlsRect.x + 114f, layout.ControlsRect.y, 90f, 20f), FaceMotionUiText.Get("stopPreview")))

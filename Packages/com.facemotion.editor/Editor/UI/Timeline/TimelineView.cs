@@ -90,12 +90,83 @@ namespace FaceMotion.Editor.UI.Timeline
             DrawTimelineHeader(rect, animation.Timeline.FrameRate);
 
             Event current = Event.current;
-            if (current != null && _input.HandleEvent(current, plotRect, layout, textControlOwnsKeyboard))
+            int pointerControlId = GUIUtility.GetControlID(FocusType.Passive, rect);
+            bool routed = RoutePointerEvent(current, pointerControlId, rect, _input, _session.ViewState, plotRect, layout, textControlOwnsKeyboard);
+
+            if (routed)
             {
                 current.Use();
             }
 
             TimelineRenderer.Draw(rect, layout, _session.ViewState, _session.Selection);
+        }
+
+        /// <summary>
+        /// Routes pointer gestures through one IMGUI hot control. Once a timeline drag starts,
+        /// MouseDrag and MouseUp continue reaching the timeline even after the pointer leaves it.
+        /// Kept separate from TimelineInputHandler so the interaction contract is testable.
+        /// </summary>
+        internal static bool RoutePointerEvent(
+            Event current,
+            int controlId,
+            Rect timelineRect,
+            TimelineInputHandler input,
+            TimelineViewState viewState,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout,
+            bool textControlOwnsKeyboard)
+        {
+            if (current == null || input == null || viewState == null)
+            {
+                return false;
+            }
+
+            bool ownsPointer = GUIUtility.hotControl == controlId;
+            EventType eventType = current.rawType;
+            if (eventType == EventType.Ignore || eventType == EventType.Used)
+            {
+                eventType = current.type;
+            }
+
+            switch (eventType)
+            {
+                case EventType.MouseDown:
+                    if (!timelineRect.Contains(current.mousePosition))
+                    {
+                        return false;
+                    }
+
+                    bool began = input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
+                    if (began && viewState.DragMode != TimelineDragMode.None)
+                    {
+                        GUIUtility.hotControl = controlId;
+                    }
+
+                    return began;
+
+                case EventType.MouseDrag:
+                case EventType.MouseUp:
+                    if (!ownsPointer)
+                    {
+                        return false;
+                    }
+
+                    bool handled = input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
+                    if (eventType == EventType.MouseUp)
+                    {
+                        GUIUtility.hotControl = 0;
+                    }
+
+                    return handled;
+
+                case EventType.MouseMove:
+                case EventType.ScrollWheel:
+                    return timelineRect.Contains(current.mousePosition)
+                        && input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
+
+                default:
+                    return input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
+            }
         }
 
         private void DrawTimelineHeader(Rect rect, float frameRate)
@@ -123,5 +194,6 @@ namespace FaceMotion.Editor.UI.Timeline
             };
             GUI.Label(new Rect(rect.x, rect.y + rect.height * 0.4f, rect.width, 30f), message, style);
         }
+
     }
 }

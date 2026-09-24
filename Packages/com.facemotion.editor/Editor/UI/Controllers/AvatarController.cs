@@ -9,15 +9,24 @@ namespace FaceMotion.Editor.UI.Controllers
 {
     /// <summary>
     /// Avatar selection, index build/rebuild, hierarchy-dirty flag, and binding diagnostics.
-    /// The index is only rebuilt on explicit user action; hierarchy changes only set a flag.
+    /// The window coalesces hierarchy notifications and calls RebuildIndex after mutations settle.
     /// </summary>
     public sealed class AvatarController
     {
         private readonly FaceMotionEditorSession _session;
+        private readonly Action<VRCAvatarDescriptor> _buildObserver;
 
         public AvatarController(FaceMotionEditorSession session)
+            : this(session, null)
+        {
+        }
+
+        internal AvatarController(
+            FaceMotionEditorSession session,
+            Action<VRCAvatarDescriptor> buildObserver)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _buildObserver = buildObserver;
         }
 
         public bool HasAvatar => _session.ActiveDescriptor != null;
@@ -57,6 +66,26 @@ namespace FaceMotion.Editor.UI.Controllers
             BuildAvatar(descriptor);
         }
 
+        /// <summary>Ensures preview consumers never use a missing or hierarchy-stale index.</summary>
+        public bool EnsureAvatarIndexCurrent()
+        {
+            if (_session.ActiveDescriptor != null &&
+                (_session.ActiveAvatarIndex == null || _session.AvatarIndexDirty))
+            {
+                BuildAvatar(_session.ActiveDescriptor);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Refreshes the active index after a FaceMotion integration operation settles.</summary>
+        public bool RefreshIndexAfterIntegration(VRCAvatarDescriptor descriptor)
+        {
+            if (descriptor == null || !ReferenceEquals(descriptor, _session.ActiveDescriptor)) return false;
+            MarkAvatarDirtyFromHierarchy();
+            return EnsureAvatarIndexCurrent();
+        }
+
         public void RebuildBindings()
         {
             _session.RecomputeBindingDiagnostics();
@@ -64,10 +93,16 @@ namespace FaceMotion.Editor.UI.Controllers
             _session.NotifyChanged();
         }
 
-        /// <summary>Called on EditorApplication.hierarchyChanged; only sets the dirty flag.</summary>
+        /// <summary>
+        /// Called on EditorApplication.hierarchyChanged. The notification is global, so compare
+        /// the selected avatar before dirtying it; preview clone changes are unrelated.
+        /// </summary>
         public void MarkAvatarDirtyFromHierarchy()
         {
-            if (_session.ActiveAvatarRoot != null && !_session.AvatarIndexDirty)
+            if (_session.ActiveAvatarRoot != null
+                && !_session.AvatarIndexDirty
+                && (_session.ActiveObjectCache == null
+                    || !_session.ActiveObjectCache.MatchesCurrentHierarchy(_session.ActiveAvatarRoot)))
             {
                 _session.AvatarIndexDirty = true;
                 _session.NotifyChanged();
@@ -76,6 +111,7 @@ namespace FaceMotion.Editor.UI.Controllers
 
         private void BuildAvatar(VRCAvatarDescriptor descriptor)
         {
+            _buildObserver?.Invoke(descriptor);
             var validation = VRCAvatarDescriptorAdapter.Validate(descriptor);
             var cache = new UnityAvatarObjectCache();
             var report = cache.Rebuild(descriptor.gameObject);

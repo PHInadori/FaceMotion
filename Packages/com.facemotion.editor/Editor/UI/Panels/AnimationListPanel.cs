@@ -34,14 +34,6 @@ namespace FaceMotion.Editor.UI.Panels
             IReadOnlyList<FaceMotionAnimationData> list = Snapshot(_session.ActiveProject?.Animations);
             int count = list.Count;
 
-            if (count > 0)
-            {
-                EditorGUILayout.BeginHorizontal();
-                if (GUILayout.Button(FaceMotionUiText.Get("batchSelectAll"), EditorStyles.miniButtonLeft)) _session.SelectAllBatchAnimations();
-                if (GUILayout.Button(FaceMotionUiText.Get("batchClearAll"), EditorStyles.miniButtonRight)) _session.ClearBatchSelection();
-                EditorGUILayout.EndHorizontal();
-            }
-
             for (int i = 0; i < count; i++)
             {
                 var anim = list[i];
@@ -51,13 +43,12 @@ namespace FaceMotion.Editor.UI.Panels
                 }
 
                 bool isSelected = string.Equals(anim.AnimationId, _session.SelectedAnimationId, System.StringComparison.Ordinal);
-                EditorGUILayout.BeginHorizontal();
-
-                bool batchSelected = EditorGUILayout.Toggle(_session.IsBatchSelected(anim.AnimationId), GUILayout.Width(18f));
-                if (batchSelected != _session.IsBatchSelected(anim.AnimationId)) _session.SetBatchSelected(anim.AnimationId, batchSelected);
+                EditorGUILayout.BeginHorizontal(isSelected ? "SelectionRect" : "box", GUILayout.MinHeight(EditorGUIUtility.singleLineHeight + 4f));
 
                 string label = !string.IsNullOrEmpty(anim.DisplayName) ? anim.DisplayName : FaceMotionUiText.Get("unnamed");
-                if (GUILayout.Button(label, isSelected ? EditorStyles.miniButtonMid : EditorStyles.miniButtonLeft))
+                string editingLabel = RowLabel(label, isSelected);
+                bool selectClicked = GUILayout.Button(editingLabel, EditorStyles.miniButtonLeft);
+                if (selectClicked)
                 {
                     _animation.Select(anim.AnimationId);
                     _renameAnimationId = null;
@@ -139,6 +130,13 @@ namespace FaceMotion.Editor.UI.Panels
             return source == null
                 ? new List<FaceMotionAnimationData>()
                 : new List<FaceMotionAnimationData>(source);
+        }
+
+        /// <summary>Row label for the current editing animation; presentational so tests can assert it without GUI.</summary>
+        internal static string RowLabel(string displayName, bool isSelected)
+        {
+            string label = string.IsNullOrEmpty(displayName) ? FaceMotionUiText.Get("unnamed") : displayName;
+            return isSelected ? label + "  [" + FaceMotionUiText.Get("editing") + "]" : label;
         }
 
         private void DrawTimelineSettings()

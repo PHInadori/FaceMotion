@@ -38,7 +38,7 @@ namespace FaceMotion.Editor.UI.Controllers
                 result.Succeeded = ProjectCommandExecutor.TryExecute(command, project, transaction, out result.Error);
             }
 
-            session.RefreshAll();
+            session.RefreshPose();
             return result;
         }
 
@@ -89,7 +89,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             result.Succeeded = true;
-            session.RefreshAll();
+            session.RefreshPose();
             return result;
         }
     }

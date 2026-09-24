@@ -15,13 +15,15 @@ namespace FaceMotion.Editor.UI.Controllers
     public sealed class OneClickIntegrationController
     {
         private readonly FaceMotionEditorSession _session;
+        private readonly Action<VRCAvatarDescriptor> _invalidateManagedState;
         private OneClickPreflight _preflight;
         private int _preflightVersion = -1;
         private OneClickIntegrationResult _lastResult;
 
-        public OneClickIntegrationController(FaceMotionEditorSession session)
+        public OneClickIntegrationController(FaceMotionEditorSession session, Action<VRCAvatarDescriptor> invalidateManagedState = null)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
+            _invalidateManagedState = invalidateManagedState;
         }
 
         public OneClickIntegrationResult LastResult => _lastResult;
@@ -41,7 +43,13 @@ namespace FaceMotion.Editor.UI.Controllers
 
         public OneClickIntegrationResult Execute(Action<OneClickStage> progress)
         {
-            var result = OneClickIntegrationService.Execute(BuildRequest(), progress);
+            var request = BuildRequest();
+            var result = OneClickIntegrationService.Execute(request, progress);
+            if (result.Backend == OneClickIntegrationService.ModularAvatarBackendId
+                && (result.Succeeded || result.Stage == OneClickStage.Apply))
+            {
+                _invalidateManagedState?.Invoke(request.Avatar);
+            }
             _lastResult = result;
             if (result.Diagnostics.Count > 0)
             {

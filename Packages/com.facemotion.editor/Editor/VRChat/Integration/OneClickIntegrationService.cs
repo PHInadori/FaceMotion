@@ -82,6 +82,12 @@ namespace FaceMotion.Editor.VRChat.Integration
         public const string ModularAvatarBackendId = "modular-avatar";
         public const string DefaultOutputFolder = "Assets/FaceMotion/Exports";
 
+        /// <summary>Empty normal-flow roots use FaceMotion's established generated-asset location.</summary>
+        public static string ResolveIntegrationOutputFolder(string outputFolder)
+        {
+            return string.IsNullOrWhiteSpace(outputFolder) ? DefaultOutputFolder : outputFolder;
+        }
+
         /// <summary>Write-free preflight summary. It never creates assets and never plans.</summary>
         public static OneClickPreflight Preflight(OneClickIntegrationRequest request)
         {

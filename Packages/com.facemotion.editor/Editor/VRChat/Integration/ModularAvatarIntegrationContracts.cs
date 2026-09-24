@@ -9,12 +9,14 @@ namespace FaceMotion.Editor.VRChat.Integration
     /// <summary>MA-free public contract. The implementation lives in the package-gated MA assembly.</summary>
     public sealed class ModularAvatarIntegrationRequest
     {
-        public ModularAvatarIntegrationRequest(VRCAvatarDescriptor avatar, AnimationClip clip, string outputFolder, string displayName)
-        { Avatar = avatar; Clip = clip; OutputFolder = outputFolder; DisplayName = displayName; }
+        public ModularAvatarIntegrationRequest(VRCAvatarDescriptor avatar, AnimationClip clip, string outputFolder, string displayName, string animationId = null)
+        { Avatar = avatar; Clip = clip; OutputFolder = outputFolder; DisplayName = displayName; AnimationId = animationId ?? string.Empty; }
         public VRCAvatarDescriptor Avatar { get; }
         public AnimationClip Clip { get; }
         public string OutputFolder { get; }
         public string DisplayName { get; }
+        /// <summary>Stable project identity used by desired-state reconciliation; never inferred from a display name.</summary>
+        public string AnimationId { get; }
     }
 
     public sealed class ModularAvatarIntegrationPlan
@@ -58,6 +60,38 @@ namespace FaceMotion.Editor.VRChat.Integration
         public IReadOnlyList<FaceMotionDiagnostic> Diagnostics { get; }
     }
 
+    /// <summary>Verified ownership metadata used to reconcile MA integrations without display-name matching.</summary>
+    public sealed class ModularAvatarManagedState
+    {
+        public ModularAvatarManagedState(string animationId, string parameterName)
+        { AnimationId = animationId ?? string.Empty; ParameterName = parameterName ?? string.Empty; }
+        public string AnimationId { get; }
+        public string ParameterName { get; }
+        public bool HasAnimationId => !string.IsNullOrEmpty(AnimationId);
+    }
+
+    public sealed class ModularAvatarManagedStateSnapshot
+    {
+        public ModularAvatarManagedStateSnapshot(IReadOnlyList<ModularAvatarManagedState> items, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
+        { Items = items ?? Array.Empty<ModularAvatarManagedState>(); Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>(); }
+        public IReadOnlyList<ModularAvatarManagedState> Items { get; }
+        public IReadOnlyList<FaceMotionDiagnostic> Diagnostics { get; }
+        public bool IsValid { get { for (var i = 0; i < Diagnostics.Count; i++) if (Diagnostics[i].Blocking) return false; return true; } }
+    }
+
+    /// <summary>Optional transaction boundary for reconciliation backends that can restore a real pre-apply snapshot.</summary>
+    public interface IModularAvatarIntegrationRollbackBackend
+    {
+        object CaptureRollbackSnapshot(VRCAvatarDescriptor avatar);
+        ModularAvatarIntegrationBatchResult RestoreRollbackSnapshot(object snapshot);
+    }
+
+    /// <summary>Optional final-state planner. Implementations may ignore proven-owned entries scheduled for removal.</summary>
+    public interface IModularAvatarDesiredStateBackend
+    {
+        ModularAvatarIntegrationBatchPlan PlanFinalState(IReadOnlyList<ModularAvatarIntegrationRequest> requests, IReadOnlyList<string> removingParameters);
+    }
+
     public interface IModularAvatarIntegrationBackend
     {
         bool HasExistingIntegration(VRCAvatarDescriptor avatar);
@@ -72,6 +106,10 @@ namespace FaceMotion.Editor.VRChat.Integration
         ModularAvatarIntegrationBatchResult RemoveAnimations(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters);
         ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests);
         ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan);
+        /// <summary>Lists only FaceMotion manifests whose ownership can be proven without mutation.</summary>
+        ModularAvatarManagedStateSnapshot InspectManagedState(VRCAvatarDescriptor avatar);
+        /// <summary>Verifies every requested removal before any hierarchy or asset mutation occurs.</summary>
+        ModularAvatarManagedStateSnapshot ValidateRemovals(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters);
     }
 
     public static class ModularAvatarIntegrationBackendLocator

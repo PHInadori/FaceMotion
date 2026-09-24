@@ -23,18 +23,10 @@ namespace FaceMotion.Editor.UI.Panels
         public void OnGUI()
         {
             EditorGUILayout.LabelField(FaceMotionUiText.Get("avatar"), EditorStyles.boldLabel);
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button(FaceMotionUiText.Get("selectAvatar"), EditorStyles.miniButtonLeft, GUILayout.ExpandWidth(true)))
+            if (GUILayout.Button(FaceMotionUiText.Get("selectAvatar"), GUILayout.ExpandWidth(true)))
             {
                 ShowSceneSelector();
             }
-
-            if (GUILayout.Button(FaceMotionUiText.Get("rebuildAvatarIndex"), EditorStyles.miniButtonRight, GUILayout.ExpandWidth(true)))
-            {
-                _avatar.RebuildIndex();
-            }
-
-            EditorGUILayout.EndHorizontal();
 
             if (_session.ActiveDescriptor != null)
             {

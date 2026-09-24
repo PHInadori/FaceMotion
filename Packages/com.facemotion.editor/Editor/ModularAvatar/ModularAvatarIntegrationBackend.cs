@@ -18,13 +18,14 @@ using VRC.SDK3.Avatars.ScriptableObjects;
 namespace FaceMotion.Editor.ModularAvatar
 {
     /// <summary>Uses only MA's public 1.18.7 component APIs; MA performs the eventual avatar merge.</summary>
-    public sealed class ModularAvatarIntegrationBackend : IModularAvatarIntegrationBackend
+    public sealed class ModularAvatarIntegrationBackend : IModularAvatarIntegrationBackend, IModularAvatarIntegrationRollbackBackend, IModularAvatarDesiredStateBackend
     {
         public const string BackendId = "modular-avatar";
         private const string Prefix = "FaceMotion MA ";
         private static readonly Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest> SessionManifests = new Dictionary<VRCAvatarDescriptor, ModularAvatarIntegrationManifest>();
         internal static Action<string> PlanFailureInjector;
         internal static Action<string> ApplyFailureInjector;
+        internal static Action<string> RollbackFailureInjector;
 
         public bool HasExistingIntegration(VRCAvatarDescriptor avatar)
         {
@@ -56,6 +57,16 @@ namespace FaceMotion.Editor.ModularAvatar
 
         public ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests)
         {
+            return PlanBatchCore(requests, null);
+        }
+
+        public ModularAvatarIntegrationBatchPlan PlanFinalState(IReadOnlyList<ModularAvatarIntegrationRequest> requests, IReadOnlyList<string> removingParameters)
+        {
+            return PlanBatchCore(requests, removingParameters == null ? null : new HashSet<string>(removingParameters, StringComparer.Ordinal));
+        }
+
+        private ModularAvatarIntegrationBatchPlan PlanBatchCore(IReadOnlyList<ModularAvatarIntegrationRequest> requests, HashSet<string> removingParameters)
+        {
             var plans = new List<ModularAvatarIntegrationPlan>();
             if (requests == null || requests.Count == 0) return new ModularAvatarIntegrationBatchPlan(plans);
             var reservedParameters = new HashSet<string>(StringComparer.Ordinal);
@@ -77,9 +88,9 @@ namespace FaceMotion.Editor.ModularAvatar
                     rootName = "FaceMotionMA_" + stem + discriminator;
                     suffix++;
                 }
-                while (reservedParameters.Contains(parameter) || reservedObjects.Contains(objectName) || reservedRoots.Contains(rootName) || RootIsOccupiedByOtherIntegration(request == null ? null : request.Avatar, request == null ? null : request.OutputFolder, parameter, rootName));
+                while (reservedParameters.Contains(parameter) || reservedObjects.Contains(objectName) || reservedRoots.Contains(rootName) || RootIsOccupiedByOtherIntegration(request == null ? null : request.Avatar, request == null ? null : request.OutputFolder, parameter, rootName, removingParameters));
                 reservedParameters.Add(parameter); reservedObjects.Add(objectName); reservedRoots.Add(rootName);
-                plans.Add(PlanCore(request, parameter, objectName, rootName, true));
+                plans.Add(PlanCore(request, parameter, objectName, rootName, true, removingParameters));
             }
             return new ModularAvatarIntegrationBatchPlan(plans);
         }
@@ -117,13 +128,36 @@ namespace FaceMotion.Editor.ModularAvatar
             }
         }
 
+        public ModularAvatarManagedStateSnapshot InspectManagedState(VRCAvatarDescriptor avatar)
+        {
+            var items = new List<ModularAvatarManagedState>();
+            var diagnostics = new List<FaceMotionDiagnostic>();
+            foreach (var manifest in FindManagedManifests(avatar))
+            {
+                if (!ValidateManagedState(manifest, avatar, diagnostics)) continue;
+                items.Add(new ModularAvatarManagedState(manifest.AnimationId, manifest.ParameterName));
+            }
+            return new ModularAvatarManagedStateSnapshot(items, diagnostics);
+        }
+
+        public ModularAvatarManagedStateSnapshot ValidateRemovals(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters)
+        {
+            var snapshot = InspectManagedState(avatar);
+            if (!snapshot.IsValid || parameters == null || parameters.Count == 0) return snapshot;
+            var diagnostics = new List<FaceMotionDiagnostic>(snapshot.Diagnostics);
+            var requested = new HashSet<string>(parameters, StringComparer.Ordinal);
+            for (var i = 0; i < snapshot.Items.Count; i++) requested.Remove(snapshot.Items[i].ParameterName);
+            foreach (var parameter in requested) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The requested FaceMotion Modular Avatar integration could not be proven owned: " + parameter));
+            return new ModularAvatarManagedStateSnapshot(snapshot.Items, diagnostics);
+        }
+
         private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request)
         {
             var stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
-            return PlanCore(request, "FaceMotion_" + stem, Prefix + stem, "FaceMotionMA_" + stem, false);
+            return PlanCore(request, "FaceMotion_" + stem, Prefix + stem, "FaceMotionMA_" + stem, false, null);
         }
 
-        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName, bool allowOtherManifests)
+        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName, bool allowOtherManifests, HashSet<string> removingParameters)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarAvatar, "Select a VRCAvatarDescriptor."));
@@ -138,7 +172,7 @@ namespace FaceMotion.Editor.ModularAvatar
                 if (request.Clip != null)
                 {
                     ValidateAmbiguousClipBindings(request.Avatar, request.Clip, diagnostics);
-                    ValidateConflicts(request.Avatar, request.Clip, parameter, existing, diagnostics);
+                    ValidateConflicts(request.Avatar, request.Clip, parameter, existing, removingParameters, diagnostics);
                 }
             }
             return new ModularAvatarIntegrationPlan(request, parameter, objectName, rootName, diagnostics);
@@ -260,7 +294,9 @@ namespace FaceMotion.Editor.ModularAvatar
                 manifest.BackendId = ModularAvatarIntegrationBackend.BackendId;
                 manifest.IntegrationId = string.IsNullOrEmpty(carryIntegrationId) ? StableId.New() : carryIntegrationId;
                 manifest.State = IntegrationState.Attached;
-                manifest.AnimationId = carryAnimationId ?? string.Empty;
+                manifest.AnimationId = !string.IsNullOrEmpty(plan.Request.AnimationId)
+                    ? plan.Request.AnimationId
+                    : carryAnimationId ?? string.Empty;
                 manifest.AvatarFingerprint = carryAvatarFingerprint ?? string.Empty;
                 AssetDatabase.CreateAsset(manifest, root + "/Manifest.asset");
                 SessionManifests[plan.Request.Avatar] = manifest;
@@ -369,11 +405,11 @@ namespace FaceMotion.Editor.ModularAvatar
             var results = new List<ModularAvatarIntegrationManifest>();
             if (avatar == null) return results;
             var seen = new HashSet<ModularAvatarIntegrationManifest>();
-            if (SessionManifests.TryGetValue(avatar, out var session) && session != null && seen.Add(session)) results.Add(session);
+            if (SessionManifests.TryGetValue(avatar, out var session) && session != null && BelongsToAvatar(session, avatar) && seen.Add(session)) results.Add(session);
             foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest"))
             {
                 var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid));
-                if (manifest != null && seen.Add(manifest) && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) results.Add(manifest);
+                if (manifest != null && seen.Add(manifest) && BelongsToAvatar(manifest, avatar)) results.Add(manifest);
             }
             return results;
         }
@@ -389,6 +425,7 @@ namespace FaceMotion.Editor.ModularAvatar
         {
             var items = new List<FaceMotionDiagnostic>();
             if (manifest == null) { items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifest, "The Modular Avatar manifest is missing.")); diagnostics = items; return false; }
+            if (!BelongsToAvatar(manifest, owner)) { items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The Modular Avatar manifest does not belong to the selected avatar.")); diagnostics = items; return false; }
             var migration = ModularAvatarIntegrationManifestMigration.TryMigrateOnUse(manifest, owner, items);
             if (migration.Blocked) { diagnostics = items; return false; }
             owner = owner ?? ResolveAvatar(manifest);
@@ -423,6 +460,35 @@ namespace FaceMotion.Editor.ModularAvatar
             return true;
         }
 
+        // Reconciliation calls this before any export or hierarchy mutation. Unlike migration,
+        // it intentionally performs no repair or persistence while proving ownership.
+        private static bool ValidateManagedState(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor avatar, List<FaceMotionDiagnostic> diagnostics)
+        {
+            if (!BelongsToAvatar(manifest, avatar))
+            {
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The Modular Avatar manifest does not belong to the selected avatar."));
+                return false;
+            }
+            if (manifest.SchemaVersion > FaceMotionVersions.IntegrationManifestVersion)
+            {
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.FutureSchemaBlocked, "The Modular Avatar manifest uses a newer schema and cannot be reconciled."));
+                return false;
+            }
+            if (string.IsNullOrEmpty(manifest.ParameterName))
+            {
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The Modular Avatar manifest has no ownership parameter."));
+                return false;
+            }
+            if (!HasSafeOwnedAssetPaths(manifest)) { diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The Modular Avatar manifest contains an unsafe owned asset path.")); return false; }
+            if (ResolveIntegrationObject(manifest, avatar) != null) return true;
+            if (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null)
+            {
+                diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "An integration object name is occupied by content not owned by FaceMotion."));
+                return false;
+            }
+            return true; // A detached manifest retains its own generated assets and is safe to remove.
+        }
+
         // Batch rollback deliberately differs from user-facing Remove: it deletes only assets and
         // hierarchy proven to have been created by the failed batch.
         private static void RollbackCreated(ModularAvatarIntegrationManifest manifest)
@@ -448,14 +514,14 @@ namespace FaceMotion.Editor.ModularAvatar
             return plan.ObjectName == Prefix + Sanitize(displayName) ? displayName : plan.ObjectName.Substring(Prefix.Length);
         }
 
-        private static void ValidateConflicts(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, ModularAvatarIntegrationManifest owned, List<FaceMotionDiagnostic> diagnostics)
+        private static void ValidateConflicts(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, ModularAvatarIntegrationManifest owned, HashSet<string> removingParameters, List<FaceMotionDiagnostic> diagnostics)
         {
             foreach (var parameters in avatar.GetComponentsInChildren<ModularAvatarParameters>(true))
-                if (!IsOwned(parameters.gameObject, owned, avatar))
+                if (!IsOwned(parameters.gameObject, owned, avatar) && !IsScheduledForRemoval(parameters.gameObject, avatar, removingParameters))
                     if (parameters.parameters != null) foreach (var config in parameters.parameters) if (!config.isPrefix && config.nameOrPrefix == parameter) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarParameterConflict, "An MA Parameters component already defines the generated parameter."));
             foreach (var merge in avatar.GetComponentsInChildren<ModularAvatarMergeAnimator>(true))
             {
-                if (IsOwned(merge.gameObject, owned, avatar) || merge.animator == null) continue;
+                if (IsOwned(merge.gameObject, owned, avatar) || IsScheduledForRemoval(merge.gameObject, avatar, removingParameters) || merge.animator == null) continue;
                 foreach (var candidate in merge.animator.animationClips)
                 {
                     if (candidate == null) continue;
@@ -535,10 +601,280 @@ namespace FaceMotion.Editor.ModularAvatar
                 { FaceMotionDiagnosticDetailKeys.Binding, description }
             };
         }
-        private static ModularAvatarIntegrationManifest FindManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter) && ResolveIntegrationObject(session, avatar) != null) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && ResolveIntegrationObject(manifest, avatar) != null) return manifest; } return null; }
-        private static ModularAvatarIntegrationManifest FindRemovalCandidateManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter)) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) return manifest; } return null; }
-        private static bool RootIsOccupiedByOtherIntegration(VRCAvatarDescriptor avatar, string outputFolder, string parameter, string rootName) { var existing = FindManifest(avatar, parameter) ?? FindRemovalCandidateManifest(avatar, parameter); if (existing != null) return Path.GetFileName(Path.GetDirectoryName(AssetDatabase.GetAssetPath(existing))) != rootName; return !string.IsNullOrEmpty(outputFolder) && AssetDatabase.IsValidFolder(outputFolder + "/" + rootName); }
+        private static ModularAvatarIntegrationManifest FindManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter) && BelongsToAvatar(session, avatar)) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && BelongsToAvatar(manifest, avatar)) return manifest; } return null; }
+        private static ModularAvatarIntegrationManifest FindRemovalCandidateManifest(VRCAvatarDescriptor avatar, string parameter = null) { if (avatar == null) return null; if (SessionManifests.TryGetValue(avatar, out var session) && session != null && (parameter == null || session.ParameterName == parameter) && BelongsToAvatar(session, avatar)) return session; foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest")) { var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (manifest != null && (parameter == null || manifest.ParameterName == parameter) && BelongsToAvatar(manifest, avatar)) return manifest; } return null; }
+        private static bool RootIsOccupiedByOtherIntegration(VRCAvatarDescriptor avatar, string outputFolder, string parameter, string rootName, HashSet<string> removingParameters) { var existing = FindManifest(avatar, parameter) ?? FindRemovalCandidateManifest(avatar, parameter); if (existing != null) return Path.GetFileName(Path.GetDirectoryName(AssetDatabase.GetAssetPath(existing))) != rootName; if (removingParameters != null) foreach (var manifest in FindManagedManifests(avatar)) if (removingParameters.Contains(manifest.ParameterName) && Path.GetFileName(Path.GetDirectoryName(AssetDatabase.GetAssetPath(manifest))) == rootName) return false; return !string.IsNullOrEmpty(outputFolder) && AssetDatabase.IsValidFolder(outputFolder + "/" + rootName); }
+        private static bool IsScheduledForRemoval(GameObject value, VRCAvatarDescriptor avatar, HashSet<string> removingParameters) { if (value == null || removingParameters == null) return false; foreach (var manifest in FindManagedManifests(avatar)) if (removingParameters.Contains(manifest.ParameterName) && IsOwned(value, manifest, avatar)) return true; return false; }
+
+        public object CaptureRollbackSnapshot(VRCAvatarDescriptor avatar)
+        {
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Reconcile FaceMotion Modular Avatar integrations");
+            var files = new List<RollbackSnapshotEntry>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var existingRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var manifest in FindManagedManifests(avatar))
+            {
+                if (manifest == null) continue;
+                var manifestPath = AssetDatabase.GetAssetPath(manifest);
+                var root = string.IsNullOrEmpty(manifestPath) ? null : Path.GetDirectoryName(manifestPath)?.Replace('\\', '/');
+                if (!string.IsNullOrEmpty(root) && AssetDatabase.IsValidFolder(root)) existingRoots.Add(root);
+                var owned = manifest.OwnedAssetPaths ?? Array.Empty<string>();
+                for (var i = 0; i < owned.Length; i++)
+                    if (GeneratedAssetOwnership.IsSafeOwnedAssetPath(owned[i], root) && GeneratedAssetOwnership.IsCanonicalGeneratedFileName(Path.GetFileName(owned[i])))
+                        AddSnapshotFile(files, seen, owned[i], root);
+                if (!string.IsNullOrEmpty(manifestPath)) AddSnapshotFile(files, seen, manifestPath, root);
+            }
+            return new RollbackSnapshot(group, avatar, files, existingRoots);
+        }
+
+        public ModularAvatarIntegrationBatchResult RestoreRollbackSnapshot(object snapshot)
+        {
+            if (!(snapshot is RollbackSnapshot rollback)) return new ModularAvatarIntegrationBatchResult(false, Array.Empty<ModularAvatarIntegrationResult>(), new[] { Error(FaceMotionDiagnosticCodes.ModularAvatarApply, "The reconciliation rollback snapshot is unavailable.") });
+            try { RollbackFailureInjector?.Invoke("start-rollback"); }
+            catch (Exception injected)
+            {
+                return new ModularAvatarIntegrationBatchResult(false, Array.Empty<ModularAvatarIntegrationResult>(), new[] { Error(FaceMotionDiagnosticCodes.ModularAvatarApply, "Rollback failed: Injected rollback failure: " + injected.Message) });
+            }
+            var errors = new List<string>();
+            try
+            {
+                try { Undo.RevertAllDownToGroup(rollback.UndoGroup); AssetDatabase.Refresh(); }
+                catch (Exception revertException) { errors.Add("Undo revert failed: " + revertException.Message); }
+                RemoveLeakedContent(rollback, errors);
+                RestoreFolders(rollback, errors);
+                RestoreFiles(rollback, errors);
+                RebindRestoredManifests(rollback, errors);
+                AssetDatabase.SaveAssets();
+                AssetDatabase.Refresh();
+                VerifyRollback(rollback, errors);
+            }
+            catch (Exception rollbackException) { errors.Add("Rollback failed: " + rollbackException.Message); }
+            if (errors.Count > 0)
+            {
+                var detail = string.Join(" / ", errors.ToArray());
+                try { RollbackFailureInjector?.Invoke(detail); }
+                catch (Exception injected) { detail = detail + " / Injected rollback failure: " + injected.Message; }
+                return new ModularAvatarIntegrationBatchResult(false, Array.Empty<ModularAvatarIntegrationResult>(), new[] { Error(FaceMotionDiagnosticCodes.ModularAvatarApply, "Rollback failed: " + detail) });
+            }
+            return new ModularAvatarIntegrationBatchResult(true, Array.Empty<ModularAvatarIntegrationResult>(), new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarApplied, "The previous Modular Avatar state was restored after reconciliation failed.") });
+        }
+
+        /// <summary>Deletes integration content that was created by the failed transaction but did not exist at capture time.</summary>
+        private static void RemoveLeakedContent(RollbackSnapshot rollback, List<string> errors)
+        {
+            var snapshotPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < rollback.Files.Count; i++) snapshotPaths.Add(rollback.Files[i].Path);
+            foreach (var manifest in FindManagedManifests(rollback.Avatar))
+            {
+                if (manifest == null) continue;
+                string manifestPath = AssetDatabase.GetAssetPath(manifest);
+                if (string.IsNullOrEmpty(manifestPath) || snapshotPaths.Contains(manifestPath)) continue;
+                try { RollbackCreated(manifest); }
+                catch (Exception exception) { errors.Add("Leaked integration cleanup failed for " + manifestPath + ": " + exception.Message); }
+            }
+        }
+
+        /// <summary>Recreates every generated folder that disappeared during the failed transaction.</summary>
+        private static void RestoreFolders(RollbackSnapshot rollback, List<string> errors)
+        {
+            for (var i = 0; i < rollback.Files.Count; i++)
+            {
+                var parent = Path.GetDirectoryName(rollback.Files[i].Path)?.Replace('\\', '/');
+                if (string.IsNullOrEmpty(parent)) continue;
+                try { EnsureAssetFolder(parent); }
+                catch (Exception exception) { errors.Add("Folder restore failed for " + parent + ": " + exception.Message); }
+            }
+        }
+
+        /// <summary>Restores exact bytes and .meta (and therefore GUIDs) for every file that pre-existed the transaction and drifted or disappeared.</summary>
+        private static void RestoreFiles(RollbackSnapshot rollback, List<string> errors)
+        {
+            for (var i = 0; i < rollback.Files.Count; i++)
+            {
+                var entry = rollback.Files[i];
+                if (!entry.ExistedBefore) continue;
+                try
+                {
+                    string full = AsFullPath(entry.Path);
+                    bool drifted = !File.Exists(full) || !ByteEquals(full, entry.Bytes) || entry.MetaBytes != null && (!File.Exists(full + ".meta") || !ByteEquals(full + ".meta", entry.MetaBytes));
+                    if (!drifted) continue;
+                    File.WriteAllBytes(full, entry.Bytes);
+                    if (entry.MetaBytes != null) File.WriteAllBytes(full + ".meta", entry.MetaBytes);
+                    AssetDatabase.ImportAsset(entry.Path, ImportAssetOptions.ForceUpdate);
+                }
+                catch (Exception exception) { errors.Add("File restore failed for " + entry.Path + ": " + exception.Message); }
+            }
+        }
+
+        /// <summary>Proves every pre-existing file and its .meta survived, and no leaked file remains.</summary>
+        private static void VerifyRollback(RollbackSnapshot rollback, List<string> errors)
+        {
+            for (var i = 0; i < rollback.Files.Count; i++)
+            {
+                var entry = rollback.Files[i];
+                string full = AsFullPath(entry.Path);
+                if (entry.ExistedBefore)
+                {
+                    if (!File.Exists(full)) { errors.Add("Rollback verification failed: missing " + entry.Path); continue; }
+                    if (!ByteEquals(full, entry.Bytes)) errors.Add("Rollback verification failed: content differs for " + entry.Path);
+                    if (entry.MetaBytes != null && (!File.Exists(full + ".meta") || !ByteEquals(full + ".meta", entry.MetaBytes))) errors.Add("Rollback verification failed: .meta differs for " + entry.Path);
+                }
+                else if (File.Exists(full) && rollback.IsCanonicalLeak(entry.Path)) errors.Add("Rollback verification failed: leaked file remains " + entry.Path);
+            }
+        }
+
+        private static void AddSnapshotFile(List<RollbackSnapshotEntry> files, HashSet<string> seen, string path, string root)
+        {
+            if (!seen.Add(path)) return;
+            files.Add(new RollbackSnapshotEntry(path, root, File.Exists(AsFullPath(path)) ? File.ReadAllBytes(AsFullPath(path)) : null, File.Exists(AsFullPath(path) + ".meta") ? File.ReadAllBytes(AsFullPath(path) + ".meta") : null));
+        }
+
+        /// <summary>After byte-level restore, references from the manifest back to scene objects (and node references back to restored assets) can fail to rebind automatically; re-establish them so ownership re-validates.</summary>
+        private static void RebindRestoredManifests(RollbackSnapshot rollback, List<string> errors)
+        {
+            if (rollback.Avatar == null) return;
+            var snapshotPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < rollback.Files.Count; i++) snapshotPaths.Add(rollback.Files[i].Path);
+            var guids = AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest");
+            for (var g = 0; g < guids.Length; g++)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[g]);
+                if (!snapshotPaths.Contains(path)) continue;
+                var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(path);
+                if (manifest == null) continue;
+                if (manifest.Avatar == null)
+                {
+                    manifest.Avatar = rollback.Avatar;
+                    EditorUtility.SetDirty(manifest);
+                }
+                if (manifest.Avatar != rollback.Avatar) continue;
+                var node = ResolveIntegrationObject(manifest, rollback.Avatar)
+                    ?? (string.IsNullOrEmpty(manifest.IntegrationObjectName) ? null : rollback.Avatar.transform.Find(manifest.IntegrationObjectName)?.gameObject);
+                if (node == null) continue;
+                var merge = node.GetComponent<ModularAvatarMergeAnimator>();
+                var installer = node.GetComponent<ModularAvatarMenuInstaller>();
+                var increments = false;
+                if (merge != null && merge.animator == null)
+                {
+                    var controller = LoadOwned<RuntimeAnimatorController>(manifest, "FX.controller");
+                    if (controller != null) { merge.animator = controller; increments = true; }
+                }
+                if (installer != null && installer.menuToAppend == null)
+                {
+                    var menu = LoadOwned<VRCExpressionsMenu>(manifest, "Menu.asset");
+                    if (menu != null) { installer.menuToAppend = menu; increments = true; }
+                }
+                if (increments) EditorUtility.SetDirty(node);
+            }
+        }
+
+        private static T LoadOwned<T>(ModularAvatarIntegrationManifest manifest, string fileName) where T : UnityEngine.Object
+        {
+            var owned = manifest.OwnedAssetPaths ?? Array.Empty<string>();
+            for (var i = 0; i < owned.Length; i++)
+                if (string.Equals(Path.GetFileName(owned[i]), fileName, StringComparison.Ordinal))
+                {
+                    var asset = AssetDatabase.LoadAssetAtPath<T>(owned[i]);
+                    if (asset != null) return asset;
+                }
+            return null;
+        }
+
+        private static void EnsureAssetFolder(string assetPath)
+        {
+            assetPath = assetPath.Replace('\\', '/');
+            if (AssetDatabase.IsValidFolder(assetPath)) return;
+            if (string.IsNullOrEmpty(assetPath) || !assetPath.StartsWith("Assets/", StringComparison.Ordinal) && assetPath != "Assets") throw new InvalidOperationException("Refusing to recreate folders outside Assets.");
+            var parent = Path.GetDirectoryName(assetPath)?.Replace('\\', '/');
+            var name = Path.GetFileName(assetPath);
+            if (string.IsNullOrEmpty(parent) || string.IsNullOrEmpty(name)) throw new InvalidOperationException("Invalid folder path: " + assetPath);
+            EnsureAssetFolder(parent);
+            if (string.IsNullOrEmpty(AssetDatabase.CreateFolder(parent, name))) throw new InvalidOperationException("Could not recreate folder " + assetPath);
+        }
+
+        private static bool ByteEquals(string path, byte[] expected)
+        {
+            if (expected == null || !File.Exists(path)) return false;
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (stream.Length != expected.Length) return false;
+                var buffer = new byte[expected.Length];
+                int offset = 0;
+                while (offset < expected.Length) { int read = stream.Read(buffer, offset, expected.Length - offset); if (read <= 0) return false; offset += read; }
+                for (var i = 0; i < expected.Length; i++) if (buffer[i] != expected[i]) return false;
+                return true;
+            }
+        }
+
+        private static string AsFullPath(string assetPath)
+        {
+            var normalized = (assetPath ?? string.Empty).Replace('\\', '/');
+            var relative = normalized.StartsWith("Assets/", StringComparison.Ordinal) ? normalized.Substring("Assets/".Length) : normalized;
+            return (Application.dataPath.Replace('\\', '/') + "/" + relative);
+        }
+
+        private sealed class RollbackSnapshotEntry
+        {
+            public RollbackSnapshotEntry(string path, string root, byte[] bytes, byte[] metaBytes) { Path = path; Root = root; Bytes = bytes; MetaBytes = metaBytes; ExistedBefore = bytes != null; }
+            public string Path { get; }
+            public string Root { get; }
+            public bool ExistedBefore { get; }
+            public byte[] Bytes { get; }
+            public byte[] MetaBytes { get; }
+        }
+
+        private sealed class RollbackSnapshot
+        {
+            public RollbackSnapshot(int undoGroup, VRCAvatarDescriptor avatar, List<RollbackSnapshotEntry> files, HashSet<string> existingRoots)
+            { UndoGroup = undoGroup; Avatar = avatar; Files = files; ExistingRoots = existingRoots; }
+            public int UndoGroup { get; }
+            public VRCAvatarDescriptor Avatar { get; }
+            public List<RollbackSnapshotEntry> Files { get; }
+            public HashSet<string> ExistingRoots { get; }
+            public bool IsCanonicalLeak(string path) { var name = Path.GetFileName(path); var dir = Path.GetDirectoryName(path)?.Replace('\\', '/'); return GeneratedAssetOwnership.IsCanonicalGeneratedFileName(name) && !ExistingRoots.Contains(dir); }
+        }
         internal static VRCAvatarDescriptor ResolveAvatar(ModularAvatarIntegrationManifest manifest) { if (manifest == null) return null; if (manifest.Avatar != null) return manifest.Avatar; return GlobalObjectId.TryParse(manifest.AvatarGlobalId, out var id) ? GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as VRCAvatarDescriptor : null; }
+
+        /// <summary>
+        /// Unsaved scenes cannot persist an asset-to-scene avatar reference or a resolvable global
+        /// ID. Only in that case, prove ownership from the direct child and every generated MA
+        /// component/asset recorded by the manifest. A resolved different avatar never falls back.
+        /// </summary>
+        private static bool BelongsToAvatar(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor avatar)
+        {
+            if (manifest == null || avatar == null)
+            {
+                return false;
+            }
+
+            VRCAvatarDescriptor resolved = ResolveAvatar(manifest);
+            if (resolved != null)
+            {
+                return resolved == avatar;
+            }
+
+            return HasSafeOwnedAssetPaths(manifest)
+                && ResolveIntegrationObject(manifest, avatar) != null;
+        }
+
+        private static bool HasSafeOwnedAssetPaths(ModularAvatarIntegrationManifest manifest)
+        {
+            string manifestPath = AssetDatabase.GetAssetPath(manifest);
+            string root = string.IsNullOrEmpty(manifestPath) ? null : Path.GetDirectoryName(manifestPath)?.Replace('\\', '/');
+            var owned = manifest.OwnedAssetPaths ?? Array.Empty<string>();
+            for (var i = 0; i < owned.Length; i++)
+            {
+                if (!GeneratedAssetOwnership.IsSafeOwnedAssetPath(owned[i], root)
+                    || !GeneratedAssetOwnership.IsCanonicalGeneratedFileName(Path.GetFileName(owned[i])))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
         internal static GameObject ResolveIntegrationObject(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor owner)
         {
             if (manifest == null || owner == null) return null;

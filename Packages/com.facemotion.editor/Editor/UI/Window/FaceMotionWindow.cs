@@ -9,11 +9,13 @@ using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Timeline;
 using FaceMotion.Editor.Preview;
+using FaceMotion.Editor.VRChat.Integration;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Unity.Profiling;
+using VRC.SDK3.Avatars.Components;
 
 namespace FaceMotion.Editor.UI.Window
 {
@@ -57,6 +59,8 @@ namespace FaceMotion.Editor.UI.Window
         private PreviewPlaybackController _playback;
         private PreviewEvaluationGate _previewGate;
         private bool _previewDrainScheduled;
+        private bool _integrationIndexRefreshScheduled;
+        private VRCAvatarDescriptor _integrationIndexRefreshAvatar;
 
         private ProjectPanel _projectPanel;
         private AvatarPanel _avatarPanel;
@@ -66,6 +70,7 @@ namespace FaceMotion.Editor.UI.Window
         private DiagnosticsPanel _diagnosticsPanel;
         private ExportPanel _exportPanel;
         private OneClickIntegrationPanel _integrationPanel;
+        private ModularAvatarManagedStateCache _managedStateCache;
         private PreviewPanel _previewPanel;
         private ShortcutHelpPanel _shortcutHelpPanel;
 
@@ -73,6 +78,8 @@ namespace FaceMotion.Editor.UI.Window
         private bool _draggingSplitter;
         private float _previewHeightRatio = DefaultPreviewHeightRatio;
         private bool _draggingPreviewSplitter;
+        internal const string AdvancedFoldoutKey = "FaceMotion.Window.v3.AdvancedFoldout";
+        private bool _advancedFoldout;
         private Vector2 _leftScrollPosition;
         private int _sessionChangedCount;
         private string _pendingAvatarGlobalObjectId;
@@ -80,6 +87,7 @@ namespace FaceMotion.Editor.UI.Window
         private int _pendingAvatarRestoreAttempts;
         private string _lastPreviewAnimationId;
         private readonly PreviewRepaintScheduler _previewRepaint = new PreviewRepaintScheduler();
+        private readonly PreviewRepaintScheduler _previewDeferredRepaint = new PreviewRepaintScheduler();
         private readonly PlaybackUpdateGate _playbackUpdateGate = new PlaybackUpdateGate();
         private static readonly ProfilerMarker WindowOnGuiMarker = new ProfilerMarker("FaceMotion.Window.OnGUI");
 
@@ -114,11 +122,13 @@ namespace FaceMotion.Editor.UI.Window
             _inspectorPanel = new KeyframeInspectorPanel(_session, _keys);
             _diagnosticsPanel = new DiagnosticsPanel(_session);
             _exportPanel = new ExportPanel(_session);
-            _integrationPanel = new OneClickIntegrationPanel(_session);
-            _previewPanel = new PreviewPanel(_session, _previewSession, _sceneApplySession, _playback);
+            _managedStateCache = new ModularAvatarManagedStateCache();
+            _integrationPanel = new OneClickIntegrationPanel(_session, _managedStateCache, ScheduleIntegrationIndexRefresh);
+            _previewPanel = new PreviewPanel(_session, _previewSession, _sceneApplySession, _playback, () => { _avatar.EnsureAvatarIndexCurrent(); });
             _shortcutHelpPanel = new ShortcutHelpPanel();
             _leftColumnRatio = Mathf.Clamp(EditorPrefs.GetFloat(LeftColumnRatioKey, DefaultLeftColumnRatio), 0.1f, MaximumLeftColumnRatio);
             _previewHeightRatio = Mathf.Clamp(EditorPrefs.GetFloat(PreviewHeightRatioKey, DefaultPreviewHeightRatio), 0.1f, MaximumPreviewHeightRatio);
+            _advancedFoldout = ReadAdvancedFoldoutPref();
             wantsMouseMove = true;
 
             RestoreSessionState();
@@ -138,7 +148,12 @@ namespace FaceMotion.Editor.UI.Window
         {
             EditorApplication.delayCall -= FlushPreviewRepaint;
             EditorApplication.delayCall -= DrainPendingPreviewEvaluation;
+            EditorApplication.update -= FlushDeferredPreviewRepaint;
+            EditorApplication.update -= FlushIntegrationIndexRefresh;
             _previewRepaint.Cancel();
+            _previewDeferredRepaint.Cancel();
+            _integrationIndexRefreshScheduled = false;
+            _integrationIndexRefreshAvatar = null;
             SetPlaybackUpdateActive(false);
             EditorApplication.hierarchyChanged -= OnHierarchyChanged;
             Undo.undoRedoPerformed -= OnUndoRedoPerformed;
@@ -309,7 +324,6 @@ namespace FaceMotion.Editor.UI.Window
         {
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent(FaceMotionUiText.Get("selectVrcAvatar")), false, _avatarPanel.ShowSceneSelector);
-            menu.AddItem(new GUIContent(FaceMotionUiText.Get("rebuildAvatarIndex")), false, _avatar.RebuildIndex);
             menu.ShowAsContext();
         }
 
@@ -330,16 +344,44 @@ namespace FaceMotion.Editor.UI.Window
             EditorGUILayout.Space();
             _trackListPanel.OnGUI();
             EditorGUILayout.Space();
-            _exportPanel.OnGUI();
-            EditorGUILayout.Space();
             _integrationPanel.OnGUI();
             EditorGUILayout.Space();
             _diagnosticsPanel.OnGUI();
             EditorGUILayout.Space();
+            bool advanced = EditorGUILayout.Foldout(_advancedFoldout, FaceMotionUiText.Get("advancedSettings"), true);
+            if (advanced != _advancedFoldout)
+            {
+                _advancedFoldout = advanced;
+                EditorPrefs.SetBool(AdvancedFoldoutKey, advanced);
+            }
+            if (_advancedFoldout)
+            {
+                _exportPanel.OnGUI();
+                EditorGUILayout.Space();
+                _integrationPanel.DrawAdvanced();
+                EditorGUILayout.Space();
+                DrawTroubleshooting();
+                EditorGUILayout.Space();
+            }
             _shortcutHelpPanel.OnGUI();
             EditorGUILayout.Space();
             GUILayout.EndScrollView();
             GUILayout.EndArea();
+        }
+
+        private void DrawTroubleshooting()
+        {
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("troubleshooting"), EditorStyles.boldLabel);
+            if (GUILayout.Button(FaceMotionUiText.Get("rebuildAvatarIndex")))
+            {
+                _avatar.RebuildIndex();
+            }
+        }
+
+        /// <summary>Reads the persisted advanced-foldout preference; defaults to collapsed.</summary>
+        internal static bool ReadAdvancedFoldoutPref()
+        {
+            return EditorPrefs.GetBool(AdvancedFoldoutKey, false);
         }
 
         private void DrawSplitter(Rect splitterRect, Rect hostRect)
@@ -596,6 +638,26 @@ namespace FaceMotion.Editor.UI.Window
             RestorePendingAvatar();
         }
 
+        /// <summary>Waits for Unity's hierarchy notification before refreshing an integration-mutated avatar index.</summary>
+        private void ScheduleIntegrationIndexRefresh(VRCAvatarDescriptor avatar)
+        {
+            if (avatar == null) return;
+            _integrationIndexRefreshAvatar = avatar;
+            if (_integrationIndexRefreshScheduled) return;
+            _integrationIndexRefreshScheduled = true;
+            EditorApplication.QueuePlayerLoopUpdate();
+            EditorApplication.update += FlushIntegrationIndexRefresh;
+        }
+
+        private void FlushIntegrationIndexRefresh()
+        {
+            EditorApplication.update -= FlushIntegrationIndexRefresh;
+            _integrationIndexRefreshScheduled = false;
+            var avatar = _integrationIndexRefreshAvatar;
+            _integrationIndexRefreshAvatar = null;
+            _avatar?.RefreshIndexAfterIntegration(avatar);
+        }
+
         private void OnUndoRedoPerformed()
         {
             _session?.RefreshAfterUndo();
@@ -706,7 +768,16 @@ namespace FaceMotion.Editor.UI.Window
             // every MouseDrag event requests the latest sample but only the final one evaluates.
             // Direct (non-drag) time changes still evaluate synchronously, one sample per change.
             _previewGate.Scrubbing = _session.ViewState.DragMode == TimelineDragMode.Scrub;
-            _previewGate.Synchronize(animation, _session.ViewState.CurrentTime);
+            _previewGate.Synchronize(animation, _session.ViewState.CurrentTime, _session.PreviewRevision);
+            float duration = _session.GetSelectedDuration();
+            bool endpoint = _previewGate.Scrubbing &&
+                (Mathf.Approximately(_session.ViewState.CurrentTime, 0f) ||
+                  Mathf.Approximately(_session.ViewState.CurrentTime, duration));
+            if (endpoint)
+            {
+                _previewGate.FlushPending(_session.PreviewRevision);
+                RequestPreviewRepaint();
+            }
             if (_previewGate.Pending && !_previewDrainScheduled)
             {
                 _previewDrainScheduled = true;
@@ -718,7 +789,7 @@ namespace FaceMotion.Editor.UI.Window
         private void DrainPendingPreviewEvaluation()
         {
             _previewDrainScheduled = false;
-            if (_previewGate != null && _previewGate.FlushPending())
+            if (_previewGate != null && _previewGate.FlushPending(_session == null ? 0 : _session.PreviewRevision))
             {
                 RequestPreviewRepaint();
             }
@@ -726,7 +797,7 @@ namespace FaceMotion.Editor.UI.Window
 
         private void OnScrubEnded()
         {
-            _previewGate?.EndScrub();
+            _previewGate?.EndScrub(_session == null ? 0 : _session.PreviewRevision);
             RequestPreviewRepaint();
         }
 
@@ -736,9 +807,36 @@ namespace FaceMotion.Editor.UI.Window
             {
                 _previewSession.EnsureAvatar(_session == null ? null : _session.ActiveAvatarRoot);
                 _previewSession.Evaluate(animation, time);
+                ScheduleDeferredPreviewRepaint();
             }
 
             _sceneApplySession?.Apply(animation, time);
+        }
+
+        /// <summary>
+        /// Skinned mesh deformation can become visible one editor tick after a preview mutation.
+        /// This repaint-only callback never evaluates animation data or changes the preview clone.
+        /// </summary>
+        private void ScheduleDeferredPreviewRepaint()
+        {
+            if (!_previewDeferredRepaint.Request())
+            {
+                return;
+            }
+
+            EditorApplication.QueuePlayerLoopUpdate();
+            EditorApplication.update += FlushDeferredPreviewRepaint;
+        }
+
+        private void FlushDeferredPreviewRepaint()
+        {
+            EditorApplication.update -= FlushDeferredPreviewRepaint;
+            if (!_previewDeferredRepaint.Dispatch() || _session == null)
+            {
+                return;
+            }
+
+            Repaint();
         }
 
         private void OnBeforeAssemblyReload()

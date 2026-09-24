@@ -67,6 +67,7 @@ namespace FaceMotion.Editor.UI.Session
         public AvatarMappingProfile ActiveMappingProfile { get; private set; }
 
         public int Version { get; private set; }
+        public int PreviewRevision { get; private set; }
 
         public event Action Changed;
 
@@ -111,6 +112,13 @@ namespace FaceMotion.Editor.UI.Session
             Changed?.Invoke();
         }
 
+        /// <summary>Use for data/target mutations that change the evaluated pose at a fixed time.</summary>
+        public void NotifyPoseChanged()
+        {
+            PreviewRevision++;
+            NotifyChanged();
+        }
+
         public void SetActiveProject(FaceMotionProject project, string assetPath)
         {
             ActiveProject = project;
@@ -124,7 +132,7 @@ namespace FaceMotion.Editor.UI.Session
             LastProjectValidation = null;
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
-            NotifyChanged();
+            NotifyPoseChanged();
         }
 
         public void ClearProject()
@@ -149,7 +157,7 @@ namespace FaceMotion.Editor.UI.Session
             AvatarIndexDirty = false;
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
-            NotifyChanged();
+            NotifyPoseChanged();
         }
 
         public void ClearAvatar()
@@ -163,13 +171,13 @@ namespace FaceMotion.Editor.UI.Session
             AvatarIndexDirty = false;
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
-            NotifyChanged();
+            NotifyPoseChanged();
         }
 
         public void SetMappingProfile(AvatarMappingProfile profile)
         {
             ActiveMappingProfile = profile;
-            NotifyChanged();
+            NotifyPoseChanged();
         }
 
         public void SetLastOperationDiagnostic(FaceMotionDiagnostic diagnostic)
@@ -234,7 +242,7 @@ namespace FaceMotion.Editor.UI.Session
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
             ValidateSelections();
-            NotifyChanged();
+            NotifyPoseChanged();
         }
 
         public void RecomputeBindingDiagnostics()
@@ -291,6 +299,14 @@ namespace FaceMotion.Editor.UI.Session
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
             NotifyChanged();
+        }
+
+        /// <summary>Refreshes after a project command that may change the evaluated pose.</summary>
+        public void RefreshPose()
+        {
+            RecomputeBindingDiagnostics();
+            RecomputeDiagnostics();
+            NotifyPoseChanged();
         }
 
         public bool TryGetTrackBinding(string trackId, out TrackBindingValidation validation)

@@ -1,3 +1,4 @@
+using System;
 using FaceMotion.Animation;
 using FaceMotion.Data;
 using FaceMotion.Editor.Diagnostics;
@@ -9,7 +10,11 @@ namespace FaceMotion.Editor.Preview
     /// <summary>Applies authored values using the canonical evaluator and no alternate curve math.</summary>
     public static class PreviewMotionApplier
     {
-        public static void Apply(FaceMotionAnimationData animation, PreviewObjectCache cache, PreviewBaseline baseline, float time)
+        public static void Apply(
+            FaceMotionAnimationData animation,
+            PreviewObjectCache cache,
+            PreviewBaseline baseline,
+            float time)
         {
             if (animation == null || animation.Timeline == null || cache == null || baseline == null)
             {
@@ -41,44 +46,46 @@ namespace FaceMotion.Editor.Preview
                 evaluatedBindingCount);
         }
 
-        private static bool ApplyTrack(FaceTrackData track, PreviewObjectCache cache, PreviewBaseline baseline, float time)
+        private static bool ApplyTrack(
+            FaceTrackData track,
+            PreviewObjectCache cache,
+            PreviewBaseline baseline,
+            float time)
         {
             if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
             {
                 var binding = new BlendShapeBinding(track.BlendShape.RendererPath, track.BlendShape.BlendShapeName);
-                if (cache.TryGetBlendShape(binding, out var renderer, out int index)
-                    && CanonicalMotionEvaluator.Instance.TryEvaluateFloat(track.BlendShape.Keys, time, out float value))
+                if (!cache.TryGetBlendShape(binding, out var renderer, out int index))
                 {
-                    baseline.Capture(renderer, index);
-                    renderer.SetBlendShapeWeight(index, value);
-                    float readBack = renderer.GetBlendShapeWeight(index);
-                    FaceMotionPreviewTrace.Trace(
-                        "F.ApplyBlendShape",
-                        "renderer={0} name={1} time={2} value={3} afterSet={4} event={5}",
-                        track.BlendShape.RendererPath,
-                        track.BlendShape.BlendShapeName,
-                        time,
-                        value,
-                        readBack,
-                        Event.current == null ? "<none>" : Event.current.type.ToString());
-                    return true;
-                }
-                else if (track.BlendShape != null)
-                {
-                    FaceMotionPreviewTrace.Trace(
-                        "F.ApplyBlendShape.Miss",
-                        "renderer={0} name={1} time={2} event={3}",
-                        track.BlendShape.RendererPath,
-                        track.BlendShape.BlendShapeName,
-                        time,
-                        Event.current == null ? "<none>" : Event.current.type.ToString());
+                    return false;
                 }
 
+                if (!CanonicalMotionEvaluator.Instance.TryEvaluateFloat(track.BlendShape.Keys, time, out float value))
+                {
+                    return false;
+                }
+
+                baseline.Capture(renderer, index);
+                renderer.SetBlendShapeWeight(index, value);
+                float readBack = renderer.GetBlendShapeWeight(index);
+                FaceMotionPreviewTrace.Trace(
+                    "F.ApplyBlendShape",
+                    "renderer={0} name={1} time={2} value={3} afterSet={4} event={5}",
+                    track.BlendShape.RendererPath,
+                    track.BlendShape.BlendShapeName,
+                    time,
+                    value,
+                    readBack,
+                    Event.current == null ? "<none>" : Event.current.type.ToString());
+                return true;
+            }
+
+            if (!TrackKinds.IsTransform(track.Kind) || track.Transform == null)
+            {
                 return false;
             }
 
-            if (!TrackKinds.IsTransform(track.Kind) || track.Transform == null
-                || !cache.TryGetTransform(track.Transform.TransformPath, out var transform))
+            if (!cache.TryGetTransform(track.Transform.TransformPath, out var transform))
             {
                 return false;
             }

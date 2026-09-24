@@ -87,6 +87,14 @@ namespace FaceMotion.Editor.Export
             return new AnimationClipExportValidation(diagnostics);
         }
 
+        /// <summary>Builds an unsaved clip for integration planning without touching the AssetDatabase.</summary>
+        public static AnimationClip CreatePreview(FaceMotionAnimationData animation)
+        {
+            var preview = new AnimationClip { name = animation == null ? "FaceMotion Preview" : animation.DisplayName };
+            Populate(preview, animation);
+            return preview;
+        }
+
         private static void Validate(FaceMotionAnimationData animation, string assetPath, List<FaceMotionDiagnostic> diagnostics)
         {
             if (animation == null || animation.Timeline == null)

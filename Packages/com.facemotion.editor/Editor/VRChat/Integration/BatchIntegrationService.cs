@@ -105,7 +105,7 @@ namespace FaceMotion.Editor.VRChat.Integration
 
             var ma = ModularAvatarIntegrationBackendLocator.Create();
             var requests = new List<ModularAvatarIntegrationRequest>();
-            for (int i = 0; i < items.Count; i++) requests.Add(new ModularAvatarIntegrationRequest(request.Avatar, items[i].Clip, request.OutputFolder, Stem(request, items[i].Animation)));
+            for (int i = 0; i < items.Count; i++) requests.Add(new ModularAvatarIntegrationRequest(request.Avatar, items[i].Clip, request.OutputFolder, Stem(request, items[i].Animation), items[i].Animation.AnimationId));
             var maPlan = ma.PlanBatch(requests);
             for (int i = 0; i < maPlan.Items.Count; i++) diagnostics.AddRange(maPlan.Items[i].Diagnostics);
             if (!maPlan.IsValid) return Result(BatchIntegrationStage.Validate, false, backend, items, diagnostics, null);

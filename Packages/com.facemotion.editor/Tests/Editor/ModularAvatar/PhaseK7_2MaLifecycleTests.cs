@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using FaceMotion.Data;
 using FaceMotion.Editor.ModularAvatar;
 using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Session;
@@ -124,6 +125,62 @@ namespace FaceMotion.Editor.Tests
 
             Assert.That(removal.Succeeded, Is.True);
             Assert.That(HasCode(removal.Diagnostics, "FM-H-MA-NOTHING-TO-REMOVE"), Is.True);
+        }
+
+        [Test]
+        public void UnsavedAvatarIdentityLoss_StillRecognizesAndRemovesStructurallyOwnedIntegration()
+        {
+            var backend = new ModularAvatarIntegrationBackend();
+            var applied = Apply(backend, "Smile");
+            var manifest = applied.Manifest as ModularAvatarIntegrationManifest;
+            string parameter = Parameter(backend, "Smile");
+            string manifestPath = AssetDatabase.GetAssetPath(manifest);
+            string controllerPath = manifest.OwnedAssetPaths[0];
+
+            SimulateUnsavedIdentityLoss(manifest);
+            ClearSessionManifests();
+
+            var inspected = backend.InspectManagedState(_avatar);
+            Assert.That(inspected.Items, Has.Exactly(1).Matches<ModularAvatarManagedState>(item => item.ParameterName == parameter));
+
+            var reconciled = VrchatDesiredStateReconciliationService.Execute(
+                new VrchatDesiredStateReconciliationRequest(_avatar, FaceMotionProject.CreateNew(), new string[0], Folder, backend));
+
+            Assert.That(reconciled.Succeeded, Is.True);
+            Assert.That(reconciled.Items, Has.Exactly(1).Matches<VrchatDesiredStateReconciliationItem>(item => item.Action == VrchatDesiredStateAction.Remove && item.ParameterName == parameter));
+            Assert.That(_root.transform.Find("FaceMotion MA Smile"), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(manifestPath), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(controllerPath), Is.Null);
+        }
+
+        [Test]
+        public void UnsavedAvatarIdentityLoss_NeverClaimsSameNamedForeignNodeUnderAnotherAvatar()
+        {
+            var backend = new ModularAvatarIntegrationBackend();
+            var applied = Apply(backend, "Smile");
+            var manifest = applied.Manifest as ModularAvatarIntegrationManifest;
+            string manifestPath = AssetDatabase.GetAssetPath(manifest);
+            string controllerPath = manifest.OwnedAssetPaths[0];
+            SimulateUnsavedIdentityLoss(manifest);
+            ClearSessionManifests();
+
+            var otherRoot = new GameObject("OtherAvatar");
+            var otherAvatar = otherRoot.AddComponent<VRCAvatarDescriptor>();
+            var foreign = new GameObject(manifest.IntegrationObjectName);
+            foreign.transform.SetParent(otherRoot.transform, false);
+            try
+            {
+                Assert.That(backend.InspectManagedState(otherAvatar).Items, Is.Empty);
+                Assert.That(backend.Remove(otherAvatar).Succeeded, Is.True);
+                Assert.That(foreign, Is.Not.Null);
+                Assert.That(_root.transform.Find(manifest.IntegrationObjectName), Is.Not.Null);
+                Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(manifestPath), Is.Not.Null);
+                Assert.That(AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(controllerPath), Is.Not.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(otherRoot);
+            }
         }
 
         [Test]
@@ -287,6 +344,15 @@ namespace FaceMotion.Editor.Tests
             ((IDictionary)field.GetValue(null)).Clear();
         }
 
+        private static void SimulateUnsavedIdentityLoss(ModularAvatarIntegrationManifest manifest)
+        {
+            manifest.Avatar = null;
+            manifest.AvatarGlobalId = "GlobalObjectId_V1-2-00000000000000000000000000000000-0-0";
+            manifest.IntegrationObjectGlobalId = "GlobalObjectId_V1-2-00000000000000000000000000000000-0-0";
+            EditorUtility.SetDirty(manifest);
+            AssetDatabase.SaveAssets();
+        }
+
         private sealed class CountingBackend : IModularAvatarIntegrationBackend
         {
             public int AllScans;
@@ -301,6 +367,8 @@ namespace FaceMotion.Editor.Tests
             public ModularAvatarIntegrationBatchResult RemoveAnimations(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters) => throw new System.NotImplementedException();
             public ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests) => throw new System.NotImplementedException();
             public ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan) => throw new System.NotImplementedException();
+            public ModularAvatarManagedStateSnapshot InspectManagedState(VRCAvatarDescriptor avatar) => throw new System.NotImplementedException();
+            public ModularAvatarManagedStateSnapshot ValidateRemovals(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters) => throw new System.NotImplementedException();
         }
     }
 }

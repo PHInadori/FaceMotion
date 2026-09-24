@@ -1,4 +1,3 @@
-using System.Reflection;
 using FaceMotion.Editor.UI.Guidance;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Panels;
@@ -19,8 +18,6 @@ namespace FaceMotion.Editor.Tests
     /// </summary>
     public sealed class J5UxPolishTests
     {
-        private const string AdvancedFoldoutKey = "FaceMotion.Window.v2.OneClickAdvancedFoldout";
-
         private static readonly string[] J5Keys =
         {
             "guidanceNextAction", "guidanceStepFormat", "guidanceHintAvatar", "guidanceHintAnimation",
@@ -172,26 +169,26 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void AdvancedFoldout_DefaultsClosed_AndPersistsOpening()
+        public void AdvancedFoldout_WindowOwned_DefaultsClosed_AndPersistsOpening()
         {
-            bool original = EditorPrefs.GetBool(AdvancedFoldoutKey, false);
+            bool original = FaceMotionWindow.ReadAdvancedFoldoutPref();
             try
             {
-                EditorPrefs.DeleteKey(AdvancedFoldoutKey);
-                Assert.That(ReadAdvancedFoldout(new OneClickIntegrationPanel(new FaceMotionEditorSession())), Is.False);
+                EditorPrefs.DeleteKey(FaceMotionWindow.AdvancedFoldoutKey);
+                Assert.That(FaceMotionWindow.ReadAdvancedFoldoutPref(), Is.False);
 
-                EditorPrefs.SetBool(AdvancedFoldoutKey, true);
-                Assert.That(ReadAdvancedFoldout(new OneClickIntegrationPanel(new FaceMotionEditorSession())), Is.True);
+                EditorPrefs.SetBool(FaceMotionWindow.AdvancedFoldoutKey, true);
+                Assert.That(FaceMotionWindow.ReadAdvancedFoldoutPref(), Is.True);
             }
             finally
             {
                 if (original)
                 {
-                    EditorPrefs.SetBool(AdvancedFoldoutKey, true);
+                    EditorPrefs.SetBool(FaceMotionWindow.AdvancedFoldoutKey, true);
                 }
                 else
                 {
-                    EditorPrefs.DeleteKey(AdvancedFoldoutKey);
+                    EditorPrefs.DeleteKey(FaceMotionWindow.AdvancedFoldoutKey);
                 }
             }
         }
@@ -232,14 +229,6 @@ namespace FaceMotion.Editor.Tests
         public void GuidanceStrip_HasPositiveReservedHeight()
         {
             Assert.That(FaceMotionWindow.GuidanceHeight, Is.GreaterThan(0f));
-        }
-
-        private static bool ReadAdvancedFoldout(OneClickIntegrationPanel panel)
-        {
-            FieldInfo field = typeof(OneClickIntegrationPanel)
-                .GetField("_advancedFoldout", BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.That(field, Is.Not.Null);
-            return (bool)field.GetValue(panel);
         }
     }
 }

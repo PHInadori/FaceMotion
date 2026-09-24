@@ -83,6 +83,22 @@ namespace FaceMotion.Editor.Avatar
             return report;
         }
 
+        /// <summary>
+        /// Checks whether a global hierarchy notification actually changed the selected avatar.
+        /// Preview clones raise the same notification, so they must not mark this cache stale.
+        /// </summary>
+        public bool MatchesCurrentHierarchy(GameObject root)
+        {
+            if (root == null || _index == null || HasDestroyedCachedObjects())
+            {
+                return false;
+            }
+
+            AvatarScanReport current = UnityAvatarScanner.Scan(root);
+            return current.Index != null
+                && _index.Fingerprint.EqualsValue(current.Index.Fingerprint);
+        }
+
         public void Clear()
         {
             _uniqueTransforms.Clear();
@@ -158,6 +174,27 @@ namespace FaceMotion.Editor.Avatar
                     }
                 }
             }
+        }
+
+        private bool HasDestroyedCachedObjects()
+        {
+            foreach (var pair in _uniqueTransforms)
+            {
+                if (pair.Value == null)
+                {
+                    return true;
+                }
+            }
+
+            foreach (var pair in _uniqueRenderers)
+            {
+                if (pair.Value == null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

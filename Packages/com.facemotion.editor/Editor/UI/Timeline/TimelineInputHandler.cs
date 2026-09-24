@@ -50,12 +50,36 @@ namespace FaceMotion.Editor.UI.Timeline
             TimelineLayoutSnapshot layout,
             bool textControlOwnsKeyboard)
         {
+            return HandleEvent(e, e == null ? EventType.Ignore : e.type, plotRect, layout, textControlOwnsKeyboard);
+        }
+
+        /// <summary>
+        /// Accepts the IMGUI event type selected by the owning control. TimelineView uses the
+        /// raw type while it owns hotControl, so an outside drag remains a timeline gesture.
+        /// </summary>
+        internal bool HandleEvent(
+            Event e,
+            EventType eventType,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout,
+            bool textControlOwnsKeyboard)
+        {
+            return HandleEventCore(e, eventType, plotRect, layout, textControlOwnsKeyboard);
+        }
+
+        private bool HandleEventCore(
+            Event e,
+            EventType eventType,
+            Rect plotRect,
+            TimelineLayoutSnapshot layout,
+            bool textControlOwnsKeyboard)
+        {
             if (e == null || layout == null)
             {
                 return false;
             }
 
-            switch (e.type)
+            switch (eventType)
             {
                 case EventType.MouseMove:
                     UpdateHover(
