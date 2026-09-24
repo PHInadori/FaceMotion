@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0] - 2026-09-25
+
+### Added / Improved
+
+- Redesigned the beginner-friendly VRChat integration workflow: select the animations to use and update VRChat with one button.
+- Removing all FaceMotion integrations is supported by unchecking all animations, and existing integrations are synchronized to the selected state.
+- Improved Modular Avatar ownership, cleanup, remove/re-add behavior, and unsaved-scene safety.
+- Added transactional rollback protection for Modular Avatar integration failures.
+- AvatarIndex refresh is handled automatically during normal integration and preview workflows.
+- Improved preview scrubbing responsiveness, including fast held scrubbing at timeline boundaries.
+- Improved visibility of the currently edited animation and grouped technical/manual operations under Advanced.
+- Improved animation export path defaults, duplicate-name handling, and Modular Avatar removal/reintegration lifecycle.
+
+### Compatibility
+
+- Unity 2022.3.22f1, VRChat SDK, and Modular Avatar are supported.
+- Existing v0.4.0 users can update normally.
+- No project schema or serialization schema change is required.
+
 ## [0.4.0] - 2026-09-21
 
 ### Added
