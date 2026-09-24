@@ -31,6 +31,11 @@ namespace FaceMotion.Editor.ModularAvatar
             return FindManifest(avatar) != null || FindRemovalCandidateManifest(avatar) != null;
         }
 
+        public bool HasExistingIntegration(VRCAvatarDescriptor avatar, string parameter)
+        {
+            return FindManifest(avatar, parameter) != null || FindRemovalCandidateManifest(avatar, parameter) != null;
+        }
+
         public ModularAvatarIntegrationPlan Plan(ModularAvatarIntegrationRequest request)
         {
             try
@@ -274,13 +279,64 @@ namespace FaceMotion.Editor.ModularAvatar
             }
         }
 
+        /// <summary>Removes every FaceMotion Modular Avatar integration (hierarchy, owned assets, manifest) from the avatar.</summary>
         public ModularAvatarIntegrationResult Remove(VRCAvatarDescriptor avatar)
         {
-            var manifest = FindManifest(avatar) ?? FindRemovalCandidateManifest(avatar);
-            if (manifest == null) return new ModularAvatarIntegrationResult(false, null, new[] { Error(FaceMotionDiagnosticCodes.ModularAvatarManifest, "No FaceMotion Modular Avatar manifest was found on this avatar.") });
-            return RemoveInternal(manifest, avatar, out var diagnostics) ? new ModularAvatarIntegrationResult(true, null, diagnostics) : new ModularAvatarIntegrationResult(false, manifest, diagnostics);
+            var parameters = new List<string>();
+            foreach (var manifest in FindManagedManifests(avatar))
+            {
+                if (!string.IsNullOrEmpty(manifest.ParameterName) && !parameters.Contains(manifest.ParameterName)) parameters.Add(manifest.ParameterName);
+            }
+            var batch = RemoveAnimations(avatar, parameters);
+            return new ModularAvatarIntegrationResult(batch.Succeeded, null, batch.Diagnostics);
         }
 
+        /// <summary>
+        /// Removes the FaceMotion Modular Avatar integration whose generated parameter matches.
+        /// Idempotent: an absent integration is a successful no-op, never an error, so re-adding
+        /// a different animation after a full removal never leaves a stale managed state.
+        /// </summary>
+        public ModularAvatarIntegrationResult RemoveAnimation(VRCAvatarDescriptor avatar, string parameter)
+        {
+            if (avatar == null || string.IsNullOrEmpty(parameter))
+            {
+                return new ModularAvatarIntegrationResult(true, null, new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarNothingToRemove, "No FaceMotion Modular Avatar integration matches the requested parameter.") });
+            }
+            var manifest = FindRemovalCandidateManifest(avatar, parameter);
+            if (manifest == null)
+            {
+                return new ModularAvatarIntegrationResult(true, null, new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarNothingToRemove, "No FaceMotion Modular Avatar integration matches the requested parameter.") });
+            }
+            if (!RemoveManaged(manifest, avatar, out var diagnostics))
+            {
+                return new ModularAvatarIntegrationResult(false, manifest, diagnostics);
+            }
+            return new ModularAvatarIntegrationResult(true, null, diagnostics);
+        }
+
+        /// <summary>Removes the FaceMotion Modular Avatar integrations for the given generated parameters. Idempotent per parameter.</summary>
+        public ModularAvatarIntegrationBatchResult RemoveAnimations(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters)
+        {
+            var results = new List<ModularAvatarIntegrationResult>();
+            var diagnostics = new List<FaceMotionDiagnostic>();
+            if (avatar == null || parameters == null || parameters.Count == 0)
+            {
+                var empty = new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarNothingToRemove, "No FaceMotion Modular Avatar integrations are selected for removal.") };
+                results.Add(new ModularAvatarIntegrationResult(true, null, empty));
+                return new ModularAvatarIntegrationBatchResult(true, results, empty);
+            }
+            var succeeded = true;
+            for (var i = 0; i < parameters.Count; i++)
+            {
+                var result = RemoveAnimation(avatar, parameters[i]);
+                results.Add(result);
+                for (var d = 0; d < result.Diagnostics.Count; d++) diagnostics.Add(result.Diagnostics[d]);
+                if (!result.Succeeded) succeeded = false;
+            }
+            return new ModularAvatarIntegrationBatchResult(succeeded, results, diagnostics);
+        }
+
+        /// <summary>Hierarchy-only removal used by Apply's replace-in-place path; Apply deletes the old assets and manifest itself so the folder is reused.</summary>
         private static bool RemoveInternal(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor owner, out IReadOnlyList<FaceMotionDiagnostic> diagnostics)
         {
             var items = new List<FaceMotionDiagnostic>();
@@ -289,9 +345,9 @@ namespace FaceMotion.Editor.ModularAvatar
             if (migration.Blocked) { diagnostics = items; return false; }
             owner = owner ?? ResolveAvatar(manifest);
             var integrationObject = ResolveIntegrationObject(manifest, owner);
-if (integrationObject == null)
+            if (integrationObject == null)
             {
-                items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "連携オブジェクトの所有権を確認できないため削除しませんでした。", "同じアバター直下のFaceMotion連携オブジェクトと生成アセットを確認してください。"));
+                items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "The integration object ownership could not be confirmed.", "Check the FaceMotion integration object and generated assets under the same avatar."));
                 diagnostics = items;
                 return false;
             }
@@ -301,7 +357,70 @@ if (integrationObject == null)
             Undo.SetCurrentGroupName("Remove FaceMotion Modular Avatar integration");
             Undo.DestroyObjectImmediate(integrationObject);
             if (owner != null) SessionManifests.Remove(owner);
-            Undo.CollapseUndoOperations(undoGroup); items.Add(Info(FaceMotionDiagnosticCodes.ModularAvatarRemoved, "FaceMotion-owned Modular Avatar hierarchy was removed. Generated assets and manifest were retained.")); diagnostics = items; return true;
+            Undo.CollapseUndoOperations(undoGroup);
+            items.Add(Info(FaceMotionDiagnosticCodes.ModularAvatarRemoved, "The FaceMotion Modular Avatar hierarchy was removed; generated assets were retained for reintegration."));
+            diagnostics = items;
+            return true;
+        }
+
+        /// <summary>All manifests attached to, or resolvable on, this avatar (session + persisted), deduplicated.</summary>
+        private static IReadOnlyList<ModularAvatarIntegrationManifest> FindManagedManifests(VRCAvatarDescriptor avatar)
+        {
+            var results = new List<ModularAvatarIntegrationManifest>();
+            if (avatar == null) return results;
+            var seen = new HashSet<ModularAvatarIntegrationManifest>();
+            if (SessionManifests.TryGetValue(avatar, out var session) && session != null && seen.Add(session)) results.Add(session);
+            foreach (var guid in AssetDatabase.FindAssets("t:ModularAvatarIntegrationManifest"))
+            {
+                var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid));
+                if (manifest != null && seen.Add(manifest) && (ResolveAvatar(manifest) == avatar || (!string.IsNullOrEmpty(manifest.IntegrationObjectName) && avatar.transform.Find(manifest.IntegrationObjectName) != null))) results.Add(manifest);
+            }
+            return results;
+        }
+
+        /// <summary>
+        /// Full user-facing removal of one integration: the owned hierarchy is destroyed and every
+        /// FaceMotion-generated asset plus the manifest are deleted. Deletion is confined to the
+        /// canonical generated file names listed in OwnedAssetPaths inside the manifest folder, and
+        /// the empty folder is removed afterwards. A foreign object holding the integration name
+        /// blocks removal so nothing beyond FaceMotion-owned files is ever touched.
+        /// </summary>
+        private static bool RemoveManaged(ModularAvatarIntegrationManifest manifest, VRCAvatarDescriptor owner, out IReadOnlyList<FaceMotionDiagnostic> diagnostics)
+        {
+            var items = new List<FaceMotionDiagnostic>();
+            if (manifest == null) { items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarManifest, "The Modular Avatar manifest is missing.")); diagnostics = items; return false; }
+            var migration = ModularAvatarIntegrationManifestMigration.TryMigrateOnUse(manifest, owner, items);
+            if (migration.Blocked) { diagnostics = items; return false; }
+            owner = owner ?? ResolveAvatar(manifest);
+            if (owner == null) { items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarAvatar, "The owning avatar could not be resolved from the manifest.")); diagnostics = items; return false; }
+            var integrationObject = ResolveIntegrationObject(manifest, owner);
+            if (integrationObject == null && !string.IsNullOrEmpty(manifest.IntegrationObjectName) && owner.transform.Find(manifest.IntegrationObjectName) != null)
+            {
+                items.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarOwnership, "An object with the FaceMotion integration name exists but is not owned by the manifest.", "Rename or remove that object before removing the FaceMotion integration."));
+                diagnostics = items;
+                return false;
+            }
+            var manifestPath = AssetDatabase.GetAssetPath(manifest);
+            var root = string.IsNullOrEmpty(manifestPath) ? null : Path.GetDirectoryName(manifestPath)?.Replace('\\', '/');
+            var owned = manifest.OwnedAssetPaths ?? Array.Empty<string>();
+
+            Undo.IncrementCurrentGroup();
+            var undoGroup = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Remove FaceMotion Modular Avatar integration");
+            if (integrationObject != null) Undo.DestroyObjectImmediate(integrationObject);
+            for (var i = 0; i < owned.Length; i++)
+                if (GeneratedAssetOwnership.IsSafeOwnedAssetPath(owned[i], root) && GeneratedAssetOwnership.IsCanonicalGeneratedFileName(Path.GetFileName(owned[i]))) AssetDatabase.DeleteAsset(owned[i]);
+            if (!string.IsNullOrEmpty(manifestPath)) AssetDatabase.DeleteAsset(manifestPath);
+            GeneratedAssetOwnership.TryDeleteEmptyOwnedFolder(root, owned);
+            AssetDatabase.SaveAssets();
+            if (owner != null) SessionManifests.Remove(owner);
+            var keys = new List<VRCAvatarDescriptor>(SessionManifests.Count);
+            foreach (var pair in SessionManifests) if (pair.Value == manifest) keys.Add(pair.Key);
+            for (var k = 0; k < keys.Count; k++) SessionManifests.Remove(keys[k]);
+            Undo.CollapseUndoOperations(undoGroup);
+            items.Add(Info(FaceMotionDiagnosticCodes.ModularAvatarRemoved, "The FaceMotion Modular Avatar integration, its generated assets, and its manifest were removed."));
+            diagnostics = items;
+            return true;
         }
 
         // Batch rollback deliberately differs from user-facing Remove: it deletes only assets and

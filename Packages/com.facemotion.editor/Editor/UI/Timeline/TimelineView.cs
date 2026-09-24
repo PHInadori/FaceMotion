@@ -22,11 +22,16 @@ namespace FaceMotion.Editor.UI.Timeline
         public float LabelWidth = TimelineGeometry.DefaultLabelWidth;
 
         public TimelineView(FaceMotionEditorSession session, KeyframeController keys, TrackController tracks)
+            : this(session, keys, tracks, null)
+        {
+        }
+
+        public TimelineView(FaceMotionEditorSession session, KeyframeController keys, TrackController tracks, Action scrubEnded)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _keys = keys ?? throw new ArgumentNullException(nameof(keys));
             _tracks = tracks ?? throw new ArgumentNullException(nameof(tracks));
-            _input = new TimelineInputHandler(_session, _keys, _tracks);
+            _input = new TimelineInputHandler(_session, _keys, _tracks, scrubEnded);
         }
 
         public TimelineInputHandler Input => _input;

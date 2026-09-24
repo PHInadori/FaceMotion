@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Reflection;
 using FaceMotion.Editor.VRChat.Integration;
@@ -334,7 +335,7 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void Remove_RetainsGeneratedAssetsAndUndoRestoresTheOwnedRoot()
+        public void Remove_DeletesGeneratedAssetsAndManifestAndUndoRestoresTheOwnedRoot()
         {
             Undo.ClearAll();
             var backend = new ModularAvatarIntegrationBackend();
@@ -343,9 +344,9 @@ namespace FaceMotion.Editor.Tests
 
             Assert.That(backend.Remove(_avatar).Succeeded, Is.True);
             Assert.That(_root.transform.Find("FaceMotion MA UndoRemove"), Is.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<Object>(manifest.OwnedAssetPaths[0]), Is.Not.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<Object>(manifest.OwnedAssetPaths[1]), Is.Not.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_UndoRemove/Manifest.asset"), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<Object>(manifest.OwnedAssetPaths[0]), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<Object>(manifest.OwnedAssetPaths[1]), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_UndoRemove/Manifest.asset"), Is.Null);
 
             Undo.PerformUndo();
 
@@ -404,12 +405,12 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void Remove_WithoutAManifestIsBlocked()
+        public void Remove_WithoutAnIntegrationIsAnIdempotentNoOpSuccess()
         {
             var result = new ModularAvatarIntegrationBackend().Remove(_avatar);
 
-            Assert.That(result.Succeeded, Is.False);
-            Assert.That(result.Diagnostics[0].Code, Is.EqualTo("FM-H-MA-MANIFEST"));
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(HasCode(result.Diagnostics, "FM-H-MA-NOTHING-TO-REMOVE"), Is.True);
         }
 
         private AnimatorController CreateControllerWithClip(string name, AnimationClip clip)
@@ -433,5 +434,13 @@ namespace FaceMotion.Editor.Tests
             field.SetValue(null, value);
         }
 
+        private static bool HasCode(IReadOnlyList<FaceMotion.Diagnostics.FaceMotionDiagnostic> diagnostics, string code)
+        {
+            for (int i = 0; i < diagnostics.Count; i++)
+            {
+                if (diagnostics[i].Code == code) return true;
+            }
+            return false;
+        }
     }
 }

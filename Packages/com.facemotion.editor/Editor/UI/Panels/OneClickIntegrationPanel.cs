@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using FaceMotion.Diagnostics;
 using FaceMotion.Data;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Localization;
@@ -22,6 +24,7 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly OneClickIntegrationController _controller;
         private readonly BatchIntegrationController _batchController;
         private readonly DirectVRChatIntegrationPanel _advanced;
+        private ModularAvatarIntegrationPresenceCache _maPresence;
         private bool _advancedFoldout;
 
         public OneClickIntegrationPanel(FaceMotionEditorSession session)
@@ -32,6 +35,8 @@ namespace FaceMotion.Editor.UI.Panels
             _advanced = new DirectVRChatIntegrationPanel(session);
             _advancedFoldout = EditorPrefs.GetBool(AdvancedFoldoutKey, false);
         }
+
+        private ModularAvatarIntegrationPresenceCache Presence => _maPresence ?? (_maPresence = new ModularAvatarIntegrationPresenceCache(_advanced.MaBackend, _session));
 
         public void OnGUI()
         {
@@ -75,6 +80,8 @@ namespace FaceMotion.Editor.UI.Panels
             }
             if (!ready) EditorGUILayout.HelpBox(count == 0 ? FaceMotionUiText.Get("batchSelectAnimations") : FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
 
+            if (ready) DrawBatchRemoval();
+
             var result = _batchController.LastResult;
             if (result == null) return;
             EditorGUILayout.LabelField(result.Succeeded ? FaceMotionUiText.Get("batchResultSucceeded") : FaceMotionUiText.Get("batchResultFailed"), EditorStyles.boldLabel);
@@ -88,6 +95,38 @@ namespace FaceMotion.Editor.UI.Panels
                 var diagnostic = result.Diagnostics[i];
                 if (diagnostic.Blocking) EditorGUILayout.HelpBox(DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic), MessageType.Error);
             }
+        }
+
+        private void DrawBatchRemoval()
+        {
+            var backend = _advanced.MaBackend;
+            if (backend == null) return;
+            var avatar = _session.ActiveAvatarRoot == null
+                ? null
+                : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
+            if (avatar == null || _session.ActiveProject == null || _session.BatchAnimationIds.Count == 0) return;
+
+            if (!GUILayout.Button(FaceMotionUiText.Get("removeModularAvatarIntegrationsBatch"))) return;
+
+            var parameters = new List<string>();
+            foreach (var id in _session.BatchAnimationIds)
+            {
+                if (!_session.ActiveProject.TryGetAnimation(id, out var animation) || animation == null) continue;
+                string parameter = OneClickIntegrationService.MaParameterName(
+                    new OneClickIntegrationRequest(avatar, animation, _session.ActiveProject, null));
+                if (!string.IsNullOrEmpty(parameter) && !parameters.Contains(parameter)) parameters.Add(parameter);
+            }
+            RemoveAndRefresh(backend.RemoveAnimations(avatar, parameters).Diagnostics);
+        }
+
+        private void RemoveAndRefresh(IReadOnlyList<FaceMotionDiagnostic> diagnostics)
+        {
+            if (diagnostics != null && diagnostics.Count > 0)
+            {
+                _session.SetLastOperationDiagnostic(diagnostics[diagnostics.Count - 1]);
+            }
+            _session.RecomputeDiagnostics();
+            _session.NotifyChanged();
         }
 
         private void DrawPreflight()
@@ -115,6 +154,27 @@ namespace FaceMotion.Editor.UI.Panels
                 {
                     RunOneClick();
                 }
+            }
+
+            DrawCurrentAnimationRemoval(preflight);
+        }
+
+        private void DrawCurrentAnimationRemoval(OneClickPreflight preflight)
+        {
+            if (preflight == null || preflight.BackendId != OneClickIntegrationService.ModularAvatarBackendId) return;
+            if (string.IsNullOrEmpty(preflight.ParameterName)) return;
+            var avatar = _session.ActiveAvatarRoot == null
+                ? null
+                : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
+            if (avatar == null) return;
+            var backend = _advanced.MaBackend;
+            if (backend == null || !Presence.HasExistingIntegration(avatar, preflight.ParameterName)) return;
+
+            if (GUILayout.Button(new GUIContent(
+                    FaceMotionUiText.Get("removeModularAvatarIntegrationForCurrent"),
+                    preflight.ParameterName)))
+            {
+                RemoveAndRefresh(backend.RemoveAnimation(avatar, preflight.ParameterName).Diagnostics);
             }
         }
 

@@ -61,9 +61,15 @@ namespace FaceMotion.Editor.VRChat.Integration
     public interface IModularAvatarIntegrationBackend
     {
         bool HasExistingIntegration(VRCAvatarDescriptor avatar);
+        bool HasExistingIntegration(VRCAvatarDescriptor avatar, string parameter);
         ModularAvatarIntegrationPlan Plan(ModularAvatarIntegrationRequest request);
         ModularAvatarIntegrationResult Apply(ModularAvatarIntegrationPlan plan);
+        /// <summary>Removes every FaceMotion Modular Avatar integration from the avatar (including its generated assets).</summary>
         ModularAvatarIntegrationResult Remove(VRCAvatarDescriptor avatar);
+        /// <summary>Removes the FaceMotion Modular Avatar integration whose generated parameter matches. Idempotent no-op when absent.</summary>
+        ModularAvatarIntegrationResult RemoveAnimation(VRCAvatarDescriptor avatar, string parameter);
+        /// <summary>Removes the FaceMotion Modular Avatar integrations for the given generated parameters. Idempotent per parameter.</summary>
+        ModularAvatarIntegrationBatchResult RemoveAnimations(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters);
         ModularAvatarIntegrationBatchPlan PlanBatch(IReadOnlyList<ModularAvatarIntegrationRequest> requests);
         ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan);
     }

@@ -16,7 +16,7 @@ namespace FaceMotion.Editor.Tests
     /// </summary>
     public sealed class DiagnosticsContractsTests
     {
-        private const int ExpectedCodeCount = 152;
+        private const int ExpectedCodeCount = 153;
 
         [Test]
         public void Codes_ConstantsMatchRegisteredKeys_NoDuplicates()
@@ -129,15 +129,15 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-                public void ActionLevel_InfoCodesResolveToInfo_ExactlyFourteen()
+                public void ActionLevel_InfoCodesResolveToInfo_ExactlyFifteen()
         {
             var infoCodes = FaceMotionDiagnosticDefinitionRegistry.All
                 .Where(pair => pair.Value.NonBlockingActionLevel == FaceMotionDiagnosticActionLevel.Info)
                 .Select(pair => pair.Key)
                 .ToArray();
 
-            Assert.That(infoCodes.Length, Is.EqualTo(14),
-                "Expected exactly fourteen Info codes, got: " + string.Join(",", infoCodes));
+            Assert.That(infoCodes.Length, Is.EqualTo(15),
+                "Expected exactly fifteen Info codes, got: " + string.Join(",", infoCodes));
 
             foreach (string code in infoCodes)
             {

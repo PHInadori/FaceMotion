@@ -100,8 +100,7 @@ namespace FaceMotion.Editor.VRChat.Integration
             var backend = ResolveBackend(request, diagnostics, out bool backendUsable);
             if (backendUsable) CheckCrossBackend(request, backend, diagnostics);
             string exportPath = ResolveExportPath(request, diagnostics);
-            string stem = BuildStem(request);
-            string parameter = "FaceMotion_" + stem;
+            string parameter = MaParameterName(request);
 
             if (!string.IsNullOrEmpty(exportPath))
             {
@@ -146,7 +145,7 @@ namespace FaceMotion.Editor.VRChat.Integration
             CheckForeignClip(request, exportPath, diagnostics);
             if (HasBlocking(diagnostics))
             {
-                return new OneClickIntegrationResult(OneClickStage.Export, false, null, BackendId(selectedBackend), "FaceMotion_" + BuildStem(request), exportPath, null, diagnostics);
+                return new OneClickIntegrationResult(OneClickStage.Export, false, null, BackendId(selectedBackend), MaParameterName(request), exportPath, null, diagnostics);
             }
 
             // Stage 1: Export.
@@ -155,7 +154,7 @@ namespace FaceMotion.Editor.VRChat.Integration
             for (int i = 0; i < exportResult.Diagnostics.Count; i++) diagnostics.Add(exportResult.Diagnostics[i]);
             if (!exportResult.Succeeded)
             {
-                return new OneClickIntegrationResult(OneClickStage.Export, false, null, BackendId(selectedBackend), "FaceMotion_" + BuildStem(request), exportPath, null, diagnostics);
+                return new OneClickIntegrationResult(OneClickStage.Export, false, null, BackendId(selectedBackend), MaParameterName(request), exportPath, null, diagnostics);
             }
 
             var clip = exportResult.Clip;
@@ -164,7 +163,7 @@ namespace FaceMotion.Editor.VRChat.Integration
 
             // Stage 2: Plan.
             progress?.Invoke(OneClickStage.Plan);
-            string parameterName = "FaceMotion_" + BuildStem(request);
+            string parameterName = MaParameterName(request);
             bool reapplied = selectedBackend == IntegrationBackendSelection.Direct
                 ? DirectVRChatIntegration.HasExistingIntegration(request.Avatar)
                 : ModularAvatarIntegrationBackendLocator.Create()?.HasExistingIntegration(request.Avatar) == true;
@@ -375,6 +374,15 @@ namespace FaceMotion.Editor.VRChat.Integration
             return char.IsControl(value)
                 || value == '<' || value == '>' || value == ':' || value == '"'
                 || value == '/' || value == '\\' || value == '|' || value == '?' || value == '*';
+        }
+
+        /// <summary>
+        /// The deterministic Modular Avatar parameter a one-click request produces.
+        /// Shared by preflight, execute, and the removal UI so they always agree.
+        /// </summary>
+        public static string MaParameterName(OneClickIntegrationRequest request)
+        {
+            return "FaceMotion_" + BuildStem(request);
         }
 
         internal static string BuildStem(OneClickIntegrationRequest request)

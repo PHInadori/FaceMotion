@@ -381,28 +381,28 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void Remove_RetainsGeneratedAssets()
+        public void Remove_DeletesGeneratedAssets()
         {
             Apply("Smile");
 
             var removal = new ModularAvatarIntegrationBackend().Remove(_avatar);
 
             Assert.That(removal.Succeeded, Is.True);
-            Assert.That(AssetDatabase.LoadAssetAtPath<AnimatorController>(Folder + "/FaceMotionMA_Smile/FX.controller"), Is.Not.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<VRCExpressionsMenu>(Folder + "/FaceMotionMA_Smile/Menu.asset"), Is.Not.Null);
-            Assert.That(AssetDatabase.LoadAssetAtPath<AnimationClip>(Folder + "/FaceMotionMA_Smile/Reset.anim"), Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<AnimatorController>(Folder + "/FaceMotionMA_Smile/FX.controller"), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<VRCExpressionsMenu>(Folder + "/FaceMotionMA_Smile/Menu.asset"), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<AnimationClip>(Folder + "/FaceMotionMA_Smile/Reset.anim"), Is.Null);
         }
 
         [Test]
-        public void Remove_RetainsManifest()
+        public void Remove_DeletesManifestAndHasExistingIntegrationIsFalse()
         {
             Apply("Smile");
             var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset");
+            Assert.That(manifest, Is.Not.Null);
 
             Assert.That(new ModularAvatarIntegrationBackend().Remove(_avatar).Succeeded, Is.True);
-            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset"), Is.Not.Null);
-            Assert.That(new ModularAvatarIntegrationBackend().HasExistingIntegration(_avatar), Is.True);
-            Assert.That(manifest, Is.Not.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset"), Is.Null);
+            Assert.That(new ModularAvatarIntegrationBackend().HasExistingIntegration(_avatar), Is.False);
         }
 
         [Test]

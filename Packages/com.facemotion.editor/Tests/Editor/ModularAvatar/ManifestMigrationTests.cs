@@ -103,7 +103,7 @@ namespace FaceMotion.Editor.Tests
         public void MaApply_LegacyDetachedManifestWithForeignObject_IsBlockedAmbiguous()
         {
             Assert.That(MaApply().Succeeded, Is.True);
-            Assert.That(new ModularAvatarIntegrationBackend().Remove(_avatar).Succeeded, Is.True);
+            Detach();
             var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset");
             SetLegacySchema(manifest);
             var foreign = new GameObject("FaceMotion MA Smile");
@@ -123,7 +123,7 @@ namespace FaceMotion.Editor.Tests
         public void MaApply_LegacyDetachedManifest_ReconnectsReusingAssetsAndCarriesFields()
         {
             Assert.That(MaApply().Succeeded, Is.True);
-            Assert.That(new ModularAvatarIntegrationBackend().Remove(_avatar).Succeeded, Is.True);
+            Detach();
             var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset");
             manifest.AnimationId = "ANIM-2";
             SetLegacySchema(manifest);
@@ -144,7 +144,7 @@ namespace FaceMotion.Editor.Tests
         public void MaApply_FutureSchemaManifest_IsBlockedWithoutMutation()
         {
             Assert.That(MaApply().Succeeded, Is.True);
-            Assert.That(new ModularAvatarIntegrationBackend().Remove(_avatar).Succeeded, Is.True);
+            Detach();
             var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset");
             manifest.SchemaVersion = FaceMotionVersions.IntegrationManifestVersion + 1;
 
@@ -195,18 +195,25 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void MaRemove_LegacyDetachedManifest_BlocksWithoutOwnedObject()
+        public void MaRemove_LegacyDetachedManifest_CleanupRemovesOwnedAssetsAndManifest()
         {
             Assert.That(MaApply().Succeeded, Is.True);
-            Assert.That(new ModularAvatarIntegrationBackend().Remove(_avatar).Succeeded, Is.True);
+            Detach();
             var manifest = AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset");
             SetLegacySchema(manifest);
 
             var removal = new ModularAvatarIntegrationBackend().Remove(_avatar);
 
-            Assert.That(removal.Succeeded, Is.False);
-            Assert.That(removal.Diagnostics, Has.Some.Matches<FaceMotionDiagnostic>(d => d.Code == "FM-H-MA-OWNERSHIP"));
-            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset"), Is.Not.Null);
+            Assert.That(removal.Succeeded, Is.True);
+            Assert.That(AssetDatabase.LoadAssetAtPath<ModularAvatarIntegrationManifest>(Folder + "/FaceMotionMA_Smile/Manifest.asset"), Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<AnimatorController>(Folder + "/FaceMotionMA_Smile/FX.controller"), Is.Null);
+        }
+
+        /// <summary>Simulates a user deleting the integration hierarchy so the manifest becomes detached.</summary>
+        private void Detach()
+        {
+            var node = _root.transform.Find("FaceMotion MA Smile");
+            if (node != null) Object.DestroyImmediate(node.gameObject);
         }
     }
 }

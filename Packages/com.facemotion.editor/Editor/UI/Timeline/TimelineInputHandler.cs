@@ -17,16 +17,19 @@ namespace FaceMotion.Editor.UI.Timeline
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
         private readonly TrackController _tracks;
+        private readonly Action _scrubEnded;
         private float _keyDragAnchorPixelX;
 
         public TimelineInputHandler(
             FaceMotionEditorSession session,
             KeyframeController keys,
-            TrackController tracks)
+            TrackController tracks,
+            Action scrubEnded = null)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _keys = keys ?? throw new ArgumentNullException(nameof(keys));
             _tracks = tracks ?? throw new ArgumentNullException(nameof(tracks));
+            _scrubEnded = scrubEnded;
         }
 
         public bool HandleEvent(
@@ -158,8 +161,11 @@ namespace FaceMotion.Editor.UI.Timeline
                             _keys.EndKeyDrag();
                         }
 
+                        bool scrubbed = _session.ViewState.DragMode ==
+                            TimelineDragMode.Scrub;
                         _session.ViewState.DragMode =
                             TimelineDragMode.None;
+                        if (scrubbed) _scrubEnded?.Invoke();
 
                         return true;
                     }

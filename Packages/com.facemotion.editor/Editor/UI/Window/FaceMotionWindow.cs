@@ -55,6 +55,8 @@ namespace FaceMotion.Editor.UI.Window
         private PreviewSession _previewSession;
         private SceneApplySession _sceneApplySession;
         private PreviewPlaybackController _playback;
+        private PreviewEvaluationGate _previewGate;
+        private bool _previewDrainScheduled;
 
         private ProjectPanel _projectPanel;
         private AvatarPanel _avatarPanel;
@@ -99,10 +101,11 @@ namespace FaceMotion.Editor.UI.Window
             _animations = new AnimationController(_session);
             _tracks = new TrackController(_session);
             _keys = new KeyframeController(_session);
-            _timelineView = new TimelineView(_session, _keys, _tracks);
+            _timelineView = new TimelineView(_session, _keys, _tracks, OnScrubEnded);
             _previewSession = new PreviewSession();
             _sceneApplySession = new SceneApplySession();
             _playback = new PreviewPlaybackController(_session);
+            _previewGate = new PreviewEvaluationGate(EvaluatePreviewAt);
 
             _projectPanel = new ProjectPanel(_session, _project);
             _avatarPanel = new AvatarPanel(_session, _avatar);
@@ -134,6 +137,7 @@ namespace FaceMotion.Editor.UI.Window
         private void OnDisable()
         {
             EditorApplication.delayCall -= FlushPreviewRepaint;
+            EditorApplication.delayCall -= DrainPendingPreviewEvaluation;
             _previewRepaint.Cancel();
             SetPlaybackUpdateActive(false);
             EditorApplication.hierarchyChanged -= OnHierarchyChanged;
@@ -692,13 +696,49 @@ namespace FaceMotion.Editor.UI.Window
                 _session.ViewState.CurrentTime,
                 _previewSession.IsActive,
                 _sceneApplySession != null && _sceneApplySession.IsActive);
-            if (_previewSession.IsActive)
+            bool active = _previewSession.IsActive || (_sceneApplySession != null && _sceneApplySession.IsActive);
+            if (!active || _previewGate == null)
             {
-                _previewSession.EnsureAvatar(_session.ActiveAvatarRoot);
-                _previewSession.Evaluate(animation, _session.ViewState.CurrentTime);
+                return;
             }
 
-            _sceneApplySession?.Apply(animation, _session.ViewState.CurrentTime);
+            // While the timeline is in an interactive scrub drag, synchronize through the gate:
+            // every MouseDrag event requests the latest sample but only the final one evaluates.
+            // Direct (non-drag) time changes still evaluate synchronously, one sample per change.
+            _previewGate.Scrubbing = _session.ViewState.DragMode == TimelineDragMode.Scrub;
+            _previewGate.Synchronize(animation, _session.ViewState.CurrentTime);
+            if (_previewGate.Pending && !_previewDrainScheduled)
+            {
+                _previewDrainScheduled = true;
+                EditorApplication.delayCall += DrainPendingPreviewEvaluation;
+            }
+        }
+
+        /// <summary>Flushes the latest coalesced scrub sample once, outside the drag gesture.</summary>
+        private void DrainPendingPreviewEvaluation()
+        {
+            _previewDrainScheduled = false;
+            if (_previewGate != null && _previewGate.FlushPending())
+            {
+                RequestPreviewRepaint();
+            }
+        }
+
+        private void OnScrubEnded()
+        {
+            _previewGate?.EndScrub();
+            RequestPreviewRepaint();
+        }
+
+        private void EvaluatePreviewAt(FaceMotionAnimationData animation, float time)
+        {
+            if (_previewSession != null && _previewSession.IsActive)
+            {
+                _previewSession.EnsureAvatar(_session == null ? null : _session.ActiveAvatarRoot);
+                _previewSession.Evaluate(animation, time);
+            }
+
+            _sceneApplySession?.Apply(animation, time);
         }
 
         private void OnBeforeAssemblyReload()

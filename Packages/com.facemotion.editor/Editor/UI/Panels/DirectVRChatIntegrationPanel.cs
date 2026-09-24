@@ -20,12 +20,30 @@ namespace FaceMotion.Editor.UI.Panels
         private OptionalIntegrationPlan _optionalPlan;
         private ModularAvatarIntegrationPlan _modularAvatarPlan;
         private IntegrationBackendSelection _backend;
+        private IModularAvatarIntegrationBackend _maBackend;
+        private ModularAvatarIntegrationPresenceCache _maPresence;
 
         public DirectVRChatIntegrationPanel(FaceMotionEditorSession session)
         {
             _session = session;
             _backend = IntegrationBackendSelectionStore.Load();
         }
+
+        /// <summary>
+        /// Lazily created once and cached: creating it resolves the MA assembly via reflection,
+        /// which must never run on a per-repaint path.
+        /// </summary>
+        internal IModularAvatarIntegrationBackend MaBackend
+        {
+            get
+            {
+                if (_backend != IntegrationBackendSelection.ModularAvatar) return null;
+                if (_maBackend == null) _maBackend = ModularAvatarIntegrationBackendLocator.Create();
+                return _maBackend;
+            }
+        }
+
+        private ModularAvatarIntegrationPresenceCache Presence => _maPresence ?? (_maPresence = new ModularAvatarIntegrationPresenceCache(MaBackend, _session));
 
         public void OnGUI()
         {
@@ -51,8 +69,7 @@ namespace FaceMotion.Editor.UI.Panels
             _clip = (AnimationClip)EditorGUILayout.ObjectField(FaceMotionUiText.Get("animationClip"), _clip, typeof(AnimationClip), false);
             _folder = EditorGUILayout.TextField(FaceMotionUiText.Get("outputFolder"), _folder);
             if (_backend == IntegrationBackendSelection.Direct) EditorGUILayout.HelpBox(FaceMotionUiText.Get("expressionBudgetPolicy"), MessageType.Info);
-            var maBackend = _backend == IntegrationBackendSelection.ModularAvatar ? ModularAvatarIntegrationBackendLocator.Create() : null;
-            bool showMaRemove = ShouldShowModularAvatarRemove(_backend, maBackend, avatar);
+            bool showMaRemove = _backend == IntegrationBackendSelection.ModularAvatar && avatar != null && MaBackend != null && Presence.HasExistingIntegration(avatar);
             if (GUILayout.Button(FaceMotionUiText.Get("planIntegration")))
             {
                 if (_backend == IntegrationBackendSelection.Direct)
@@ -63,11 +80,11 @@ namespace FaceMotion.Editor.UI.Panels
                 }
                 else
                 {
-                    if (maBackend == null) _optionalPlan = new ModularAvatarOptionalBackend().Plan();
+                    if (MaBackend == null) _optionalPlan = new ModularAvatarOptionalBackend().Plan();
                     else
                     {
                         string name = _session.GetSelectedAnimation() == null ? (_clip == null ? "FaceMotion" : _clip.name) : _session.GetSelectedAnimation().DisplayName;
-                        _modularAvatarPlan = maBackend.Plan(new ModularAvatarIntegrationRequest(avatar, _clip, _folder, name));
+                        _modularAvatarPlan = MaBackend.Plan(new ModularAvatarIntegrationRequest(avatar, _clip, _folder, name));
                         _optionalPlan = null;
                     }
                     _plan = null;
@@ -75,7 +92,7 @@ namespace FaceMotion.Editor.UI.Panels
             }
             if (showMaRemove)
             {
-                DrawModularAvatarRemove(maBackend, avatar);
+                DrawModularAvatarRemoval(MaBackend, avatar);
             }
             if (_optionalPlan != null)
             {
@@ -96,10 +113,10 @@ namespace FaceMotion.Editor.UI.Panels
                     var diagnostic = _modularAvatarPlan.Diagnostics[i];
                     EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), diagnostic.Blocking ? MessageType.Error : MessageType.Info);
                 }
-                using (new EditorGUI.DisabledScope(!_modularAvatarPlan.IsValid || maBackend == null))
+                using (new EditorGUI.DisabledScope(!_modularAvatarPlan.IsValid || MaBackend == null))
                     if (GUILayout.Button(FaceMotionUiText.Get("applyModularAvatarIntegration")))
                     {
-                        var result = maBackend.Apply(_modularAvatarPlan);
+                        var result = MaBackend.Apply(_modularAvatarPlan);
                         if (result.Diagnostics.Count > 0) _session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
                         _session.RecomputeDiagnostics(); _session.NotifyChanged();
                         if (result.Succeeded) Selection.activeObject = result.Manifest;
@@ -197,14 +214,24 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
-        private void DrawModularAvatarRemove(IModularAvatarIntegrationBackend maBackend, VRCAvatarDescriptor avatar)
+        private void DrawModularAvatarRemoval(IModularAvatarIntegrationBackend maBackend, VRCAvatarDescriptor avatar)
         {
-            if (!GUILayout.Button(FaceMotionUiText.Get("removeModularAvatarIntegration")))
+            if (_modularAvatarPlan != null
+                && !string.IsNullOrEmpty(_modularAvatarPlan.ParameterName)
+                && Presence.HasExistingIntegration(avatar, _modularAvatarPlan.ParameterName)
+                && GUILayout.Button(FaceMotionUiText.Get("removeModularAvatarIntegrationForCurrent")))
             {
-                return;
+                RemoveAndRefresh(maBackend.RemoveAnimation(avatar, _modularAvatarPlan.ParameterName));
             }
 
-            var result = maBackend.Remove(avatar);
+            if (GUILayout.Button(FaceMotionUiText.Get("removeAllModularAvatarIntegrations")))
+            {
+                RemoveAndRefresh(maBackend.Remove(avatar));
+            }
+        }
+
+        private void RemoveAndRefresh(ModularAvatarIntegrationResult result)
+        {
             if (result.Diagnostics.Count > 0) _session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
             _session.RecomputeDiagnostics();
             _session.NotifyChanged();

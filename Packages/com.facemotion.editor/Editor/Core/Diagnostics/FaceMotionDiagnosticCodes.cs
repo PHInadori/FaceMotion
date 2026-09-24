@@ -158,6 +158,7 @@ namespace FaceMotion.Diagnostics
         public const string ModularAvatarApply = "FM-H-MA-APPLY";
         public const string ModularAvatarOwnership = "FM-H-MA-OWNERSHIP";
         public const string ModularAvatarRemoved = "FM-H-MA-REMOVED";
+        public const string ModularAvatarNothingToRemove = "FM-H-MA-NOTHING-TO-REMOVE";
         public const string ModularAvatarParameterConflict = "FM-H-MA-PARAMETER-CONFLICT";
         public const string ModularAvatarBindingConflict = "FM-H-MA-BINDING-CONFLICT";
         public const string ModularAvatarCrossBindingConflict = "FM-H-MA-CROSS-BINDING-CONFLICT";

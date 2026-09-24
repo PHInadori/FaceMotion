@@ -333,18 +333,38 @@ namespace FaceMotion.Editor.UI.Localization
                 new DiagnosticLocalizedFields
                 {
                     Title = "Modular Avatar統合を削除しました",
-                    Summary = "Modular Avatar統合の適用結果を削除しました。",
+                    Summary = "Modular Avatar統合のヒエラルキーと生成アセット、マニフェストを削除しました。",
                     Cause = "削除操作が正常に完了しました。",
-                    Impact = "統合されたアセットが取り除かれました。",
+                    Impact = "FaceMotionが管理する統合ヒエラルキー・生成アセット・マニフェストが削除されました。外部アセットやユーザーファイルは保持されます。",
                     Resolution = "特に操作は不要です。",
                     Caution = ""
                 },
                 new DiagnosticLocalizedFields
                 {
                     Title = "Modular Avatar integration removed",
-                    Summary = "The applied Modular Avatar integration was removed.",
+                    Summary = "The Modular Avatar integration hierarchy, its generated assets, and its manifest were removed.",
                     Cause = "The removal operation completed successfully.",
-                    Impact = "The integrated assets were removed.",
+                    Impact = "FaceMotion-managed integration hierarchy, generated assets, and manifest were deleted. Foreign assets and user files are preserved.",
+                    Resolution = "No action is required.",
+                    Caution = ""
+                });
+
+            Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarNothingToRemove,
+                new DiagnosticLocalizedFields
+                {
+                    Title = "削除するModular Avatar統合がありません",
+                    Summary = "このアバターに対象のModular Avatar統合が見つからなかったため、削除しませんでした。",
+                    Cause = "対象の統合が既に適用されていない状態です。",
+                    Impact = "変更は行われていません。",
+                    Resolution = "特に操作は不要です。",
+                    Caution = ""
+                },
+                new DiagnosticLocalizedFields
+                {
+                    Title = "No Modular Avatar integration to remove",
+                    Summary = "No matching Modular Avatar integration was found on this avatar, so nothing was removed.",
+                    Cause = "The integration is not currently applied.",
+                    Impact = "No changes were made.",
                     Resolution = "No action is required.",
                     Caution = ""
                 });
