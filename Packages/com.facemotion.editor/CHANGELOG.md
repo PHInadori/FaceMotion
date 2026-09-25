@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.1] - 2026-09-26
+
+### Fixed / Improved
+
+- Fixed fresh-project Modular Avatar integration path handling and default output-root lifecycle.
+- Fixed exact non-loop playback endpoint evaluation and held-scrub responsiveness.
+- Improved beginner workflow guidance, hover preview responsiveness, and localized Preview control wrapping.
+- Fixed Shared FaceMotion BlendShape integration, including partner regeneration after add, remove, and re-add.
+- Improved foreign FX binding, desired-state, and preflight diagnostics.
+- Hidden true zero-effect BlendShapes from the candidate browser while preserving existing bindings.
+- Improved Transform target hierarchy presentation and adjusted Middle Mouse Preview pan direction.
+
+### Compatibility
+
+- Existing projects remain supported; no project, mapping, or integration schema change is required.
+
 ## [0.5.0] - 2026-09-25
 
 ### Added / Improved
