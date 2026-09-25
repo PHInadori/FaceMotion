@@ -1,6 +1,5 @@
 using System;
 using FaceMotion.Data;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.Preview;
 using FaceMotion.Editor.UI.Localization;
 using UnityEditor;
@@ -74,14 +73,6 @@ namespace FaceMotion.Editor.UI.Preview
             using (EvaluateMarker.Auto())
             {
             EvaluateCallCount++;
-            FaceMotionPreviewTrace.Trace(
-                "E.Evaluate",
-                "callCount={0} animationId={1} time={2} active={3} event={4}",
-                EvaluateCallCount,
-                animation == null ? "<null>" : animation.AnimationId,
-                time,
-                IsActive,
-                Event.current == null ? "<none>" : Event.current.type.ToString());
             if (IsActive)
             {
                 PreviewMotionApplier.Apply(animation, _cache, _baseline, time);
@@ -117,13 +108,11 @@ namespace FaceMotion.Editor.UI.Preview
             using (RenderMarker.Auto())
             {
             RenderCallCount++;
-            string eventType = Event.current == null ? "<none>" : Event.current.type.ToString();
             Texture texture = null;
             _renderer.camera.aspect = rect.width / Mathf.Max(1f, rect.height);
             _renderer.BeginPreview(rect, GUIStyle.none);
             try
             {
-                FaceMotionPreviewTrace.Trace("G.Render", "renderCall={0} event={1}", RenderCallCount, eventType);
                 _renderer.camera.Render();
             }
             finally
@@ -132,12 +121,6 @@ namespace FaceMotion.Editor.UI.Preview
             }
 
             GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit, false);
-            FaceMotionPreviewTrace.Trace(
-                "G.Draw",
-                "renderCall={0} event={1} textureId={2}",
-                RenderCallCount,
-                eventType,
-                texture == null ? 0 : texture.GetInstanceID());
             }
         }
 

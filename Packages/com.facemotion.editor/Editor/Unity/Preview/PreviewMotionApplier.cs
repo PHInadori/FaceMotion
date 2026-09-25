@@ -1,7 +1,6 @@
 using System;
 using FaceMotion.Animation;
 using FaceMotion.Data;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Timeline;
 using UnityEngine;
 
@@ -22,8 +21,6 @@ namespace FaceMotion.Editor.Preview
             }
 
             baseline.Restore();
-            int enabledTrackCount = 0;
-            int evaluatedBindingCount = 0;
             foreach (var track in animation.Timeline.Tracks)
             {
                 if (track == null || !track.Enabled)
@@ -31,19 +28,8 @@ namespace FaceMotion.Editor.Preview
                     continue;
                 }
 
-                enabledTrackCount++;
-                if (ApplyTrack(track, cache, baseline, time))
-                {
-                    evaluatedBindingCount++;
-                }
+                ApplyTrack(track, cache, baseline, time);
             }
-
-            FaceMotionPreviewTrace.Trace(
-                "E.ApplySummary",
-                "time={0} enabledTracks={1} evaluatedBindings={2}",
-                time,
-                enabledTrackCount,
-                evaluatedBindingCount);
         }
 
         private static bool ApplyTrack(
@@ -67,16 +53,6 @@ namespace FaceMotion.Editor.Preview
 
                 baseline.Capture(renderer, index);
                 renderer.SetBlendShapeWeight(index, value);
-                float readBack = renderer.GetBlendShapeWeight(index);
-                FaceMotionPreviewTrace.Trace(
-                    "F.ApplyBlendShape",
-                    "renderer={0} name={1} time={2} value={3} afterSet={4} event={5}",
-                    track.BlendShape.RendererPath,
-                    track.BlendShape.BlendShapeName,
-                    time,
-                    value,
-                    readBack,
-                    Event.current == null ? "<none>" : Event.current.type.ToString());
                 return true;
             }
 

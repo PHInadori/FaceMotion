@@ -1,6 +1,5 @@
 using System;
 using FaceMotion.Data;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Guidance;
 using FaceMotion.Editor.UI.Panels;
@@ -31,6 +30,7 @@ namespace FaceMotion.Editor.UI.Window
         private const float ToolbarHeight = 22f;
         internal const float GuidanceHeight = 26f;
         internal const float MinimumWindowWidth = 900f;
+        internal const float ToolbarHorizontalPadding = 8f;
         internal const float MinimumWindowHeight = 700f;
         internal const float MinimumLeftColumnWidth = 320f;
         internal const float MaximumLeftColumnRatio = 0.4f;
@@ -81,7 +81,6 @@ namespace FaceMotion.Editor.UI.Window
         internal const string AdvancedFoldoutKey = "FaceMotion.Window.v3.AdvancedFoldout";
         private bool _advancedFoldout;
         private Vector2 _leftScrollPosition;
-        private int _sessionChangedCount;
         private string _pendingAvatarGlobalObjectId;
         private string _pendingAvatarScenePath;
         private int _pendingAvatarRestoreAttempts;
@@ -118,7 +117,7 @@ namespace FaceMotion.Editor.UI.Window
             _projectPanel = new ProjectPanel(_session, _project);
             _avatarPanel = new AvatarPanel(_session, _avatar);
             _animationListPanel = new AnimationListPanel(_session, _animations);
-            _trackListPanel = new TrackListPanel(_session, _tracks, _previewSession.Override, RequestPreviewRepaint);
+            _trackListPanel = new TrackListPanel(_session, _tracks, _previewSession.Override, RequestHoverPreviewRepaint);
             _inspectorPanel = new KeyframeInspectorPanel(_session, _keys);
             _diagnosticsPanel = new DiagnosticsPanel(_session);
             _exportPanel = new ExportPanel(_session);
@@ -192,19 +191,6 @@ namespace FaceMotion.Editor.UI.Window
             using (WindowOnGuiMarker.Auto())
             {
 
-            Event current = Event.current;
-            if (current != null && (current.type == EventType.MouseDown || current.type == EventType.MouseDrag
-                || current.type == EventType.MouseUp || current.type == EventType.Layout || current.type == EventType.Repaint))
-            {
-                FaceMotionPreviewTrace.Trace(
-                    "W.OnGUI",
-                    "window={0} event={1} focused={2} pending={3}",
-                    GetInstanceID(),
-                    current.type,
-                    hasFocus,
-                    _previewRepaint.Pending);
-            }
-
             GUILayout.BeginArea(new Rect(0f, 0f, position.width, ToolbarHeight));
             DrawToolbar();
             GUILayout.EndArea();
@@ -243,45 +229,124 @@ namespace FaceMotion.Editor.UI.Window
             return Mathf.Clamp(usableHeight * Mathf.Clamp01(ratio), minHeight, maxHeight);
         }
 
+        private static readonly float[] ToolbarMinimumWidths = { 54f, 70f, 48f, 42f, 54f, 54f };
+        private static readonly float[] GuidanceMinimumWidths = { 52f, 88f, 40f, 40f };
+
+        /// <summary>
+        /// Distributes toolbar/guidance element widths across the available space. Each element
+        /// keeps its preferred (localization-aware) width when there is room, falls back to its
+        /// per-item minimum when space is tight, and shrinks proportionally only when even the
+        /// minimums cannot fit, so Japanese labels are never clipped by English-era constants.
+        /// </summary>
+        internal static float[] CalculateToolbarWidths(float[] preferredWidths, float[] minimumWidths, float availableWidth)
+        {
+            if (preferredWidths == null || preferredWidths.Length == 0)
+            {
+                return new float[0];
+            }
+
+            if (minimumWidths == null || minimumWidths.Length != preferredWidths.Length)
+            {
+                throw new System.ArgumentException("minimumWidths must match preferredWidths", nameof(minimumWidths));
+            }
+
+            var widths = new float[preferredWidths.Length];
+            float available = Mathf.Max(0f, availableWidth);
+            float preferredSum = 0f;
+            float minimumSum = 0f;
+            for (int i = 0; i < widths.Length; i++)
+            {
+                float minimum = Mathf.Max(0f, minimumWidths[i]);
+                widths[i] = Mathf.Max(minimum, Mathf.Max(0f, preferredWidths[i]));
+                preferredSum += widths[i];
+                minimumSum += minimum;
+            }
+
+            if (preferredSum <= available || preferredSum <= 0f)
+            {
+                return widths;
+            }
+
+            if (available >= minimumSum)
+            {
+                float remainder = available - minimumSum;
+                for (int i = 0; i < widths.Length; i++)
+                {
+                    float minimum = Mathf.Max(0f, minimumWidths[i]);
+                    widths[i] = minimum + remainder * (widths[i] / preferredSum);
+                }
+
+                return widths;
+            }
+
+            for (int i = 0; i < widths.Length; i++)
+            {
+                widths[i] = available * (widths[i] / preferredSum);
+            }
+
+            return widths;
+        }
+
         private void DrawToolbar()
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+            var file = new GUIContent(FaceMotionUiText.Get("file"), FaceMotionUiText.Get("fileTooltip"));
+            var avatar = new GUIContent(FaceMotionUiText.Get("avatar"), FaceMotionUiText.Get("avatarTooltip"));
+            var play = new GUIContent(
+                _session.ViewState.IsPlaying ? FaceMotionUiText.Get("pause") : FaceMotionUiText.Get("play"),
+                FaceMotionUiText.Get("playTooltip"));
+            var fit = new GUIContent(FaceMotionUiText.Get("fit"), FaceMotionUiText.Get("fitTooltip"));
+            var zoomOut = new GUIContent(FaceMotionUiText.Get("zoomOutLabel"), FaceMotionUiText.Get("zoomOut"));
+            var zoomIn = new GUIContent(FaceMotionUiText.Get("zoomInLabel"), FaceMotionUiText.Get("zoomIn"));
+            float[] widths = CalculateToolbarWidths(
+                new[]
+                {
+                    EditorStyles.toolbarDropDown.CalcSize(file).x,
+                    EditorStyles.toolbarDropDown.CalcSize(avatar).x,
+                    EditorStyles.toolbarButton.CalcSize(play).x,
+                    EditorStyles.toolbarButton.CalcSize(fit).x,
+                    EditorStyles.toolbarButton.CalcSize(zoomOut).x,
+                    EditorStyles.toolbarButton.CalcSize(zoomIn).x,
+                },
+                ToolbarMinimumWidths,
+                Mathf.Max(0f, position.width - ToolbarHorizontalPadding));
+
             if (EditorGUILayout.DropdownButton(
-                new GUIContent(FaceMotionUiText.Get("file"), FaceMotionUiText.Get("fileTooltip")),
+                file,
                 FocusType.Passive,
                 EditorStyles.toolbarDropDown,
-                GUILayout.Width(54f)))
+                GUILayout.Width(widths[0])))
             {
                 ShowFileMenu();
             }
 
             if (EditorGUILayout.DropdownButton(
-                new GUIContent(FaceMotionUiText.Get("avatar"), FaceMotionUiText.Get("avatarTooltip")),
+                avatar,
                 FocusType.Passive,
                 EditorStyles.toolbarDropDown,
-                GUILayout.Width(70f)))
+                GUILayout.Width(widths[1])))
             {
                 ShowAvatarMenu();
             }
 
             GUILayout.FlexibleSpace();
 
-            if (GUILayout.Button(new GUIContent(_session.ViewState.IsPlaying ? FaceMotionUiText.Get("pause") : FaceMotionUiText.Get("play"), FaceMotionUiText.Get("playTooltip")), EditorStyles.toolbarButton, GUILayout.Width(48f)))
+            if (GUILayout.Button(play, EditorStyles.toolbarButton, GUILayout.Width(widths[2])))
             {
                 TogglePlayback();
             }
 
-            if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("fit"), FaceMotionUiText.Get("fitTooltip")), EditorStyles.toolbarButton, GUILayout.Width(42f)))
+            if (GUILayout.Button(fit, EditorStyles.toolbarButton, GUILayout.Width(widths[3])))
             {
                 FitTimeline();
             }
 
-            if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("zoomOutLabel"), FaceMotionUiText.Get("zoomOut")), EditorStyles.toolbarButton, GUILayout.Width(54f)))
+            if (GUILayout.Button(zoomOut, EditorStyles.toolbarButton, GUILayout.Width(widths[4])))
             {
                 StepZoom(-1);
             }
 
-            if (GUILayout.Button(new GUIContent(FaceMotionUiText.Get("zoomInLabel"), FaceMotionUiText.Get("zoomIn")), EditorStyles.toolbarButton, GUILayout.Width(54f)))
+            if (GUILayout.Button(zoomIn, EditorStyles.toolbarButton, GUILayout.Width(widths[5])))
             {
                 StepZoom(+1);
             }
@@ -291,18 +356,42 @@ namespace FaceMotion.Editor.UI.Window
 
         private void DrawGuidance()
         {
-            FaceMotionGuidanceModel model = FaceMotionWorkflowHintService.Evaluate(_session);
+            FaceMotionGuidanceModel model = FaceMotionWorkflowHintService.Evaluate(_session, _previewSession != null && _previewSession.IsActive);
             string step = string.Format(FaceMotionUiText.Get("guidanceStepFormat"), model.StepNumber);
             string hint = FaceMotionUiText.Get(model.HintKey);
             GUILayout.BeginArea(new Rect(0f, ToolbarHeight, position.width, GuidanceHeight));
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            GUILayout.Label(step, EditorStyles.miniBoldLabel, GUILayout.Width(52f));
-            GUILayout.Label(FaceMotionUiText.Get("guidanceNextAction"), EditorStyles.miniLabel, GUILayout.Width(88f));
-            GUILayout.Label(hint, EditorStyles.boldLabel);
-            GUILayout.FlexibleSpace();
-            if (model.IsComplete)
+            var stepContent = new GUIContent(step);
+            var nextContent = new GUIContent(FaceMotionUiText.Get("guidanceNextAction"));
+            var hintContent = new GUIContent(hint);
+            bool complete = model.IsComplete;
+            var badgeContent = complete ? new GUIContent(FaceMotionUiText.Get("guidanceCompleteBadge")) : null;
+            int count = complete ? 4 : 3;
+            var preferred = new float[count];
+            var minimums = new float[count];
+            preferred[0] = EditorStyles.miniBoldLabel.CalcSize(stepContent).x;
+            minimums[0] = GuidanceMinimumWidths[0];
+            preferred[1] = EditorStyles.miniLabel.CalcSize(nextContent).x;
+            minimums[1] = GuidanceMinimumWidths[1];
+            preferred[2] = EditorStyles.boldLabel.CalcSize(hintContent).x;
+            minimums[2] = GuidanceMinimumWidths[2];
+            if (complete)
             {
-                GUILayout.Label(FaceMotionUiText.Get("guidanceCompleteBadge"), EditorStyles.miniBoldLabel, GUILayout.Width(40f));
+                preferred[3] = EditorStyles.miniBoldLabel.CalcSize(badgeContent).x;
+                minimums[3] = GuidanceMinimumWidths[3];
+            }
+
+            float[] widths = CalculateToolbarWidths(
+                preferred,
+                minimums,
+                Mathf.Max(0f, position.width - ToolbarHorizontalPadding));
+            GUILayout.Label(stepContent, EditorStyles.miniBoldLabel, GUILayout.Width(widths[0]));
+            GUILayout.Label(nextContent, EditorStyles.miniLabel, GUILayout.Width(widths[1]));
+            GUILayout.Label(hintContent, EditorStyles.boldLabel, GUILayout.Width(widths[2]));
+            GUILayout.FlexibleSpace();
+            if (complete)
+            {
+                GUILayout.Label(badgeContent, EditorStyles.miniBoldLabel, GUILayout.Width(widths[3]));
             }
 
             EditorGUILayout.EndHorizontal();
@@ -676,14 +765,6 @@ namespace FaceMotion.Editor.UI.Window
                 _previewSession?.Override.Clear();
             }
 
-            _sessionChangedCount++;
-            FaceMotionPreviewTrace.Trace(
-                "C.OnSessionChanged",
-                "window={0} count={1} time={2} event={3}",
-                GetInstanceID(),
-                _sessionChangedCount,
-                _session.ViewState.CurrentTime,
-                Event.current == null ? "<none>" : Event.current.type.ToString());
             SynchronizePreviewFromSession();
             SetPlaybackUpdateActive(_playback != null && _playback.IsPlaying);
             RequestPreviewRepaint();
@@ -706,17 +787,30 @@ namespace FaceMotion.Editor.UI.Window
             }
         }
 
+        /// <summary>
+        /// Requests a repaint for a preview-override (hover) change. Changes that land
+        /// during the Repaint pass are consumed and rendered in that same pass — the left
+        /// column hover handling runs before the right column preview — so scheduling
+        /// another repaint would render the already-current state a second time.
+        /// </summary>
+        private void RequestHoverPreviewRepaint()
+        {
+            if (!ShouldScheduleHoverRepaint(Event.current))
+            {
+                return;
+            }
+
+            RequestPreviewRepaint();
+        }
+
+        internal static bool ShouldScheduleHoverRepaint(Event current)
+        {
+            return current == null || current.type != EventType.Repaint;
+        }
+
         private void RequestPreviewRepaint()
         {
             bool scheduled = _previewRepaint.Request();
-            FaceMotionPreviewTrace.Trace(
-                "R.Request",
-                "window={0} requestCount={1} scheduled={2} pending={3} event={4}",
-                GetInstanceID(),
-                _previewRepaint.RequestCount,
-                scheduled,
-                _previewRepaint.Pending,
-                Event.current == null ? "<none>" : Event.current.type.ToString());
             if (!scheduled)
             {
                 return;
@@ -733,12 +827,6 @@ namespace FaceMotion.Editor.UI.Window
                 return;
             }
 
-            FaceMotionPreviewTrace.Trace(
-                "R.Dispatch",
-                "window={0} dispatchCount={1} event={2}",
-                GetInstanceID(),
-                _previewRepaint.DispatchCount,
-                Event.current == null ? "<none>" : Event.current.type.ToString());
             Repaint();
         }
 
@@ -751,13 +839,6 @@ namespace FaceMotion.Editor.UI.Window
             }
 
             var animation = _session.GetSelectedAnimation();
-            FaceMotionPreviewTrace.Trace(
-                "D.Synchronize",
-                "animationId={0} time={1} previewActive={2} sceneApplyActive={3}",
-                animation == null ? "<null>" : animation.AnimationId,
-                _session.ViewState.CurrentTime,
-                _previewSession.IsActive,
-                _sceneApplySession != null && _sceneApplySession.IsActive);
             bool active = _previewSession.IsActive || (_sceneApplySession != null && _sceneApplySession.IsActive);
             if (!active || _previewGate == null)
             {

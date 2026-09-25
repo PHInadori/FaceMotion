@@ -333,6 +333,27 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void DesiredResult_DeduplicatesIdenticalBlockingDetails()
+        {
+            var duplicate = new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.BatchPreflightFailed,
+                FaceMotionDiagnosticSeverity.Error,
+                "The exact root cause.",
+                "ma-desired-state",
+                true,
+                string.Empty);
+
+            DesiredStateResultPresentation presentation = DesiredStateResultPresenter.Build(Result(
+                VrchatDesiredStateReconciliationOutcome.PreflightFailed,
+                false,
+                duplicate,
+                duplicate));
+
+            Assert.That(presentation.TechnicalDetails, Has.Count.EqualTo(1));
+            Assert.That(presentation.TechnicalDetails[0], Does.Contain("[FM-K2-PREFLIGHT-FAILED]"));
+        }
+
+        [Test]
         public void AdvancedFoldout_IsOwnedByTheWindow_NotNestedInIntegrationPanel()
         {
             Assert.That(FaceMotionWindow.AdvancedFoldoutKey, Is.EqualTo("FaceMotion.Window.v3.AdvancedFoldout"));
@@ -366,9 +387,12 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void ReadyHint_PointsToTheReflectSection()
+        public void ReadyHint_PointsToTheRealUpdateButton()
         {
-            Assert.That(FaceMotionUiText.Get(FaceMotionWorkflowHintService.HintPreviewAndIntegrate), Does.Contain("反映"));
+            string japanese = FaceMotionUiText.Get(FaceMotionWorkflowHintService.HintPreviewAndIntegrate, SystemLanguage.Japanese);
+            string english = FaceMotionUiText.Get(FaceMotionWorkflowHintService.HintPreviewAndIntegrate, SystemLanguage.English);
+            Assert.That(japanese, Does.Contain(FaceMotionUiText.Get("updateVrchatSelected", SystemLanguage.Japanese)));
+            Assert.That(english, Does.Contain(FaceMotionUiText.Get("updateVrchatSelected", SystemLanguage.English)));
         }
 
         [Test]
@@ -395,6 +419,20 @@ namespace FaceMotion.Editor.Tests
             Assert.That(session.LastOperationDiagnostic, Is.Null);
             Assert.That(session.Diagnostics.Any(diagnostic => ReferenceEquals(diagnostic, persistent)), Is.True);
             Assert.That(session.Diagnostics.Any(diagnostic => ReferenceEquals(diagnostic, staleOperation)), Is.False);
+        }
+
+        [Test]
+        public void FailedDesiredState_AlsoLeavesDetailsOnlyInTheResultPanel()
+        {
+            var session = new FaceMotionEditorSession();
+            session.SetLastOperationDiagnostic(Diagnostic("stale-operation"));
+
+            OneClickIntegrationPanel.SetDesiredStateOperationDiagnostic(session, Result(
+                VrchatDesiredStateReconciliationOutcome.PreflightFailed,
+                false,
+                Diagnostic(FaceMotionDiagnosticCodes.BatchPreflightFailed)));
+
+            Assert.That(session.LastOperationDiagnostic, Is.Null);
         }
 
         private static IReadOnlyList<string> AnimationListPanelChecklistMember()

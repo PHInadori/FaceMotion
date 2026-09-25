@@ -70,6 +70,19 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void Execute_ReboundFinalPlan_PreservesSharedBindingMetadataForApply()
+        {
+            var backend = new RecordingBackend { IncludePartnerMetadata = true };
+
+            var result = VrchatDesiredStateReconciliationService.Execute(Request(backend));
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(backend.AppliedPlan, Is.Not.Null);
+            Assert.That(backend.AppliedPlan.Items[0].PartnerParameters, Is.EqualTo(new[] { "FaceMotion_Partner" }));
+            Assert.That(backend.AppliedPlan.Items[0].SharedBindings.Count, Is.EqualTo(1));
+        }
+
+        [Test]
         public void Execute_StableAnimationIdKeepsOwnedIntegrationDespiteDisplayNameChange()
         {
             var backend = new RecordingBackend(new ModularAvatarManagedState(_animation.AnimationId, "FaceMotion_OldName"));
@@ -171,6 +184,21 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void Execute_CanonicalOnlyBlockingDiagnostic_IsReturnedWithoutGenericPreflightWrapper()
+        {
+            var backend = new RecordingBackend { BlockCanonicalOnly = true };
+
+            var result = VrchatDesiredStateReconciliationService.Execute(Request(backend));
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(VrchatDesiredStateReconciliationOutcome.PreflightFailed));
+            Assert.That(result.Diagnostics, Has.Some.Matches<FaceMotionDiagnostic>(d => d.Code == "test" && d.Message == "canonical blocked"));
+            Assert.That(result.Diagnostics, Has.None.Matches<FaceMotionDiagnostic>(d => d.Code == FaceMotionDiagnosticCodes.BatchPreflightFailed));
+            Assert.That(backend.ApplyCalls, Is.Zero);
+            Assert.That(backend.RemoveCalls, Is.Zero);
+        }
+
+        [Test]
         public void Execute_RemovalInvalidatesManagedStateCacheCallback()
         {
             var backend = new RecordingBackend(new ModularAvatarManagedState("obsolete", "FaceMotion_Obsolete"));
@@ -253,6 +281,94 @@ namespace FaceMotion.Editor.Tests
             Assert.That(backend.OutputFolders, Is.Empty, "Validation must not replace an explicit invalid path with the beginner default.");
         }
 
+        [Test]
+        public void Execute_DefaultRootAbsent_CanonicalPlanFailureIsWriteFreePreflight()
+        {
+            EnsureDefaultRootAbsent();
+            var backend = new RecordingBackend { BlockPlans = true };
+
+            var result = VrchatDesiredStateReconciliationService.Execute(new VrchatDesiredStateReconciliationRequest(
+                _avatar, _project, new[] { _animation.AnimationId }, null, backend));
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(VrchatDesiredStateReconciliationOutcome.PreflightFailed));
+            Assert.That(AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder), Is.False,
+                "Preflight must never create the default output root, even to resolve its own path check.");
+            Assert.That(backend.ApplyCalls, Is.Zero);
+            Assert.That(backend.RemoveCalls, Is.Zero);
+        }
+
+        [Test]
+        public void Execute_DefaultRootAbsent_FinalStateValidationFailureIsWriteFreePreflight()
+        {
+            EnsureDefaultRootAbsent();
+            var backend = new RecordingBackend { BlockFinalPlans = true };
+
+            var result = VrchatDesiredStateReconciliationService.Execute(new VrchatDesiredStateReconciliationRequest(
+                _avatar, _project, new[] { _animation.AnimationId }, null, backend));
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(VrchatDesiredStateReconciliationOutcome.PreflightFailed));
+            Assert.That(AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder), Is.False,
+                "A later final-state validation failure must leave the project untouched.");
+            Assert.That(backend.ApplyCalls, Is.Zero);
+            Assert.That(backend.RemoveCalls, Is.Zero);
+        }
+
+        [Test]
+        public void Execute_DefaultRootAbsent_SuccessfulAddCreatesRootDuringMutation()
+        {
+            EnsureDefaultRootAbsent();
+            var backend = new RecordingBackend();
+
+            var result = VrchatDesiredStateReconciliationService.Execute(new VrchatDesiredStateReconciliationRequest(
+                _avatar, _project, new[] { _animation.AnimationId }, null, backend));
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder), Is.True,
+                "The canonical default root is created inside the mutation stage.");
+            Assert.That(AssetDatabase.LoadAssetAtPath<AnimationClip>(OneClickIntegrationService.DefaultOutputFolder + "/Renamable.anim"), Is.Not.Null);
+            Assert.That(backend.OutputFolders, Is.Not.Empty);
+            Assert.That(backend.OutputFolders, Is.All.EqualTo(OneClickIntegrationService.DefaultOutputFolder));
+            Assert.That(result.Diagnostics, Has.None.Matches<FaceMotionDiagnostic>(d => d.Code == FaceMotionDiagnosticCodes.ModularAvatarPath));
+        }
+
+        [Test]
+        public void Execute_DefaultRootAbsent_ZeroDesiredCreatesNothing()
+        {
+            EnsureDefaultRootAbsent();
+            var backend = new RecordingBackend(new ModularAvatarManagedState("obsolete", "FaceMotion_Obsolete"));
+            var request = new VrchatDesiredStateReconciliationRequest(_avatar, _project, Array.Empty<string>(), null, backend);
+
+            var result = VrchatDesiredStateReconciliationService.Execute(request);
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder), Is.False,
+                "Removal-only reconciliation must not create FaceMotion's generated root.");
+            Assert.That(backend.RemoveCalls, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Execute_ApplyFailureAfterRootCreation_RemovesCreatedRoot()
+        {
+            EnsureDefaultRootAbsent();
+            var backend = new RecordingBackend { FailApply = true };
+
+            var result = VrchatDesiredStateReconciliationService.Execute(new VrchatDesiredStateReconciliationRequest(
+                _avatar, _project, new[] { _animation.AnimationId }, null, backend));
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder), Is.False,
+                "Folders this transaction created are removed when mutation fails.");
+        }
+
+        private void EnsureDefaultRootAbsent()
+        {
+            if (AssetDatabase.IsValidFolder(OneClickIntegrationService.DefaultOutputFolder))
+                AssetDatabase.DeleteAsset(OneClickIntegrationService.DefaultOutputFolder);
+            AssetDatabase.Refresh();
+        }
+
         private VrchatDesiredStateReconciliationRequest Request(RecordingBackend backend) => new VrchatDesiredStateReconciliationRequest(_avatar, _project, new[] { _animation.AnimationId }, Folder, backend);
 
         private class RecordingBackend : IModularAvatarIntegrationBackend, IModularAvatarDesiredStateBackend
@@ -261,7 +377,11 @@ namespace FaceMotion.Editor.Tests
             public int ApplyCalls;
             public int RemoveCalls;
             public bool BlockPlans;
+            public bool BlockCanonicalOnly;
+            public bool BlockFinalPlans;
             public bool FailApply;
+            public bool IncludePartnerMetadata;
+            public ModularAvatarIntegrationBatchPlan AppliedPlan;
             public readonly List<string> Calls = new List<string>();
             public readonly List<string> OutputFolders = new List<string>();
             public RecordingBackend(params ModularAvatarManagedState[] items) { _items = new List<ModularAvatarManagedState>(items); }
@@ -277,7 +397,7 @@ namespace FaceMotion.Editor.Tests
                 Calls.Add("PlanBatch");
                 CaptureOutputFolders(requests);
                 var plans = new List<ModularAvatarIntegrationPlan>();
-                for (var i = 0; i < requests.Count; i++) plans.Add(new ModularAvatarIntegrationPlan(requests[i], "FaceMotion_" + requests[i].DisplayName.Replace(" ", "_"), "FaceMotion MA", "FaceMotionMA", BlockPlans ? new[] { new FaceMotionDiagnostic("test", FaceMotionDiagnosticSeverity.Error, "blocked", string.Empty, true, string.Empty) } : Array.Empty<FaceMotionDiagnostic>()));
+                for (var i = 0; i < requests.Count; i++) plans.Add(CreatePlan(requests[i], BlockPlans || BlockCanonicalOnly, BlockCanonicalOnly ? "canonical blocked" : "blocked"));
                 return new ModularAvatarIntegrationBatchPlan(plans);
             }
             public ModularAvatarIntegrationBatchPlan PlanFinalState(IReadOnlyList<ModularAvatarIntegrationRequest> requests, IReadOnlyList<string> removingParameters)
@@ -286,14 +406,29 @@ namespace FaceMotion.Editor.Tests
                 CaptureOutputFolders(requests);
                 return Plans(requests);
             }
-            public virtual ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan) { Calls.Add("ApplyBatch"); ApplyCalls++; return new ModularAvatarIntegrationBatchResult(!FailApply, Array.Empty<ModularAvatarIntegrationResult>(), Array.Empty<FaceMotionDiagnostic>()); }
+            public virtual ModularAvatarIntegrationBatchResult ApplyBatch(ModularAvatarIntegrationBatchPlan plan) { Calls.Add("ApplyBatch"); ApplyCalls++; AppliedPlan = plan; return new ModularAvatarIntegrationBatchResult(!FailApply, Array.Empty<ModularAvatarIntegrationResult>(), Array.Empty<FaceMotionDiagnostic>()); }
             public ModularAvatarManagedStateSnapshot InspectManagedState(VRCAvatarDescriptor avatar) => new ModularAvatarManagedStateSnapshot(_items, Array.Empty<FaceMotionDiagnostic>());
             public ModularAvatarManagedStateSnapshot ValidateRemovals(VRCAvatarDescriptor avatar, IReadOnlyList<string> parameters) { Calls.Add("ValidateRemovals"); return new ModularAvatarManagedStateSnapshot(_items, Array.Empty<FaceMotionDiagnostic>()); }
             private ModularAvatarIntegrationBatchPlan Plans(IReadOnlyList<ModularAvatarIntegrationRequest> requests)
             {
                 var plans = new List<ModularAvatarIntegrationPlan>();
-                for (var i = 0; i < requests.Count; i++) plans.Add(new ModularAvatarIntegrationPlan(requests[i], "FaceMotion_" + requests[i].DisplayName.Replace(" ", "_"), "FaceMotion MA", "FaceMotionMA", BlockPlans ? new[] { new FaceMotionDiagnostic("test", FaceMotionDiagnosticSeverity.Error, "blocked", string.Empty, true, string.Empty) } : Array.Empty<FaceMotionDiagnostic>()));
+                for (var i = 0; i < requests.Count; i++) plans.Add(CreatePlan(requests[i], BlockPlans || BlockFinalPlans, "final state blocked"));
                 return new ModularAvatarIntegrationBatchPlan(plans);
+            }
+            private ModularAvatarIntegrationPlan CreatePlan(ModularAvatarIntegrationRequest request, bool blocking, string message)
+            {
+                IReadOnlyList<string> partners = IncludePartnerMetadata ? new[] { "FaceMotion_Partner" } : null;
+                IReadOnlyList<EditorCurveBinding> shared = IncludePartnerMetadata
+                    ? new[] { EditorCurveBinding.FloatCurve("Body", typeof(Transform), "m_LocalPosition.x") }
+                    : null;
+                return new ModularAvatarIntegrationPlan(
+                    request,
+                    "FaceMotion_" + request.DisplayName.Replace(" ", "_"),
+                    "FaceMotion MA",
+                    "FaceMotionMA",
+                    blocking ? new[] { new FaceMotionDiagnostic("test", FaceMotionDiagnosticSeverity.Error, message, string.Empty, true, string.Empty) } : Array.Empty<FaceMotionDiagnostic>(),
+                    partners,
+                    shared);
             }
             private void CaptureOutputFolders(IReadOnlyList<ModularAvatarIntegrationRequest> requests) { for (var i = 0; i < requests.Count; i++) OutputFolders.Add(requests[i].OutputFolder); }
         }

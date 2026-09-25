@@ -85,16 +85,7 @@ namespace FaceMotion.Editor.Tests
             var all = snapshot.FilterBlendShapes(string.Empty);
             var filtered = snapshot.FilterBlendShapes("eye");
 
-            int expected = snapshot.BlendShapes.Count;
-            for (int i = 0; i < snapshot.BlendShapes.Count; i++)
-            {
-                if (snapshot.BlendShapes[i].IsSeparator)
-                {
-                    expected--;
-                }
-            }
-
-            Assert.That(all.Count, Is.EqualTo(expected), "empty query must return every non-separator candidate");
+            Assert.That(all.Count, Is.EqualTo(snapshot.BlendShapes.Count), "empty query must return every cached usable candidate");
             Assert.That(filtered, Is.Not.Null);
         }
 
@@ -316,7 +307,7 @@ namespace FaceMotion.Editor.Tests
         {
             var mesh = new Mesh { name = "BenchMesh" };
             mesh.vertices = new[] { Vector3.zero };
-            var frame = new Vector3[] { Vector3.zero };
+            var frame = new[] { new Vector3(0.01f, 0f, 0f) };
             for (int i = 0; i < shapeNames.Length; i++)
             {
                 mesh.AddBlendShapeFrame(shapeNames[i], 0f, frame, null, null);

@@ -123,15 +123,21 @@ namespace FaceMotion.Editor.UI.Preview
                 }
                 else
                 {
-                    t = Mathf.Min(t, duration);
-                    if (Mathf.Approximately(t, duration))
+                    if (t >= duration)
                     {
+                        // Publish the exact endpoint while playback is still active so the
+                        // session change evaluates the final authored pose exactly once.
+                        if (_session.ViewState.CurrentTime != duration)
+                        {
+                            _session.SetCurrentTime(duration);
+                        }
                         _session.ViewState.IsPlaying = false;
+                        return;
                     }
                 }
             }
 
-            if (!Mathf.Approximately(_session.ViewState.CurrentTime, t))
+            if (_session.ViewState.CurrentTime != t)
             {
                 _session.SetCurrentTime(t);
             }

@@ -11,52 +11,34 @@ namespace FaceMotion.Editor.UI.Guidance
     /// </summary>
     public static class FaceMotionWorkflowHintService
     {
+        public const string HintCreateProject = "guidanceHintProject";
         public const string HintSelectAvatar = "guidanceHintAvatar";
         public const string HintCreateAnimation = "guidanceHintAnimation";
         public const string HintAddTrack = "guidanceHintTrack";
-        public const string HintAddKey = "guidanceHintKey";
+        public const string HintStartPreview = "guidanceHintPreview";
         public const string HintPreviewAndIntegrate = "guidanceHintReady";
 
-        /// <summary>Derives the guidance model from live session state.</summary>
-        public static FaceMotionGuidanceModel Evaluate(FaceMotionEditorSession session)
+        /// <summary>Derives the guidance model from live session state; preview is only ready while it plays.</summary>
+        public static FaceMotionGuidanceModel Evaluate(FaceMotionEditorSession session, bool hasPreview)
         {
-            if (session == null)
-            {
-                return Evaluate(hasAvatar: false, hasAnimation: false, hasTrack: false, hasKey: false);
-            }
-
-            bool hasAvatar = session.ActiveDescriptor != null;
+            if (session == null) return Evaluate(false, false, false, false, hasPreview);
             FaceMotionAnimationData animation = session.GetSelectedAnimation();
             bool hasAnimation = animation != null && animation.Timeline != null;
-            bool hasTrack = hasAnimation && CountTracks(animation) > 0;
-            bool hasKey = hasTrack && HasAnyKey(animation);
-            return Evaluate(hasAvatar, hasAnimation, hasTrack, hasKey);
+            return Evaluate(session.ActiveProject != null, session.ActiveDescriptor != null, hasAnimation, hasAnimation && CountTracks(animation) > 0, hasPreview);
         }
 
-        /// <summary>Pure, side-effect-free state resolution, kept separate so it is trivial to test.</summary>
-        public static FaceMotionGuidanceModel Evaluate(bool hasAvatar, bool hasAnimation, bool hasTrack, bool hasKey)
+        /// <summary>
+        /// The six beginner steps, in workflow order. Each step is evaluated before the next, so
+        /// removing any prerequisite moves the hint backwards instead of skipping ahead.
+        /// </summary>
+        public static FaceMotionGuidanceModel Evaluate(bool hasProject, bool hasAvatar, bool hasAnimation, bool hasTrack, bool hasPreview)
         {
-            if (!hasAvatar)
-            {
-                return new FaceMotionGuidanceModel(FaceMotionUxState.SelectAvatar, 1, HintSelectAvatar);
-            }
-
-            if (!hasAnimation)
-            {
-                return new FaceMotionGuidanceModel(FaceMotionUxState.CreateAnimation, 2, HintCreateAnimation);
-            }
-
-            if (!hasTrack)
-            {
-                return new FaceMotionGuidanceModel(FaceMotionUxState.AddTrack, 3, HintAddTrack);
-            }
-
-            if (!hasKey)
-            {
-                return new FaceMotionGuidanceModel(FaceMotionUxState.AddKey, 4, HintAddKey);
-            }
-
-            return new FaceMotionGuidanceModel(FaceMotionUxState.PreviewAndIntegrate, 5, HintPreviewAndIntegrate);
+            if (!hasProject) return new FaceMotionGuidanceModel(FaceMotionUxState.CreateProject, 1, HintCreateProject);
+            if (!hasAvatar) return new FaceMotionGuidanceModel(FaceMotionUxState.SelectAvatar, 2, HintSelectAvatar);
+            if (!hasAnimation) return new FaceMotionGuidanceModel(FaceMotionUxState.CreateAnimation, 3, HintCreateAnimation);
+            if (!hasPreview) return new FaceMotionGuidanceModel(FaceMotionUxState.StartPreview, 4, HintStartPreview);
+            if (!hasTrack) return new FaceMotionGuidanceModel(FaceMotionUxState.AddTrack, 5, HintAddTrack);
+            return new FaceMotionGuidanceModel(FaceMotionUxState.PreviewAndIntegrate, 6, HintPreviewAndIntegrate);
         }
 
         private static int CountTracks(FaceMotionAnimationData animation)
@@ -78,33 +60,5 @@ namespace FaceMotion.Editor.UI.Guidance
             return count;
         }
 
-        private static bool HasAnyKey(FaceMotionAnimationData animation)
-        {
-            if (animation == null || animation.Timeline == null || animation.Timeline.Tracks == null)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < animation.Timeline.Tracks.Count; i++)
-            {
-                FaceTrackData track = animation.Timeline.Tracks[i];
-                if (track == null)
-                {
-                    continue;
-                }
-
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null && track.BlendShape.Keys.Count > 0)
-                {
-                    return true;
-                }
-
-                if (TrackKinds.IsTransform(track.Kind) && track.Transform != null && track.Transform.Keys.Count > 0)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
     }
 }

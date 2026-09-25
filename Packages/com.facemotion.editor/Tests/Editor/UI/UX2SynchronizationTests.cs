@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
 using FaceMotion.Data;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Preview;
@@ -247,106 +246,6 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-        public void PreviewTraceScrubSequence_MatchesEveryStageAndReusesClone()
-        {
-            var session = new FaceMotionEditorSession();
-            var animations = new AnimationController(session);
-            var keys = new KeyframeController(session);
-            var tracks = new TrackController(session);
-            var input = new TimelineInputHandler(session, keys, tracks);
-            session.SetActiveProject(FaceMotionProject.CreateNew(), null);
-            animations.Add();
-            tracks.AddBlendShapeTrack(AvatarFixture.FaceRendererPath, "Mouth_Smile");
-            session.ViewState.SnapEnabled = false;
-            keys.AddKeyAt(0.5f, 0.8f, Vector3.zero, InterpolationType.Linear);
-            keys.AddKeyAt(1.0f, 0.2f, Vector3.zero, InterpolationType.Linear);
-
-            using (var fixture = AvatarFixture.Create())
-            {
-                var preview = new PreviewSession();
-                try
-                {
-                    preview.EnsureAvatar(fixture.Root);
-                    session.Changed += () => preview.Evaluate(session.GetSelectedAnimation(), session.ViewState.CurrentTime);
-
-                    FaceMotionPreviewTrace.ClearAndEnable();
-                    try
-                    {
-                        input.ScrubTo(0.5f);
-                        input.ScrubTo(1.0f);
-                        input.ScrubTo(0f);
-                    }
-                    finally
-                    {
-                        FaceMotionPreviewTrace.SetEnabled(false);
-                    }
-
-                    var trace = new List<string>(FaceMotionPreviewTrace.Log);
-                    FaceMotionPreviewTrace.Clear();
-
-                    Assert.That(preview.CloneCreationCount, Is.EqualTo(1));
-                    Assert.That(preview.EvaluateCallCount, Is.EqualTo(3));
-                    Assert.That(CountEntriesContaining(trace, "E.Evaluate"),
-                        Is.EqualTo(3));
-                    Assert.That(CountEntriesContaining(trace, "F.ApplyBlendShape"),
-                        Is.EqualTo(3));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:A.ScrubTo] requested=0.5"), Is.EqualTo(1));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:A.ScrubTo] requested=1"), Is.EqualTo(1));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:A.ScrubTo] requested=0"), Is.EqualTo(1));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:B.SetCurrentTime] old=0 requested=0.5 clamped=0.5"), Is.EqualTo(1));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:B.SetCurrentTime] old=0.5 requested=1 clamped=1"), Is.EqualTo(1));
-                    Assert.That(CountExactEntries(trace, "[FaceMotionPreviewTrace:B.SetCurrentTime] old=1 requested=0 clamped=0"), Is.EqualTo(1));
-                    Assert.That(CountEntriesContaining(trace, "time=0.5 "), Is.EqualTo(3));
-                    Assert.That(CountEntriesContaining(trace, "time=1 "), Is.EqualTo(3));
-                    Assert.That(CountEntriesContaining(trace, "time=0 "), Is.EqualTo(3));
-                    Assert.That(CountEntriesContaining(trace, "value=0.8"), Is.EqualTo(2));
-                    Assert.That(CountEntriesContaining(trace, "value=0.2"), Is.EqualTo(1));
-                }
-                finally
-                {
-                    preview.Dispose();
-                }
-            }
-        }
-
-        [Test]
-        public void PreviewTrace_DefaultAndDomainStyleResetAreOffEvenWithLegacyEditorPrefs()
-        {
-            EditorPrefs.SetBool("FaceMotion.PreviewTrace.Enabled", true);
-
-            FaceMotionPreviewTrace.ResetSessionForTests();
-
-            Assert.That(FaceMotionPreviewTrace.Enabled, Is.False);
-            FaceMotionPreviewTrace.Trace("Test", "ignored={0}", 1);
-            Assert.That(FaceMotionPreviewTrace.Count, Is.Zero);
-            EditorPrefs.DeleteKey("FaceMotion.PreviewTrace.Enabled");
-        }
-
-        [Test]
-        public void PreviewTrace_EnableDisableAndClearOnlyAffectTraceData()
-        {
-            FaceMotionPreviewTrace.ResetSessionForTests();
-            FaceMotionPreviewTrace.SetEnabled(true);
-            FaceMotionPreviewTrace.Trace("Test", "recorded={0}", 1);
-            Assert.That(FaceMotionPreviewTrace.Count, Is.EqualTo(1));
-
-            FaceMotionPreviewTrace.Clear();
-            Assert.That(FaceMotionPreviewTrace.Enabled, Is.True);
-            Assert.That(FaceMotionPreviewTrace.Count, Is.Zero);
-            FaceMotionPreviewTrace.SetEnabled(false);
-            FaceMotionPreviewTrace.Trace("Test", "ignored={0}", 2);
-            Assert.That(FaceMotionPreviewTrace.Count, Is.Zero);
-        }
-
-        [Test]
-        public void PreviewTrace_MenuItemsAreUnderDeveloper()
-        {
-            Assert.That(MenuPath(nameof(FaceMotionPreviewTrace.EnableFromMenu)), Is.EqualTo("Tools/FaceMotion/Developer/Preview Trace: On"));
-            Assert.That(MenuPath(nameof(FaceMotionPreviewTrace.DisableFromMenu)), Is.EqualTo("Tools/FaceMotion/Developer/Preview Trace: Off"));
-            Assert.That(MenuPath(nameof(FaceMotionPreviewTrace.ClearFromMenu)), Is.EqualTo("Tools/FaceMotion/Developer/Preview Trace: Clear"));
-        }
-
-        [Test]
         public void SessionTimeChange_RequestsOneCoalescedPreviewRepaint()
         {
             var session = new FaceMotionEditorSession();
@@ -396,41 +295,6 @@ namespace FaceMotion.Editor.Tests
             Assert.That(gate.Reset(), Is.True);
             Assert.That(gate.IsRegistered, Is.False);
             Assert.That(gate.Reset(), Is.False);
-        }
-
-        private static int CountEntriesContaining(IReadOnlyList<string> entries, string text)
-        {
-            int count = 0;
-            for (int i = 0; i < entries.Count; i++)
-            {
-                if (entries[i].IndexOf(text, System.StringComparison.Ordinal) >= 0)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        private static string MenuPath(string methodName)
-        {
-            var method = typeof(FaceMotionPreviewTrace).GetMethod(methodName, BindingFlags.Public | BindingFlags.Static);
-            var menu = (MenuItem)System.Attribute.GetCustomAttribute(method, typeof(MenuItem));
-            return menu.menuItem;
-        }
-
-        private static int CountExactEntries(IReadOnlyList<string> entries, string text)
-        {
-            int count = 0;
-            for (int i = 0; i < entries.Count; i++)
-            {
-                if (entries[i] == text)
-                {
-                    count++;
-                }
-            }
-
-            return count;
         }
 
         private static T GetBuffer<T>(KeyframeInspectorPanel inspector, string name)

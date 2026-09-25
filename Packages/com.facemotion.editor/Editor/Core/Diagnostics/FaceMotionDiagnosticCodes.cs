@@ -162,6 +162,7 @@ namespace FaceMotion.Diagnostics
         public const string ModularAvatarParameterConflict = "FM-H-MA-PARAMETER-CONFLICT";
         public const string ModularAvatarBindingConflict = "FM-H-MA-BINDING-CONFLICT";
         public const string ModularAvatarCrossBindingConflict = "FM-H-MA-CROSS-BINDING-CONFLICT";
+        public const string ModularAvatarSharedBindingWarning = "FM-H-MA-SHARED-BINDING";
         public const string ModularAvatarPlanUnexpected = "FM-H-MA-PLAN-UNEXPECTED";
 
         // FM-UI-INFO (controller status). Inline literal centralized.

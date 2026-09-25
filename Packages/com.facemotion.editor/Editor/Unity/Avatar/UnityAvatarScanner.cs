@@ -111,6 +111,9 @@ namespace FaceMotion.Editor.Avatar
                 }
 
                 var seenNames = new HashSet<string>(StringComparer.Ordinal);
+                var deltaVertices = new Vector3[mesh.vertexCount];
+                var deltaNormals = new Vector3[mesh.vertexCount];
+                var deltaTangents = new Vector3[mesh.vertexCount];
                 for (int shapeIndex = 0; shapeIndex < blendShapeCount; shapeIndex++)
                 {
                     string shapeName = mesh.GetBlendShapeName(shapeIndex);
@@ -128,7 +131,8 @@ namespace FaceMotion.Editor.Avatar
                         renderer.gameObject.name,
                         shapeName,
                         shapeIndex,
-                        renderer.GetBlendShapeWeight(shapeIndex)));
+                        renderer.GetBlendShapeWeight(shapeIndex),
+                        HasVisibleBlendShapeDelta(mesh, shapeIndex, deltaVertices, deltaNormals, deltaTangents)));
                 }
             }
 
@@ -159,6 +163,44 @@ namespace FaceMotion.Editor.Avatar
             }
 
             return new AvatarScanReport(index, diagnostics, hasBlocking);
+        }
+
+        internal static bool HasVisibleBlendShapeDelta(
+            Mesh mesh,
+            int shapeIndex,
+            Vector3[] deltaVertices,
+            Vector3[] deltaNormals,
+            Vector3[] deltaTangents)
+        {
+            if (mesh == null || shapeIndex < 0 || shapeIndex >= mesh.blendShapeCount)
+            {
+                return true;
+            }
+
+            try
+            {
+                int frameCount = mesh.GetBlendShapeFrameCount(shapeIndex);
+                for (int frameIndex = 0; frameIndex < frameCount; frameIndex++)
+                {
+                    mesh.GetBlendShapeFrameVertices(shapeIndex, frameIndex, deltaVertices, deltaNormals, deltaTangents);
+                    for (int vertexIndex = 0; vertexIndex < deltaVertices.Length; vertexIndex++)
+                    {
+                        if (deltaVertices[vertexIndex] != Vector3.zero
+                            || deltaNormals[vertexIndex] != Vector3.zero
+                            || deltaTangents[vertexIndex] != Vector3.zero)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            }
+            catch (Exception)
+            {
+                // If Unity cannot expose mesh frame data, keep the shape available rather than hide a usable binding.
+                return true;
+            }
         }
 
         private static FaceMotionDiagnostic Blocking(string code, string message, string contextId, string fix)

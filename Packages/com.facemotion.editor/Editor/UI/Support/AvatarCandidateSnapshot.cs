@@ -103,14 +103,36 @@ namespace FaceMotion.Editor.UI.Support
 
         public sealed class TransformCandidate
         {
-            public TransformCandidate(string relativePath)
+            public TransformCandidate(string relativePath, string name = null, int depth = 0, string parentPath = null)
             {
                 RelativePath = relativePath ?? string.Empty;
+                Name = name ?? LeafName(RelativePath);
+                Depth = depth;
+                ParentPath = parentPath ?? string.Empty;
             }
 
             public string RelativePath { get; }
 
-            public string DisplayLabel => string.IsNullOrEmpty(RelativePath) ? FaceMotionUiText.Get("avatarRoot") : RelativePath;
+            public string Name { get; }
+
+            public int Depth { get; }
+
+            public string ParentPath { get; }
+
+            public string DisplayLabel => string.IsNullOrEmpty(RelativePath)
+                ? FaceMotionUiText.Get("avatarRoot")
+                : new string(' ', Depth * 2) + Name;
+
+            public bool MatchesSearch(string query)
+            {
+                return Contains(RelativePath, query) || Contains(Name, query);
+            }
+
+            private static string LeafName(string relativePath)
+            {
+                int slash = relativePath.LastIndexOf('/');
+                return slash >= 0 ? relativePath.Substring(slash + 1) : relativePath;
+            }
         }
 
         private readonly List<BlendShapeCandidate> _blendShapes = new List<BlendShapeCandidate>();
@@ -137,6 +159,11 @@ namespace FaceMotion.Editor.UI.Support
                 var entry = index.BlendShapes[i];
                 if (entry != null)
                 {
+                    if (!entry.HasVisibleDelta)
+                    {
+                        continue;
+                    }
+
                     var binding = new BlendShapeBinding(entry.RendererPath, entry.BlendShapeName);
                     VrcBlendShapeConflict conflict = conflicts.Get(binding);
                     BlendShapeCategory category = Classify(entry.RendererPath, entry.RendererName, entry.BlendShapeName, conflicts, binding, out string reason);
@@ -171,7 +198,7 @@ namespace FaceMotion.Editor.UI.Support
                 var entry = index.Transforms[i];
                 if (entry != null)
                 {
-                    transforms.Add(new TransformCandidate(entry.RelativePath));
+                    transforms.Add(new TransformCandidate(entry.RelativePath, entry.Name, entry.Depth, entry.ParentPath));
                 }
             }
 
@@ -184,7 +211,7 @@ namespace FaceMotion.Editor.UI.Support
         {
             return Filter(
                 _blendShapes,
-                candidate => !candidate.IsSeparator && candidate.MatchesSearch(query));
+                candidate => candidate.MatchesSearch(query));
         }
 
         internal static bool IsSeparatorName(string name)
@@ -426,7 +453,7 @@ namespace FaceMotion.Editor.UI.Support
         {
             return Filter(
                 _transforms,
-                candidate => Contains(candidate.DisplayLabel, query));
+                candidate => candidate.MatchesSearch(query));
         }
 
         private static bool Contains(string text, string query)

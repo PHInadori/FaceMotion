@@ -88,6 +88,30 @@ namespace FaceMotion.Editor.VRChat.Integration
             return string.IsNullOrWhiteSpace(outputFolder) ? DefaultOutputFolder : outputFolder;
         }
 
+        /// <summary>
+        /// True for FaceMotion's canonical generated-asset root only. That root is managed by
+        /// FaceMotion itself, so it may be planned before it exists; arbitrary user paths never match.
+        /// </summary>
+        public static bool IsCanonicalDefaultOutputFolder(string outputFolder)
+        {
+            if (string.IsNullOrEmpty(outputFolder)) return false;
+            return string.Equals(outputFolder.Replace('\\', '/').TrimEnd('/'), DefaultOutputFolder, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Write-free output-root validation used by backend planning. An explicit path still has to
+        /// be an existing folder under Assets; the canonical default may be planned while absent
+        /// because the mutation stage creates it before any generated asset is written.
+        /// </summary>
+        public static bool IsPlannableOutputFolder(string outputFolder)
+        {
+            if (string.IsNullOrEmpty(outputFolder)) return false;
+            string path = outputFolder.Replace('\\', '/');
+            if (path != "Assets" && !path.StartsWith("Assets/", StringComparison.Ordinal)) return false;
+            foreach (var part in path.Split('/')) if (part.Length == 0 || part == "." || part == "..") return false;
+            return AssetDatabase.IsValidFolder(path) || IsCanonicalDefaultOutputFolder(path);
+        }
+
         /// <summary>Write-free preflight summary. It never creates assets and never plans.</summary>
         public static OneClickPreflight Preflight(OneClickIntegrationRequest request)
         {

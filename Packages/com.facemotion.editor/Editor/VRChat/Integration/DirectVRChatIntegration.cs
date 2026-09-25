@@ -438,9 +438,52 @@ namespace FaceMotion.Editor.VRChat.Integration
         private static RuntimeAnimatorController GetFx(VRCAvatarDescriptor avatar) { foreach (var layer in avatar.baseAnimationLayers) if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX) return layer.animatorController; return null; }
         private static void SetFx(VRCAvatarDescriptor avatar, RuntimeAnimatorController controller) { var layers = avatar.baseAnimationLayers; for (int i = 0; i < layers.Length; i++) if (layers[i].type == VRCAvatarDescriptor.AnimLayerType.FX) { var layer = layers[i]; layer.isDefault = false; layer.animatorController = controller; layers[i] = layer; avatar.baseAnimationLayers = layers; return; } }
         private static DirectIntegrationManifest FindManifest(VRCAvatarDescriptor avatar) { if (avatar != null && SessionManifests.TryGetValue(avatar, out var current) && current != null) return current; foreach (var guid in AssetDatabase.FindAssets("Manifest")) { var value = AssetDatabase.LoadAssetAtPath<DirectIntegrationManifest>(AssetDatabase.GUIDToAssetPath(guid)); if (value != null && DirectIntegrationManifestMigration.ResolveAvatar(value) == avatar) return value; } return null; }
+
+        /// <summary>
+        /// Returns the generated parameter whose FaceMotion-owned integration animates the given clip
+        /// through the avatar's current FX controller, or null when the clip is not FaceMotion-owned.
+        /// Cross-backend consumers use this to treat a FaceMotion-owned FX binding as a partner
+        /// instead of a foreign conflict.
+        /// </summary>
+        public static string FindOwningParameterForClip(VRCAvatarDescriptor avatar, AnimationClip clip)
+        {
+            if (avatar == null || clip == null) return null;
+            var fx = GetFx(avatar);
+            if (fx == null) return null;
+            string clipPath = AssetDatabase.GetAssetPath(clip);
+            var single = FindManifest(avatar);
+            if (single != null && single.GeneratedFx == fx && SingleFxContainsClip(single.GeneratedFx, clip, clipPath, single.ParameterName)) return single.ParameterName;
+            var batch = FindBatchManifest(avatar);
+            if (batch != null && batch.GeneratedFx == fx && batch.Items != null)
+            {
+                for (int i = 0; i < batch.Items.Length; i++)
+                    if (batch.Items[i] != null && !string.IsNullOrEmpty(batch.Items[i].ClipPath) && string.Equals(batch.Items[i].ClipPath, clipPath, StringComparison.Ordinal))
+                        return batch.Items[i].ParameterName;
+            }
+            return null;
+        }
+
+        private static bool SingleFxContainsClip(RuntimeAnimatorController controller, AnimationClip clip, string clipPath, string parameterName)
+        {
+            if (!(controller is AnimatorController animator) || string.IsNullOrEmpty(parameterName)
+                || !parameterName.StartsWith("FaceMotion_", StringComparison.Ordinal)) return false;
+            string layerName = "FaceMotion " + parameterName.Substring("FaceMotion_".Length);
+            for (int layerIndex = 0; layerIndex < animator.layers.Length; layerIndex++)
+            {
+                var layer = animator.layers[layerIndex];
+                if (layer == null || !string.Equals(layer.name, layerName, StringComparison.Ordinal)) continue;
+                foreach (var state in layer.stateMachine.states)
+                {
+                    var candidate = state.state == null ? null : state.state.motion as AnimationClip;
+                    if (candidate == clip) return true;
+                    if (!string.IsNullOrEmpty(clipPath) && candidate != null && string.Equals(AssetDatabase.GetAssetPath(candidate), clipPath, StringComparison.Ordinal)) return true;
+                }
+            }
+            return false;
+        }
         private static bool SharesBinding(AnimationClip a, AnimationClip b) { var bindings = new HashSet<EditorCurveBinding>(AnimationUtility.GetCurveBindings(a)); foreach (var binding in AnimationUtility.GetCurveBindings(b)) if (bindings.Contains(binding)) return true; return false; }
         private static bool OutputFolderIsUnmanaged(DirectIntegrationRequest request) { string root = request.OutputFolder + "/FaceMotion_" + Sanitize(request.DisplayName); if (!AssetDatabase.IsValidFolder(root)) return false; var manifest = FindManifest(request.Avatar); return manifest == null || !string.Equals(Path.GetDirectoryName(AssetDatabase.GetAssetPath(manifest))?.Replace('\\', '/'), root, StringComparison.Ordinal); }
-        private static bool IsAssetFolder(string path) { if (string.IsNullOrEmpty(path)) return false; path = path.Replace('\\', '/'); if (path != "Assets" && !path.StartsWith("Assets/", StringComparison.Ordinal)) return false; foreach (var part in path.Split('/')) if (part == "." || part == "..") return false; return AssetDatabase.IsValidFolder(path); }
+        private static bool IsAssetFolder(string path) { return OneClickIntegrationService.IsPlannableOutputFolder(path); }
         private static void InjectFailure(string stage) { ApplyFailureInjector?.Invoke(stage); }
         private static string Sanitize(string value) { var chars = (value ?? "FaceMotion").ToCharArray(); for (int i = 0; i < chars.Length; i++) if (!char.IsLetterOrDigit(chars[i]) && chars[i] != '_') chars[i] = '_'; return new string(chars); }
         internal static bool HasBlocking(IReadOnlyList<FaceMotionDiagnostic> items) { for (int i = 0; i < items.Count; i++) if (items[i].Blocking) return true; return false; }

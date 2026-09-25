@@ -152,12 +152,12 @@ namespace FaceMotion.Editor.Tests
             mesh.triangles = new[] { 0, 1, 2 };
             mesh.RecalculateNormals();
 
-            var zeroDeltas = new Vector3[3];
+            var visibleDeltas = new[] { new Vector3(0.01f, 0f, 0f), Vector3.zero, Vector3.zero };
             if (blendShapes != null)
             {
                 foreach (string name in blendShapes)
                 {
-                    mesh.AddBlendShapeFrame(name, 0f, zeroDeltas, null, null);
+                    mesh.AddBlendShapeFrame(name, 0f, visibleDeltas, null, null);
                 }
             }
 

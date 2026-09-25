@@ -412,21 +412,41 @@ namespace FaceMotion.Editor.UI.Localization
             Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict,
                 new DiagnosticLocalizedFields
                 {
-                    Title = "バインドが複数メッシュで競合しています",
-                    Summary = "複数のメッシュ（スキンメッシュ）をまたいで、同じ名前のBlendShapeへバインドが集中しています。",
-                    Cause = "異なるメッシュの同名BlendShapeにバインドが設定されています。",
-                    Impact = "どのメッシュへのバインドかが曖昧で、動作が不安定な可能性があります。",
-                    Resolution = "バインド先のメッシュを明確にし、競合を解消してください。",
+                    Title = "アバターFXの既存アニメーションと対象が競合しています",
+                    Summary = "このAnimationClipが動かす同じ対象を、FaceMotion管理外のアバターFXコントローラーもアニメーションしています。",
+                    Cause = "同じ相対パス、コンポーネント、property名を持つAnimationClip bindingがアバターFX内に存在します。",
+                    Impact = "どちらのアニメーションが優先されるかをFaceMotionが安全に判断できないため、統合は適用されません。アバターや既存アセットは変更されていません。",
+                    Resolution = "Contextに表示されたFXコントローラー、AnimationClip、bindingを確認し、同じ対象を動かす外部bindingを整理してから、もう一度「統合を計画して検証」を実行してください。",
                     Caution = ""
                 },
                 new DiagnosticLocalizedFields
                 {
-                    Title = "Cross-mesh binding conflict",
-                    Summary = "Bindings across multiple skinned meshes target identically named blend shapes.",
-                    Cause = "Bindings are set on same-named blend shapes of different meshes.",
-                    Impact = "Which mesh is bound is ambiguous, and behavior may be unstable.",
-                    Resolution = "Make the bound mesh explicit and resolve the conflict.",
+                    Title = "An existing avatar FX animation targets the same binding",
+                    Summary = "A non-FaceMotion-owned avatar FX controller also animates a target used by this AnimationClip.",
+                    Cause = "An avatar FX clip has an AnimationClip binding with the same relative path, component, and property name.",
+                    Impact = "FaceMotion cannot safely determine which animation should win, so integration is not applied. The avatar and existing assets have not been modified.",
+                    Resolution = "Check the FX controller, AnimationClip, and binding shown in Context, resolve the external binding that animates the same target, then run Plan and Validate Integration again.",
                     Caution = ""
+                });
+
+            Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarSharedBindingWarning,
+                new DiagnosticLocalizedFields
+                {
+                    Title = "別のFaceMotion統合とアニメーション対象が重複しています",
+                    Summary = "このAnimationClipと同じ対象を、別のFaceMotion統合がアニメーションしています。FaceMotionは生成アニメーション同士の重複を許可し、有効時にレイヤー順で決定論的に優先します。",
+                    Cause = "複数のFaceMotionアニメーションが同じAnimationClip bindingを共有しています。対象のbindingは詳細のContextで確認できます。",
+                    Impact = "統合は適用されます。ただし同時に複数の該当アニメーションを有効にした場合、後のレイヤー（後から統合した側）の値が優先されます。",
+                    Resolution = "同時に有効にする場合は優先されるアニメーションを意図した側に統合してください。対象のbindingを分離する場合は、既存の統合を変更してから再度計画してください。",
+                    Caution = "競合する外部のModular Avatar統合やアバターFXは引き続きブロックされます。"
+                },
+                new DiagnosticLocalizedFields
+                {
+                    Title = "Another FaceMotion integration animates the same target",
+                    Summary = "Another FaceMotion integration animates a target used by this AnimationClip. FaceMotion allows generated animations to share bindings and resolves simultaneous enables deterministically by layer order.",
+                    Cause = "Multiple FaceMotion animations share the same AnimationClip binding. Check Context in the details for the affected binding.",
+                    Impact = "The integration is applied. When both animations are enabled at the same time, the later layer (the animation integrated later) takes precedence.",
+                    Resolution = "If simultaneous enable matters, integrate the animation that should win later. To separate the bindings, change the existing integration and plan again.",
+                    Caution = "Conflicting external Modular Avatar integrations or avatar FX bindings remain blocked."
                 });
 
             Add(ja, en, FaceMotionDiagnosticCodes.ModularAvatarPlanUnexpected,

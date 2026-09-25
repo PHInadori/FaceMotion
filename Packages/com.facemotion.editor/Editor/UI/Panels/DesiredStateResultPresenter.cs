@@ -138,6 +138,7 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             var technical = new List<string>();
+            var rendered = new HashSet<string>(StringComparer.Ordinal);
             if (diagnostics != null)
             {
                 for (var i = 0; i < diagnostics.Count; i++)
@@ -145,7 +146,8 @@ namespace FaceMotion.Editor.UI.Panels
                     var diagnostic = diagnostics[i];
                     if (diagnostic != null && diagnostic.Blocking)
                     {
-                        technical.Add(DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic));
+                        string detail = DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic);
+                        if (rendered.Add(detail)) technical.Add(detail);
                     }
                 }
             }

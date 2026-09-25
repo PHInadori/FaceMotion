@@ -195,7 +195,7 @@ namespace FaceMotion.Editor.VRChat
 
         private static string Key(string rendererPath, string blendShapeName)
         {
-            return (rendererPath ?? string.Empty) + "\n" + (blendShapeName ?? string.Empty);
+            return AnimationBindingKey.ForBlendShape(rendererPath, blendShapeName).ToCanonicalString();
         }
     }
 

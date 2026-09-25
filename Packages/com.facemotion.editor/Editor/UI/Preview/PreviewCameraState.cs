@@ -41,8 +41,8 @@ namespace FaceMotion.Editor.UI.Preview
         {
             Quaternion rotation = Quaternion.Euler(Pitch, Yaw, 0f);
             float unitsPerPixel = Distance * 1.5f / Mathf.Max(1f, viewportHeight);
-            Pivot -= (rotation * Vector3.right) * (delta.x * unitsPerPixel);
-            Pivot -= (rotation * Vector3.up) * (delta.y * unitsPerPixel);
+            Pivot += (rotation * Vector3.right) * (delta.x * unitsPerPixel);
+            Pivot += (rotation * Vector3.up) * (delta.y * unitsPerPixel);
         }
 
         public void Zoom(float scrollDelta)

@@ -71,13 +71,15 @@ namespace FaceMotion.Avatar
             string rendererName,
             string blendShapeName,
             int currentIndex,
-            float currentWeight)
+            float currentWeight,
+            bool hasVisibleDelta = true)
         {
             RendererPath = rendererPath ?? string.Empty;
             RendererName = rendererName ?? string.Empty;
             BlendShapeName = blendShapeName ?? string.Empty;
             CurrentIndex = currentIndex;
             CurrentWeight = currentWeight;
+            HasVisibleDelta = hasVisibleDelta;
         }
 
         public string RendererPath { get; }
@@ -89,5 +91,8 @@ namespace FaceMotion.Avatar
         public int CurrentIndex { get; }
 
         public float CurrentWeight { get; }
+
+        /// <summary>Whether at least one BlendShape frame changes a vertex, normal, or tangent.</summary>
+        public bool HasVisibleDelta { get; }
     }
 }

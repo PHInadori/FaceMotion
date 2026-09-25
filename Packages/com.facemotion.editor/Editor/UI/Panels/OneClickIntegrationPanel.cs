@@ -25,6 +25,9 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly DirectVRChatIntegrationPanel _advanced;
         private ModularAvatarIntegrationPresenceCache _maPresence;
         private VrchatDesiredStateReconciliationResult _desiredResult;
+        private GameObject _desiredResultAvatarRoot;
+        private UnityEngine.Object _desiredResultProject;
+        private string _desiredResultSelectionSignature;
         private readonly ModularAvatarManagedStateCache _managedStateCache;
         private readonly Action<VRCAvatarDescriptor> _refreshAvatarIndexAfterIntegration;
 
@@ -86,6 +89,7 @@ namespace FaceMotion.Editor.UI.Panels
 
         private void DrawDesiredState()
         {
+            ClearStaleDesiredStateResult();
             EditorGUILayout.Space();
             DrawDesiredAnimationChecklist();
             int count = _session.BatchAnimationIds.Count;
@@ -201,24 +205,66 @@ namespace FaceMotion.Editor.UI.Panels
                     backend,
                     InvalidateManagedState));
             _desiredResult = result;
+            _desiredResultAvatarRoot = _session.ActiveAvatarRoot;
+            _desiredResultProject = _session.ActiveProject;
+            _desiredResultSelectionSignature = DesiredSelectionSignature(_session.BatchAnimationIds);
             SetDesiredStateOperationDiagnostic(_session, result);
             _session.RecomputeDiagnostics();
             _session.NotifyChanged();
         }
 
-        /// <summary>Operation diagnostics must not outlive a successful replacement operation.</summary>
+        /// <summary>Prevents a result for another avatar, project, or checklist selection from being shown as current.</summary>
+        private void ClearStaleDesiredStateResult()
+        {
+            if (_desiredResult == null || DesiredResultMatchesInputs(
+                _desiredResultAvatarRoot,
+                _desiredResultProject,
+                _desiredResultSelectionSignature,
+                _session.ActiveAvatarRoot,
+                _session.ActiveProject,
+                _session.BatchAnimationIds))
+            {
+                return;
+            }
+
+            _desiredResult = null;
+            _desiredResultAvatarRoot = null;
+            _desiredResultProject = null;
+            _desiredResultSelectionSignature = null;
+        }
+
+        internal static bool DesiredResultMatchesInputs(
+            UnityEngine.Object resultAvatar,
+            UnityEngine.Object resultProject,
+            string resultSelectionSignature,
+            UnityEngine.Object activeAvatar,
+            UnityEngine.Object activeProject,
+            IReadOnlyCollection<string> activeSelection)
+        {
+            return resultAvatar == activeAvatar
+                && resultProject == activeProject
+                && string.Equals(resultSelectionSignature, DesiredSelectionSignature(activeSelection), StringComparison.Ordinal);
+        }
+
+        internal static string DesiredSelectionSignature(IReadOnlyCollection<string> selection)
+        {
+            if (selection == null || selection.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var ids = new List<string>(selection);
+            ids.Sort(StringComparer.Ordinal);
+            return string.Join("\n", ids);
+        }
+
+        /// <summary>The desired-state result panel owns operation details, so do not duplicate them in global diagnostics.</summary>
         internal static void SetDesiredStateOperationDiagnostic(
             FaceMotionEditorSession session,
             VrchatDesiredStateReconciliationResult result)
         {
             if (session == null) return;
-            if (result == null || result.Succeeded || result.Diagnostics.Count == 0)
-            {
-                session.SetLastOperationDiagnostic(null);
-                return;
-            }
-
-            session.SetLastOperationDiagnostic(result.Diagnostics[result.Diagnostics.Count - 1]);
+            session.SetLastOperationDiagnostic(null);
         }
 
         /// <summary>Called by the window's single Advanced foldout.</summary>

@@ -72,6 +72,8 @@ namespace FaceMotion.Editor.ModularAvatar
             var reservedParameters = new HashSet<string>(StringComparer.Ordinal);
             var reservedObjects = new HashSet<string>(StringComparer.Ordinal);
             var reservedRoots = new HashSet<string>(StringComparer.Ordinal);
+            var entries = new List<BatchEntry>();
+            var planned = new List<(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName)>();
             for (var i = 0; i < requests.Count; i++)
             {
                 var request = requests[i];
@@ -90,7 +92,13 @@ namespace FaceMotion.Editor.ModularAvatar
                 }
                 while (reservedParameters.Contains(parameter) || reservedObjects.Contains(objectName) || reservedRoots.Contains(rootName) || RootIsOccupiedByOtherIntegration(request == null ? null : request.Avatar, request == null ? null : request.OutputFolder, parameter, rootName, removingParameters));
                 reservedParameters.Add(parameter); reservedObjects.Add(objectName); reservedRoots.Add(rootName);
-                plans.Add(PlanCore(request, parameter, objectName, rootName, true, removingParameters));
+                planned.Add((request, parameter, objectName, rootName));
+                entries.Add(new BatchEntry(request, parameter));
+            }
+            for (var i = 0; i < planned.Count; i++)
+            {
+                var item = planned[i];
+                plans.Add(PlanCore(item.request, item.parameter, item.objectName, item.rootName, true, removingParameters, entries));
             }
             return new ModularAvatarIntegrationBatchPlan(plans);
         }
@@ -101,11 +109,14 @@ namespace FaceMotion.Editor.ModularAvatar
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (plan == null || !plan.IsValid) return new ModularAvatarIntegrationBatchResult(false, results, diagnostics);
             var created = new List<ModularAvatarIntegrationManifest>();
+            VRCAvatarDescriptor batchAvatar = null;
             try
             {
+                InsideBatchApply = true;
                 for (var i = 0; i < plan.Items.Count; i++)
                 {
                     var item = plan.Items[i];
+                    batchAvatar = item.Request == null ? batchAvatar : item.Request.Avatar;
                     var existing = FindManifest(item.Request.Avatar, item.ParameterName) ?? FindRemovalCandidateManifest(item.Request.Avatar, item.ParameterName);
                     // A matching owned item is already the desired batch state. Do not reapply it:
                     // later-item failure must never replace an earlier existing integration.
@@ -118,14 +129,24 @@ namespace FaceMotion.Editor.ModularAvatar
                     if (existing == null && result.Manifest is ModularAvatarIntegrationManifest manifest) created.Add(manifest);
                     ApplyFailureInjector?.Invoke("after-batch-item-" + i);
                 }
-                return new ModularAvatarIntegrationBatchResult(true, results, diagnostics);
             }
             catch (Exception exception)
             {
+                InsideBatchApply = false;
                 for (var i = created.Count - 1; i >= 0; i--) RollbackCreated(created[i]);
                 diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarApply, exception.Message));
                 return new ModularAvatarIntegrationBatchResult(false, results, diagnostics);
             }
+            InsideBatchApply = false;
+            var regenDiagnostics = RegenerateStalePartnerMachines(batchAvatar);
+            var regenFailed = false;
+            for (var r = 0; r < regenDiagnostics.Count; r++)
+            {
+                diagnostics.Add(regenDiagnostics[r]);
+                if (regenDiagnostics[r] != null && regenDiagnostics[r].Blocking) regenFailed = true;
+            }
+            if (regenFailed) return new ModularAvatarIntegrationBatchResult(false, results, diagnostics);
+            return new ModularAvatarIntegrationBatchResult(true, results, diagnostics);
         }
 
         public ModularAvatarManagedStateSnapshot InspectManagedState(VRCAvatarDescriptor avatar)
@@ -154,10 +175,10 @@ namespace FaceMotion.Editor.ModularAvatar
         private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request)
         {
             var stem = Sanitize(request == null ? "FaceMotion" : request.DisplayName);
-            return PlanCore(request, "FaceMotion_" + stem, Prefix + stem, "FaceMotionMA_" + stem, false, null);
+            return PlanCore(request, "FaceMotion_" + stem, Prefix + stem, "FaceMotionMA_" + stem, false, null, null);
         }
 
-        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName, bool allowOtherManifests, HashSet<string> removingParameters)
+        private static ModularAvatarIntegrationPlan PlanCore(ModularAvatarIntegrationRequest request, string parameter, string objectName, string rootName, bool allowOtherManifests, HashSet<string> removingParameters, IReadOnlyList<BatchEntry> batchEntries = null)
         {
             var diagnostics = new List<FaceMotionDiagnostic>();
             if (request == null || request.Avatar == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarAvatar, "Select a VRCAvatarDescriptor."));
@@ -165,6 +186,8 @@ namespace FaceMotion.Editor.ModularAvatar
             if (request == null || request.Clip == null) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarClip, "Select an AnimationClip before integrating."));
             if (request == null || !IsAssetFolder(request.OutputFolder)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarPath, "Output folder must be an existing folder under Assets."));
             if (parameter.Length > 256) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarParameterName, "The generated parameter name exceeds VRChat's 256 character limit."));
+            var partnerParameters = new List<string>();
+            var sharedBindings = new HashSet<EditorCurveBinding>();
             if (request != null && request.Avatar != null)
             {
                 var existing = FindManifest(request.Avatar, parameter) ?? FindRemovalCandidateManifest(request.Avatar, parameter);
@@ -172,10 +195,33 @@ namespace FaceMotion.Editor.ModularAvatar
                 if (request.Clip != null)
                 {
                     ValidateAmbiguousClipBindings(request.Avatar, request.Clip, diagnostics);
-                    ValidateConflicts(request.Avatar, request.Clip, parameter, existing, removingParameters, diagnostics);
+                    ValidateConflicts(request.Avatar, request.Clip, parameter, existing, removingParameters, diagnostics, partnerParameters, sharedBindings);
+                    CollectBatchPartners(request.Clip, parameter, batchEntries, partnerParameters, sharedBindings);
                 }
             }
-            return new ModularAvatarIntegrationPlan(request, parameter, objectName, rootName, diagnostics);
+            return new ModularAvatarIntegrationPlan(request, parameter, objectName, rootName, diagnostics,
+                partnerParameters, new List<EditorCurveBinding>(sharedBindings));
+        }
+
+        /// <summary>One planned batch item; batch siblings that share bindings become partner-aware machines.</summary>
+        private readonly struct BatchEntry
+        {
+            public BatchEntry(ModularAvatarIntegrationRequest request, string parameter) { Request = request; Parameter = parameter; }
+            public ModularAvatarIntegrationRequest Request { get; }
+            public string Parameter { get; }
+        }
+
+        private static void CollectBatchPartners(AnimationClip clip, string parameter, IReadOnlyList<BatchEntry> batchEntries, List<string> partnerParameters, HashSet<EditorCurveBinding> sharedBindings)
+        {
+            if (batchEntries == null || clip == null) return;
+            for (var i = 0; i < batchEntries.Count; i++)
+            {
+                var entry = batchEntries[i];
+                if (entry.Request == null || entry.Request.Clip == null || string.Equals(entry.Parameter, parameter, StringComparison.Ordinal)) continue;
+                var overlaps = false;
+                foreach (var binding in SharedBindings(entry.Request.Clip, clip)) { sharedBindings.Add(binding); overlaps = true; }
+                if (overlaps && !partnerParameters.Contains(entry.Parameter)) partnerParameters.Add(entry.Parameter);
+            }
         }
 
         private static FaceMotionDiagnostic UnexpectedPlanDiagnostic(Exception exception, ModularAvatarIntegrationRequest request)
@@ -274,13 +320,53 @@ namespace FaceMotion.Editor.ModularAvatar
                 }
                 var controller = AnimatorController.CreateAnimatorControllerAtPath(root + "/FX.controller"); owned.Add(root + "/FX.controller");
                 controller.AddParameter(plan.ParameterName, AnimatorControllerParameterType.Bool);
+                var partners = plan.PartnerParameters ?? Array.Empty<string>();
+                for (var p = 0; p < partners.Count; p++)
+                    if (!string.IsNullOrEmpty(partners[p]) && !string.Equals(partners[p], plan.ParameterName, StringComparison.Ordinal) && !HasParameter(controller, partners[p]))
+                        controller.AddParameter(partners[p], AnimatorControllerParameterType.Bool);
                 var machine = new AnimatorStateMachine { name = plan.ObjectName }; AssetDatabase.AddObjectToAsset(machine, controller);
                 var reset = ResetClipBuilder.Create(plan.Request.Avatar, plan.Request.Clip); reset.name = "Reset";
                 AssetDatabase.CreateAsset(reset, root + "/Reset.anim"); owned.Add(root + "/Reset.anim");
-                var off = machine.AddState("Off"); off.motion = reset; off.writeDefaultValues = false;
-                var on = machine.AddState("On"); on.motion = plan.Request.Clip; on.writeDefaultValues = false;
-                var toOn = off.AddTransition(on); toOn.hasExitTime = false; toOn.duration = 0f; toOn.AddCondition(AnimatorConditionMode.If, 0, plan.ParameterName);
-                var toOff = on.AddTransition(off); toOff.hasExitTime = false; toOff.duration = 0f; toOff.AddCondition(AnimatorConditionMode.IfNot, 0, plan.ParameterName);
+                if (partners.Count == 0)
+                {
+                    var off = machine.AddState("Off"); off.motion = reset; off.writeDefaultValues = false;
+                    var on = machine.AddState("On"); on.motion = plan.Request.Clip; on.writeDefaultValues = false;
+                    var toOn = off.AddTransition(on); toOn.hasExitTime = false; toOn.duration = 0f; toOn.AddCondition(AnimatorConditionMode.If, 0, plan.ParameterName);
+                    var toOff = on.AddTransition(off); toOff.hasExitTime = false; toOff.duration = 0f; toOff.AddCondition(AnimatorConditionMode.IfNot, 0, plan.ParameterName);
+                }
+                else
+                {
+                    var resetUnique = UnityEngine.Object.Instantiate(reset);
+                    resetUnique.name = "Reset Unique";
+                    var shared = plan.SharedBindings ?? Array.Empty<EditorCurveBinding>();
+                    for (var s = 0; s < shared.Count; s++) AnimationUtility.SetEditorCurve(resetUnique, shared[s], null);
+                    var objectBindings = AnimationUtility.GetObjectReferenceCurveBindings(resetUnique);
+                    for (var s = 0; s < objectBindings.Length; s++)
+                        for (var t = 0; t < shared.Count; t++)
+                            if (objectBindings[s].Equals(shared[t])) { AnimationUtility.SetObjectReferenceCurve(resetUnique, objectBindings[s], null); break; }
+                    AssetDatabase.CreateAsset(resetUnique, root + "/ResetUnique.anim"); owned.Add(root + "/ResetUnique.anim");
+
+                    var offUnique = machine.AddState("OffUnique"); offUnique.motion = resetUnique; offUnique.writeDefaultValues = false;
+                    var offAll = machine.AddState("OffAll"); offAll.motion = reset; offAll.writeDefaultValues = false;
+                    var on = machine.AddState("On"); on.motion = plan.Request.Clip; on.writeDefaultValues = false;
+                    machine.defaultState = offUnique;
+
+                    var allToOn = offAll.AddTransition(on); allToOn.hasExitTime = false; allToOn.duration = 0f; allToOn.AddCondition(AnimatorConditionMode.If, 0, plan.ParameterName);
+                    var uniqueToOn = offUnique.AddTransition(on); uniqueToOn.hasExitTime = false; uniqueToOn.duration = 0f; uniqueToOn.AddCondition(AnimatorConditionMode.If, 0, plan.ParameterName);
+                    var onToAll = on.AddTransition(offAll); onToAll.hasExitTime = false; onToAll.duration = 0f;
+                    onToAll.AddCondition(AnimatorConditionMode.IfNot, 0, plan.ParameterName);
+                    for (var p = 0; p < partners.Count; p++) onToAll.AddCondition(AnimatorConditionMode.IfNot, 0, partners[p]);
+                    for (var p = 0; p < partners.Count; p++)
+                    {
+                        var onToUnique = on.AddTransition(offUnique); onToUnique.hasExitTime = false; onToUnique.duration = 0f;
+                        onToUnique.AddCondition(AnimatorConditionMode.IfNot, 0, plan.ParameterName);
+                        onToUnique.AddCondition(AnimatorConditionMode.If, 0, partners[p]);
+                        var allToUnique = offAll.AddTransition(offUnique); allToUnique.hasExitTime = false; allToUnique.duration = 0f;
+                        allToUnique.AddCondition(AnimatorConditionMode.If, 0, partners[p]);
+                    }
+                    var uniqueToAll = offUnique.AddTransition(offAll); uniqueToAll.hasExitTime = false; uniqueToAll.duration = 0f;
+                    for (var p = 0; p < partners.Count; p++) uniqueToAll.AddCondition(AnimatorConditionMode.IfNot, 0, partners[p]);
+                }
                 controller.AddLayer(new AnimatorControllerLayer { name = plan.ObjectName, defaultWeight = 1, stateMachine = machine });
                 var menu = ScriptableObject.CreateInstance<VRCExpressionsMenu>(); menu.name = plan.ObjectName;
                 menu.controls = new List<VRCExpressionsMenu.Control> { new VRCExpressionsMenu.Control { name = MenuLabel(plan), type = VRCExpressionsMenu.Control.ControlType.Toggle, parameter = new VRCExpressionsMenu.Control.Parameter { name = plan.ParameterName }, value = 1 } };
@@ -303,7 +389,13 @@ namespace FaceMotion.Editor.ModularAvatar
                 EditorUtility.SetDirty(node); AssetDatabase.SaveAssets(); Undo.CollapseUndoOperations(undoGroup);
                 ApplyFailureInjector?.Invoke("after-create");
                 var applied = wasDetached ? Info(FaceMotionDiagnosticCodes.ModularAvatarDetached, "A detached integration was reconnected using its retained generated assets.") : Info(FaceMotionDiagnosticCodes.ModularAvatarApplied, "Modular Avatar merge animator, parameters, and menu installer were created.");
-                return new ModularAvatarIntegrationResult(true, manifest, new[] { applied });
+                var outcome = new List<FaceMotionDiagnostic> { applied };
+                if (!InsideBatchApply)
+                {
+                    var regen = RegenerateStalePartnerMachines(avatar);
+                    for (var r = 0; r < regen.Count; r++) outcome.Add(regen[r]);
+                }
+                return new ModularAvatarIntegrationResult(true, manifest, outcome);
             }
             catch (Exception exception)
             {
@@ -343,11 +435,14 @@ namespace FaceMotion.Editor.ModularAvatar
             {
                 return new ModularAvatarIntegrationResult(true, null, new[] { Info(FaceMotionDiagnosticCodes.ModularAvatarNothingToRemove, "No FaceMotion Modular Avatar integration matches the requested parameter.") });
             }
-            if (!RemoveManaged(manifest, avatar, out var diagnostics))
+            if (!RemoveManaged(manifest, avatar, out var removeDiagnostics))
             {
-                return new ModularAvatarIntegrationResult(false, manifest, diagnostics);
+                return new ModularAvatarIntegrationResult(false, manifest, removeDiagnostics);
             }
-            return new ModularAvatarIntegrationResult(true, null, diagnostics);
+            var outcome = new List<FaceMotionDiagnostic>(removeDiagnostics);
+            var regen = RegenerateStalePartnerMachines(avatar);
+            for (var r = 0; r < regen.Count; r++) outcome.Add(regen[r]);
+            return new ModularAvatarIntegrationResult(true, null, outcome);
         }
 
         /// <summary>Removes the FaceMotion Modular Avatar integrations for the given generated parameters. Idempotent per parameter.</summary>
@@ -370,6 +465,137 @@ namespace FaceMotion.Editor.ModularAvatar
                 if (!result.Succeeded) succeeded = false;
             }
             return new ModularAvatarIntegrationBatchResult(succeeded, results, diagnostics);
+        }
+
+        private static bool RegenerationInProgress;
+        private static bool InsideBatchApply;
+
+        /// <summary>
+        /// Rebuilds managed integrations whose generated partner-aware state machines no longer match
+        /// the current binding-partner graph (a shared partner was added or removed in the same
+        /// transaction). Idempotent: controllers whose parameter set already matches the expected
+        /// partner set are never touched. Blocking diagnostics mean a regeneration could not be applied.
+        /// </summary>
+        public IReadOnlyList<FaceMotionDiagnostic> RegenerateStalePartnerMachines(VRCAvatarDescriptor avatar)
+        {
+            var diagnostics = new List<FaceMotionDiagnostic>();
+            if (avatar == null || RegenerationInProgress) return diagnostics;
+            RegenerationInProgress = true;
+            try
+            {
+                var manifests = FindManagedManifests(avatar);
+                for (var m = 0; m < manifests.Count; m++)
+                {
+                    var manifest = manifests[m];
+                    if (manifest == null) continue;
+                    var node = ResolveIntegrationObject(manifest, avatar);
+                    if (node == null) continue;
+                    var merge = node.GetComponent<ModularAvatarMergeAnimator>();
+                    var controller = merge == null ? null : merge.animator as AnimatorController;
+                    if (controller == null) continue;
+                    var clip = ClipOfController(controller);
+                    if (clip == null) continue;
+                    var expected = new List<string>();
+                    ComputeExpectedPartners(avatar, clip, manifest.ParameterName, expected, new HashSet<EditorCurveBinding>());
+                    var actual = new List<string>();
+                    var parameters = controller.parameters;
+                    for (var p = 0; p < parameters.Length; p++)
+                        if (parameters[p] != null && !string.IsNullOrEmpty(parameters[p].name) && !string.Equals(parameters[p].name, manifest.ParameterName, StringComparison.Ordinal))
+                            actual.Add(parameters[p].name);
+                    if (SameSet(expected, actual)) continue;
+                    var manifestPath = AssetDatabase.GetAssetPath(manifest);
+                    var root = string.IsNullOrEmpty(manifestPath) ? null : Path.GetDirectoryName(manifestPath)?.Replace('\\', '/');
+                    if (string.IsNullOrEmpty(root) || !AssetDatabase.IsValidFolder(root)) continue;
+                    var parentFolder = Path.GetDirectoryName(root)?.Replace('\\', '/');
+                    var displayName = !string.IsNullOrEmpty(manifest.IntegrationObjectName) && manifest.IntegrationObjectName.StartsWith(Prefix, StringComparison.Ordinal)
+                        ? manifest.IntegrationObjectName.Substring(Prefix.Length)
+                        : manifest.ParameterName;
+                    var request = new ModularAvatarIntegrationRequest(avatar, clip, parentFolder, displayName, manifest.AnimationId);
+                    var plan = PlanCore(request, manifest.ParameterName, node.name, Path.GetFileName(root), true, null, null);
+                    if (!plan.IsValid)
+                    {
+                        for (var d = 0; d < plan.Diagnostics.Count; d++) diagnostics.Add(plan.Diagnostics[d]);
+                        continue;
+                    }
+                    var result = Apply(plan);
+                    for (var d = 0; d < result.Diagnostics.Count; d++) diagnostics.Add(result.Diagnostics[d]);
+                    if (!result.Succeeded) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarApply, "Partner-aware regeneration failed for \"" + manifest.ParameterName + "\"."));
+                }
+            }
+            finally
+            {
+                RegenerationInProgress = false;
+            }
+            return diagnostics;
+        }
+
+        /// <summary>Current partner parameters for one clip: other managed merges plus FaceMotion-owned FX clips that share bindings.</summary>
+        private static void ComputeExpectedPartners(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, List<string> partnerParameters, HashSet<EditorCurveBinding> sharedBindings)
+        {
+            if (avatar == null || clip == null) return;
+            foreach (var merge in avatar.GetComponentsInChildren<ModularAvatarMergeAnimator>(true))
+            {
+                if (merge.animator == null) continue;
+                var managed = FindManifestOwningObject(avatar, merge.gameObject);
+                if (managed == null || string.Equals(managed.ParameterName, parameter, StringComparison.Ordinal)) continue;
+                foreach (var candidate in merge.animator.animationClips)
+                {
+                    if (candidate == null) continue;
+                    foreach (var binding in SharedBindings(candidate, clip))
+                    {
+                        sharedBindings.Add(binding);
+                        if (!partnerParameters.Contains(managed.ParameterName)) partnerParameters.Add(managed.ParameterName);
+                    }
+                }
+            }
+            var fx = GetFx(avatar);
+            if (fx == null) return;
+            foreach (var candidate in fx.animationClips)
+            {
+                if (candidate == null) continue;
+                var overlaps = false;
+                foreach (var binding in SharedBindings(candidate, clip)) { sharedBindings.Add(binding); overlaps = true; }
+                if (!overlaps) continue;
+                var owning = DirectVRChatIntegration.FindOwningParameterForClip(avatar, candidate);
+                if (owning != null && !string.Equals(owning, parameter, StringComparison.Ordinal) && !partnerParameters.Contains(owning)) partnerParameters.Add(owning);
+            }
+        }
+
+        private static AnimationClip ClipOfController(AnimatorController controller)
+        {
+            if (controller == null) return null;
+            AnimationClip fallback = null;
+            var layers = controller.layers;
+            for (var l = 0; l < layers.Length; l++)
+            {
+                var machine = layers[l].stateMachine;
+                if (machine == null) continue;
+                var states = machine.states;
+                for (var s = 0; s < states.Length; s++)
+                {
+                    var motion = states[s].state == null ? null : states[s].state.motion;
+                    if (!(motion is AnimationClip clip)) continue;
+                    if (states[s].state.name == "On") return clip;
+                    if (fallback == null && !clip.name.StartsWith("Reset", StringComparison.Ordinal)) fallback = clip;
+                }
+            }
+            return fallback;
+        }
+
+        private static bool SameSet(List<string> expected, List<string> actual)
+        {
+            if (expected.Count != actual.Count) return false;
+            for (var i = 0; i < expected.Count; i++)
+                if (!actual.Contains(expected[i])) return false;
+            return true;
+        }
+
+        private static bool HasParameter(AnimatorController controller, string name)
+        {
+            var parameters = controller.parameters;
+            for (var i = 0; i < parameters.Length; i++)
+                if (parameters[i] != null && string.Equals(parameters[i].name, name, StringComparison.Ordinal)) return true;
+            return false;
         }
 
         /// <summary>Hierarchy-only removal used by Apply's replace-in-place path; Apply deletes the old assets and manifest itself so the folder is reused.</summary>
@@ -514,7 +740,7 @@ namespace FaceMotion.Editor.ModularAvatar
             return plan.ObjectName == Prefix + Sanitize(displayName) ? displayName : plan.ObjectName.Substring(Prefix.Length);
         }
 
-        private static void ValidateConflicts(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, ModularAvatarIntegrationManifest owned, HashSet<string> removingParameters, List<FaceMotionDiagnostic> diagnostics)
+        private static void ValidateConflicts(VRCAvatarDescriptor avatar, AnimationClip clip, string parameter, ModularAvatarIntegrationManifest owned, HashSet<string> removingParameters, List<FaceMotionDiagnostic> diagnostics, List<string> partnerParameters, HashSet<EditorCurveBinding> sharedBindings)
         {
             foreach (var parameters in avatar.GetComponentsInChildren<ModularAvatarParameters>(true))
                 if (!IsOwned(parameters.gameObject, owned, avatar) && !IsScheduledForRemoval(parameters.gameObject, avatar, removingParameters))
@@ -522,6 +748,8 @@ namespace FaceMotion.Editor.ModularAvatar
             foreach (var merge in avatar.GetComponentsInChildren<ModularAvatarMergeAnimator>(true))
             {
                 if (IsOwned(merge.gameObject, owned, avatar) || IsScheduledForRemoval(merge.gameObject, avatar, removingParameters) || merge.animator == null) continue;
+                var managed = FindManifestOwningObject(avatar, merge.gameObject);
+                var warnedShared = false;
                 foreach (var candidate in merge.animator.animationClips)
                 {
                     if (candidate == null) continue;
@@ -529,6 +757,19 @@ namespace FaceMotion.Editor.ModularAvatar
                     {
                         string objectPath = RelativePathUtility.GetRelativePath(avatar.transform, merge.transform) ?? string.Empty;
                         string description = DescribeBinding(binding);
+                        if (managed != null && !string.Equals(managed.ParameterName, parameter, StringComparison.Ordinal))
+                        {
+                            if (!partnerParameters.Contains(managed.ParameterName)) partnerParameters.Add(managed.ParameterName);
+                            sharedBindings.Add(binding);
+                            if (!warnedShared)
+                            {
+                                warnedShared = true;
+                                diagnostics.Add(SharedBindingWarning(
+                                    "The Modular Avatar Merge Animator \"" + merge.gameObject.name + "\" shares binding \"" + description + "\" through clip \"" + candidate.name + "\".",
+                                    objectPath, MergeAnimatorConflictDetails(merge, objectPath, candidate, binding)));
+                            }
+                            continue;
+                        }
                         diagnostics.Add(new FaceMotionDiagnostic(
                             FaceMotionDiagnosticCodes.ModularAvatarBindingConflict,
                             FaceMotionDiagnosticSeverity.Error,
@@ -540,7 +781,81 @@ namespace FaceMotion.Editor.ModularAvatar
                     }
                 }
             }
-            var fx = GetFx(avatar); if (fx != null) foreach (var candidate in fx.animationClips) if (candidate != null && HasSharedBinding(candidate, clip)) diagnostics.Add(Error(FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict, "The clip shares an animated binding with the avatar FX controller."));
+            var fx = GetFx(avatar);
+            if (fx != null)
+            {
+                var warnedFxShared = false;
+                foreach (var candidate in fx.animationClips)
+                {
+                    if (candidate == null) continue;
+                    var overlaps = new List<EditorCurveBinding>();
+                    foreach (var binding in SharedBindings(candidate, clip)) overlaps.Add(binding);
+                    if (overlaps.Count == 0) continue;
+                    var owning = DirectVRChatIntegration.FindOwningParameterForClip(avatar, candidate);
+                    if (owning != null)
+                    {
+                        if (!string.Equals(owning, parameter, StringComparison.Ordinal) && !partnerParameters.Contains(owning)) partnerParameters.Add(owning);
+                        foreach (var binding in overlaps) sharedBindings.Add(binding);
+                        if (!warnedFxShared)
+                        {
+                            warnedFxShared = true;
+                            var first = overlaps[0];
+                            diagnostics.Add(SharedBindingWarning(
+                                "The avatar FX controller clip \"" + candidate.name + "\" (FaceMotion-owned) shares binding \"" + DescribeBinding(first) + "\".",
+                                first.path,
+                                new Dictionary<string, string>
+                                {
+                                    { FaceMotionDiagnosticDetailKeys.Reason, FaceMotionDiagnosticDetailKeys.ReasonMergeAnimatorBinding },
+                                    { FaceMotionDiagnosticDetailKeys.ConflictController, fx == null ? string.Empty : fx.name },
+                                    { FaceMotionDiagnosticDetailKeys.ConflictClip, candidate.name },
+                                    { FaceMotionDiagnosticDetailKeys.BindingPath, first.path },
+                                    { FaceMotionDiagnosticDetailKeys.BindingProperty, first.propertyName },
+                                    { FaceMotionDiagnosticDetailKeys.BindingType, first.type == null ? string.Empty : first.type.Name },
+                                    { FaceMotionDiagnosticDetailKeys.Binding, DescribeBinding(first) }
+                                }));
+                        }
+                        continue;
+                    }
+                    var foreignBinding = overlaps[0];
+                    diagnostics.Add(new FaceMotionDiagnostic(
+                        FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict,
+                        FaceMotionDiagnosticSeverity.Error,
+                        "The avatar FX controller clip \"" + candidate.name + "\" shares binding \"" + DescribeBinding(foreignBinding) + "\".",
+                        foreignBinding.path,
+                        true,
+                        "Resolve the external avatar FX binding before planning the integration again.",
+                        new Dictionary<string, string>
+                        {
+                            { FaceMotionDiagnosticDetailKeys.Reason, FaceMotionDiagnosticDetailKeys.ReasonMergeAnimatorBinding },
+                            { FaceMotionDiagnosticDetailKeys.ConflictController, fx.name },
+                            { FaceMotionDiagnosticDetailKeys.ConflictClip, candidate.name },
+                            { FaceMotionDiagnosticDetailKeys.BindingPath, foreignBinding.path },
+                            { FaceMotionDiagnosticDetailKeys.BindingProperty, foreignBinding.propertyName },
+                            { FaceMotionDiagnosticDetailKeys.BindingType, foreignBinding.type == null ? string.Empty : foreignBinding.type.Name },
+                            { FaceMotionDiagnosticDetailKeys.Binding, DescribeBinding(foreignBinding) }
+                        }));
+                }
+            }
+        }
+
+        private static ModularAvatarIntegrationManifest FindManifestOwningObject(VRCAvatarDescriptor avatar, GameObject integrationObject)
+        {
+            if (avatar == null || integrationObject == null) return null;
+            foreach (var manifest in FindManagedManifests(avatar))
+                if (manifest != null && IsOwned(integrationObject, manifest, avatar)) return manifest;
+            return null;
+        }
+
+        private static FaceMotionDiagnostic SharedBindingWarning(string message, string contextId, Dictionary<string, string> details)
+        {
+            return new FaceMotionDiagnostic(
+                FaceMotionDiagnosticCodes.ModularAvatarSharedBindingWarning,
+                FaceMotionDiagnosticSeverity.Warning,
+                message,
+                contextId,
+                false,
+                "When both animations are enabled at the same time the later layer wins; keep the bindings separate if a different outcome is required.",
+                details);
         }
 
         private static void ValidateAmbiguousClipBindings(VRCAvatarDescriptor avatar, AnimationClip clip, List<FaceMotionDiagnostic> diagnostics)
@@ -916,10 +1231,10 @@ namespace FaceMotion.Editor.ModularAvatar
             return path;
         }
         private static RuntimeAnimatorController GetFx(VRCAvatarDescriptor avatar) { if (avatar == null || avatar.baseAnimationLayers == null) return null; foreach (var layer in avatar.baseAnimationLayers) if (layer.type == VRCAvatarDescriptor.AnimLayerType.FX) return layer.animatorController; return null; }
-        private static IEnumerable<EditorCurveBinding> SharedBindings(AnimationClip a, AnimationClip b) { var set = new HashSet<EditorCurveBinding>(AnimationUtility.GetCurveBindings(a)); foreach (var binding in AnimationUtility.GetCurveBindings(b)) if (set.Contains(binding)) yield return binding; }
+        private static IEnumerable<EditorCurveBinding> SharedBindings(AnimationClip a, AnimationClip b) { return AnimationBindingKey.SharedFloatBindings(a, b); }
         private static bool HasSharedBinding(AnimationClip a, AnimationClip b) { foreach (var binding in SharedBindings(a, b)) return true; return false; }
 
-        private static bool IsAssetFolder(string path) { return !string.IsNullOrEmpty(path) && (path == "Assets" || path.StartsWith("Assets/", StringComparison.Ordinal)) && AssetDatabase.IsValidFolder(path) && !path.Contains(".."); }
+        private static bool IsAssetFolder(string path) { return OneClickIntegrationService.IsPlannableOutputFolder(path); }
         private static string Sanitize(string value) { var c = (value ?? "FaceMotion").ToCharArray(); for (var i = 0; i < c.Length; i++) if (!char.IsLetterOrDigit(c[i]) && c[i] != '_') c[i] = '_'; return new string(c); }
         private static FaceMotionDiagnostic Error(string code, string message, string fix = "Resolve the conflict or use Direct integration.") { return new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Error, message, "modular-avatar", true, fix); }
         private static FaceMotionDiagnostic Info(string code, string message) { return new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Info, message, "modular-avatar", false, string.Empty); }

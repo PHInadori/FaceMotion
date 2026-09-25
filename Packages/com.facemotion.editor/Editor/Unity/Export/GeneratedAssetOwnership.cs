@@ -19,6 +19,7 @@ namespace FaceMotion.Editor.Export
             "Menu.asset",
             "FaceMotion.menu.asset",
             "Reset.anim",
+            "ResetUnique.anim",
             "Manifest.asset"
         };
 

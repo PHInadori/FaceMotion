@@ -292,7 +292,7 @@ namespace FaceMotion.Editor.UI.Panels
 
         private bool FilterAllowsCandidate(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
         {
-            if (candidate == null || candidate.IsSeparator)
+            if (candidate == null)
             {
                 return false;
             }

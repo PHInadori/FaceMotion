@@ -222,6 +222,18 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void PreviewPanelLayout_NarrowWidthWrapsControlsInsideThePanel()
+        {
+            PreviewPanelLayout layout = PreviewPanel.CalculateLayout(new Rect(0f, 0f, 180f, 400f));
+            PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(layout.ControlsRect);
+
+            Assert.That(layout.ControlsRect.height, Is.GreaterThan(PreviewPanel.ControlsHeight));
+            Assert.That(controls.Fit.xMax, Is.LessThanOrEqualTo(layout.ControlsRect.xMax));
+            Assert.That(controls.Reset.xMax, Is.LessThanOrEqualTo(layout.ControlsRect.xMax));
+            Assert.That(controls.Reset.y, Is.GreaterThan(controls.Play.y));
+        }
+
+        [Test]
         public void CameraInput_OutsidePreviewRect_IsIgnored()
         {
             var fixture = AvatarFixture.Create();

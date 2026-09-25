@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using FaceMotion.Animation;
 using FaceMotion.Editor.Avatar;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Timeline;
 using UnityEngine;
 
@@ -44,7 +43,6 @@ namespace FaceMotion.Editor.Tests.Performance
                 AddEvaluationMeasurements(report.measurements, Workloads[i]);
             }
 
-            AddTraceMeasurements(report.measurements);
             AddAvatarScanMeasurements(report.measurements);
 
             string directory = Path.GetDirectoryName(outputPath);
@@ -81,26 +79,6 @@ namespace FaceMotion.Editor.Tests.Performance
                         EvaluateAll(tracks, (randomState & 0x7fffffff) / 2147483647f);
                     }
                 }));
-        }
-
-        private static void AddTraceMeasurements(List<Measurement> measurements)
-        {
-            FaceMotionPreviewTrace.Clear();
-            FaceMotionPreviewTrace.SetEnabled(false);
-            int index = 0;
-            measurements.Add(Measure("trace.disabled", "trace", 0, 0, 10000, delegate
-            {
-                FaceMotionPreviewTrace.Trace("I6", "Value {0}", index++);
-            }));
-
-            FaceMotionPreviewTrace.ClearAndEnable();
-            index = 0;
-            measurements.Add(Measure("trace.enabled", "trace", 0, 0, 8, delegate
-            {
-                FaceMotionPreviewTrace.Trace("I6", "Value {0}", index++);
-            }));
-            FaceMotionPreviewTrace.SetEnabled(false);
-            FaceMotionPreviewTrace.Clear();
         }
 
         private static void AddAvatarScanMeasurements(List<Measurement> measurements)

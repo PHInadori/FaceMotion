@@ -1,5 +1,4 @@
 using System;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Session;
 using UnityEditor;
@@ -281,11 +280,6 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public void ScrubTo(float time)
         {
-            FaceMotionPreviewTrace.Trace(
-                "A.ScrubTo",
-                "requested={0}",
-                time);
-
             _session.SetCurrentTime(
                 _keys.SnapTime(time));
         }

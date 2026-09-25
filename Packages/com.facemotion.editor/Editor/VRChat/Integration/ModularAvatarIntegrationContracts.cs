@@ -23,13 +23,22 @@ namespace FaceMotion.Editor.VRChat.Integration
     {
         public ModularAvatarIntegrationPlan(ModularAvatarIntegrationRequest request, string parameterName, string objectName, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
             : this(request, parameterName, objectName, "FaceMotionMA_" + (objectName ?? string.Empty).Replace("FaceMotion MA ", string.Empty), diagnostics) { }
-        public ModularAvatarIntegrationPlan(ModularAvatarIntegrationRequest request, string parameterName, string objectName, string rootName, IReadOnlyList<FaceMotionDiagnostic> diagnostics)
-        { Request = request; ParameterName = parameterName; ObjectName = objectName; RootName = rootName; Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>(); }
+        public ModularAvatarIntegrationPlan(ModularAvatarIntegrationRequest request, string parameterName, string objectName, string rootName, IReadOnlyList<FaceMotionDiagnostic> diagnostics,
+            IReadOnlyList<string> partnerParameters = null, IReadOnlyList<UnityEditor.EditorCurveBinding> sharedBindings = null)
+        {
+            Request = request; ParameterName = parameterName; ObjectName = objectName; RootName = rootName; Diagnostics = diagnostics ?? Array.Empty<FaceMotionDiagnostic>();
+            PartnerParameters = partnerParameters ?? Array.Empty<string>();
+            SharedBindings = sharedBindings ?? Array.Empty<UnityEditor.EditorCurveBinding>();
+        }
         public ModularAvatarIntegrationRequest Request { get; }
         public string ParameterName { get; }
         public string ObjectName { get; }
         public string RootName { get; }
         public IReadOnlyList<FaceMotionDiagnostic> Diagnostics { get; }
+        /// <summary>Driving parameters of other FaceMotion integrations whose clips share bindings with this plan's clip.</summary>
+        public IReadOnlyList<string> PartnerParameters { get; }
+        /// <summary>Bindings of this plan's clip that partners also animate; excluded from the unique-only reset clip.</summary>
+        public IReadOnlyList<UnityEditor.EditorCurveBinding> SharedBindings { get; }
         public bool IsValid { get { for (var i = 0; i < Diagnostics.Count; i++) if (Diagnostics[i].Blocking) return false; return true; } }
     }
 

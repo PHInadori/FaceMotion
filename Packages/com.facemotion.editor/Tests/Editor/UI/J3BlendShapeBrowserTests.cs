@@ -143,5 +143,16 @@ namespace FaceMotion.Editor.Tests
             Assert.That(conflict.IsConflict, Is.False);
             Assert.That(conflict.IsWarning, Is.False);
         }
+
+        [Test]
+        public void TransformCandidate_UsesIndentedNameButSearchesCanonicalPath()
+        {
+            var candidate = new AvatarCandidateSnapshot.TransformCandidate("Armature/Hips/Head", "Head", 3, "Armature/Hips");
+
+            Assert.That(candidate.DisplayLabel, Is.EqualTo("      Head"));
+            Assert.That(candidate.MatchesSearch("Hips"), Is.True);
+            Assert.That(candidate.MatchesSearch("head"), Is.True);
+            Assert.That(candidate.RelativePath, Is.EqualTo("Armature/Hips/Head"));
+        }
     }
 }

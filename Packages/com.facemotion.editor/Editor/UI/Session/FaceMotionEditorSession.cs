@@ -4,7 +4,6 @@ using FaceMotion.Avatar;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.Avatar;
-using FaceMotion.Editor.Diagnostics;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Timeline;
 using FaceMotion.Editor.VRChat;
@@ -76,7 +75,6 @@ namespace FaceMotion.Editor.UI.Session
         {
             float old = ViewState.CurrentTime;
             float clamped = Mathf.Clamp(time, 0f, GetSelectedDuration());
-            FaceMotionPreviewTrace.Trace("B.SetCurrentTime", "old={0} requested={1} clamped={2}", old, time, clamped);
             if (Mathf.Approximately(old, clamped))
             {
                 return false;
@@ -155,6 +153,7 @@ namespace FaceMotion.Editor.UI.Session
             ActiveObjectCache = cache;
             Candidates = candidates;
             AvatarIndexDirty = false;
+            _lastOperationDiagnostic = null;
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
             NotifyPoseChanged();
@@ -169,6 +168,7 @@ namespace FaceMotion.Editor.UI.Session
             ActiveObjectCache = null;
             Candidates = null;
             AvatarIndexDirty = false;
+            _lastOperationDiagnostic = null;
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
             NotifyPoseChanged();
@@ -334,7 +334,12 @@ namespace FaceMotion.Editor.UI.Session
         {
             if (string.IsNullOrEmpty(animationId)) return false;
             bool changed = selected ? _batchAnimationIds.Add(animationId) : _batchAnimationIds.Remove(animationId);
-            if (changed) NotifyChanged();
+            if (changed)
+            {
+                _lastOperationDiagnostic = null;
+                RecomputeDiagnostics();
+                NotifyChanged();
+            }
             return changed;
         }
 
@@ -347,13 +352,20 @@ namespace FaceMotion.Editor.UI.Session
                 var animation = ActiveProject.Animations[i];
                 if (animation != null && !string.IsNullOrEmpty(animation.AnimationId)) changed |= _batchAnimationIds.Add(animation.AnimationId);
             }
-            if (changed) NotifyChanged();
+            if (changed)
+            {
+                _lastOperationDiagnostic = null;
+                RecomputeDiagnostics();
+                NotifyChanged();
+            }
         }
 
         public void ClearBatchSelection()
         {
             if (_batchAnimationIds.Count == 0) return;
             _batchAnimationIds.Clear();
+            _lastOperationDiagnostic = null;
+            RecomputeDiagnostics();
             NotifyChanged();
         }
 

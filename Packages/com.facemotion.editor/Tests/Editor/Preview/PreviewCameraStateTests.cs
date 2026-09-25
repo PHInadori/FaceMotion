@@ -33,6 +33,18 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void Pan_FollowsTheMiddleMouseDragDirection()
+        {
+            var state = new PreviewCameraState();
+            state.Reset(new Bounds(Vector3.zero, Vector3.one));
+
+            state.Pan(new Vector2(20f, -10f), 200f);
+
+            Assert.That(state.Pivot.x, Is.GreaterThan(0f));
+            Assert.That(state.Pivot.y, Is.LessThan(0f));
+        }
+
+        [Test]
         public void Bounds_WithoutRenderers_FallsBackToRoot()
         {
             var root = new GameObject("Preview bounds test");

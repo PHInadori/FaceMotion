@@ -58,6 +58,7 @@ namespace FaceMotion.Editor.Tests
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("Menu.asset"), Is.True);
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("FaceMotion.menu.asset"), Is.True);
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("Reset.anim"), Is.True);
+            Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("ResetUnique.anim"), Is.True);
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("Manifest.asset"), Is.True);
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName("MyUserMemo.anim"), Is.False);
             Assert.That(GeneratedAssetOwnership.IsCanonicalGeneratedFileName(string.Empty), Is.False);

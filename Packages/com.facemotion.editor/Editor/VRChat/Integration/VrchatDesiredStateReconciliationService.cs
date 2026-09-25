@@ -64,7 +64,15 @@ namespace FaceMotion.Editor.VRChat.Integration
 
                 // This pure pass supplies canonical legacy parameters. Do not treat its conflicts as final-state conflicts.
                 var canonical = request.Backend.PlanBatch(Requests(request, candidates, outputFolder, true));
-                if (canonical.Items.Count != candidates.Count) diagnostics.Add(Error("The Modular Avatar backend returned an incomplete canonical parameter plan."));
+                if (canonical == null)
+                {
+                    diagnostics.Add(Error("The Modular Avatar backend returned no canonical parameter plan."));
+                }
+                else
+                {
+                    if (canonical.Items.Count != candidates.Count) diagnostics.Add(Error("The Modular Avatar backend returned an incomplete canonical parameter plan."));
+                    for (var i = 0; i < canonical.Items.Count; i++) if (canonical.Items[i] != null) diagnostics.AddRange(canonical.Items[i].Diagnostics);
+                }
                 if (HasBlocking(diagnostics)) return Finish(false, VrchatDesiredStateReconciliationOutcome.PreflightFailed, actions, diagnostics, null);
 
                 var byId = new Dictionary<string, ModularAvatarManagedState>(StringComparer.Ordinal);
@@ -90,27 +98,33 @@ namespace FaceMotion.Editor.VRChat.Integration
                 // Validate additions against the state after the proven-owned removals, without mutating it.
                 var finalPlan = adds.Count == 0 ? null : PlanFinalState(request, adds, removals, outputFolder);
                 if (finalPlan != null) for (var i = 0; i < finalPlan.Items.Count; i++) if (finalPlan.Items[i] != null) diagnostics.AddRange(finalPlan.Items[i].Diagnostics);
-                if (finalPlan != null && (!finalPlan.IsValid || finalPlan.Items.Count != adds.Count)) diagnostics.Add(Error("The final Modular Avatar desired state could not be validated."));
+                if (finalPlan != null && (!finalPlan.IsValid || finalPlan.Items.Count != adds.Count) && !HasBlocking(diagnostics)) diagnostics.Add(Error("The final Modular Avatar desired state could not be validated."));
                 if (HasBlocking(diagnostics)) return Finish(false, VrchatDesiredStateReconciliationOutcome.PreflightFailed, actions, diagnostics, null);
 
                 // Capture before export: output assets are part of the transaction, not preflight.
                 object snapshot = (request.Backend as IModularAvatarIntegrationRollbackBackend)?.CaptureRollbackSnapshot(request.Avatar);
                 var exportSnapshot = CaptureExports(adds);
+                var createdFolders = new List<string>();
                 // Export and mutation happen only after every clip, ownership rule, removal, and final binding check succeeded.
                 try
                 {
-                    for (var i = 0; i < adds.Count; i++) { mayHaveMutated = true; var exported = AnimationClipExporter.Export(adds[i].Animation, adds[i].ExportPath); diagnostics.AddRange(exported.Diagnostics); if (!exported.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null); adds[i].Clip = exported.Clip; ExportedClipRegistry.Record(adds[i].Animation.AnimationId, adds[i].ExportPath); }
+                    // FaceMotion's canonical output root is created here, inside the transaction, never during preflight.
+                    if (adds.Count > 0 && !CreateManagedOutputRoot(outputFolder, createdFolders))
+                        return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, "FaceMotion's default Modular Avatar output folder could not be created.", createdFolders);
+                    if (createdFolders.Count > 0) mayHaveMutated = true;
 
-                    if (removals.Count > 0) { mayHaveMutated = true; var removed = request.Backend.RemoveAnimations(request.Avatar, removals); diagnostics.AddRange(removed.Diagnostics); if (!removed.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null); }
-                    if (adds.Count > 0) { mayHaveMutated = true; var applied = request.Backend.ApplyBatch(RebindPlans(finalPlan, adds)); diagnostics.AddRange(applied.Diagnostics); if (!applied.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null); }
+                    for (var i = 0; i < adds.Count; i++) { mayHaveMutated = true; var exported = AnimationClipExporter.Export(adds[i].Animation, adds[i].ExportPath); diagnostics.AddRange(exported.Diagnostics); if (!exported.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null, createdFolders); adds[i].Clip = exported.Clip; ExportedClipRegistry.Record(adds[i].Animation.AnimationId, adds[i].ExportPath); }
+
+                    if (removals.Count > 0) { mayHaveMutated = true; var removed = request.Backend.RemoveAnimations(request.Avatar, removals); diagnostics.AddRange(removed.Diagnostics); if (!removed.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null, createdFolders); }
+                    if (adds.Count > 0) { mayHaveMutated = true; var applied = request.Backend.ApplyBatch(RebindPlans(finalPlan, adds)); diagnostics.AddRange(applied.Diagnostics); if (!applied.Succeeded) return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, null, createdFolders); }
                 }
-                catch (Exception exception) { return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, exception.Message); }
+                catch (Exception exception) { return MutationFailure(request, actions, diagnostics, snapshot, exportSnapshot, exception.Message, createdFolders); }
                 return new VrchatDesiredStateReconciliationResult(true, VrchatDesiredStateReconciliationOutcome.Succeeded, actions, diagnostics);
             }
             finally { DestroyPreviews(previews); if (mayHaveMutated) request?.InvalidateManagedState?.Invoke(request.Avatar); }
         }
 
-        private static VrchatDesiredStateReconciliationResult MutationFailure(VrchatDesiredStateReconciliationRequest request, List<VrchatDesiredStateReconciliationItem> actions, List<FaceMotionDiagnostic> diagnostics, object snapshot, List<ExportSnapshotEntry> exportSnapshot, string thrownMessage)
+        private static VrchatDesiredStateReconciliationResult MutationFailure(VrchatDesiredStateReconciliationRequest request, List<VrchatDesiredStateReconciliationItem> actions, List<FaceMotionDiagnostic> diagnostics, object snapshot, List<ExportSnapshotEntry> exportSnapshot, string thrownMessage, List<string> createdFolders)
         {
             if (!string.IsNullOrEmpty(thrownMessage)) diagnostics.Add(Error("Reconciliation failed unexpectedly during mutation: " + thrownMessage));
             if (exportSnapshot != null)
@@ -118,6 +132,9 @@ namespace FaceMotion.Editor.VRChat.Integration
                 try { RestoreExports(exportSnapshot); }
                 catch (Exception exportRestoreException) { diagnostics.Add(Error("Exported clip rollback could not be completed: " + exportRestoreException.Message)); }
             }
+            // Folders this transaction created are removed last, once the restored exports are gone again.
+            try { DeleteCreatedFolders(createdFolders); }
+            catch (Exception folderRestoreException) { diagnostics.Add(Error("Output folder rollback could not be completed: " + folderRestoreException.Message)); }
             var rollback = request.Backend as IModularAvatarIntegrationRollbackBackend;
             if (rollback == null || snapshot == null) return new VrchatDesiredStateReconciliationResult(false, VrchatDesiredStateReconciliationOutcome.Failed, actions, diagnostics);
             var restored = rollback.RestoreRollbackSnapshot(snapshot); diagnostics.AddRange(restored.Diagnostics);
@@ -197,8 +214,44 @@ namespace FaceMotion.Editor.VRChat.Integration
             public byte[] MetaBytes { get; }
         }
         private static ModularAvatarIntegrationBatchPlan PlanFinalState(VrchatDesiredStateReconciliationRequest request, List<Candidate> adds, List<string> removals, string outputFolder) => request.Backend is IModularAvatarDesiredStateBackend final ? final.PlanFinalState(Requests(request, adds, outputFolder, true), removals) : request.Backend.PlanBatch(Requests(request, adds, outputFolder, true));
-        private static ModularAvatarIntegrationBatchPlan RebindPlans(ModularAvatarIntegrationBatchPlan plan, List<Candidate> adds) { var result = new List<ModularAvatarIntegrationPlan>(); for (var i = 0; i < plan.Items.Count; i++) { var item = plan.Items[i]; var request = new ModularAvatarIntegrationRequest(item.Request.Avatar, adds[i].Clip, item.Request.OutputFolder, item.Request.DisplayName, item.Request.AnimationId); result.Add(new ModularAvatarIntegrationPlan(request, item.ParameterName, item.ObjectName, item.RootName, item.Diagnostics)); } return new ModularAvatarIntegrationBatchPlan(result); }
+        private static ModularAvatarIntegrationBatchPlan RebindPlans(ModularAvatarIntegrationBatchPlan plan, List<Candidate> adds) { var result = new List<ModularAvatarIntegrationPlan>(); for (var i = 0; i < plan.Items.Count; i++) { var item = plan.Items[i]; var request = new ModularAvatarIntegrationRequest(item.Request.Avatar, adds[i].Clip, item.Request.OutputFolder, item.Request.DisplayName, item.Request.AnimationId); result.Add(new ModularAvatarIntegrationPlan(request, item.ParameterName, item.ObjectName, item.RootName, item.Diagnostics, item.PartnerParameters, item.SharedBindings)); } return new ModularAvatarIntegrationBatchPlan(result); }
         private static List<ModularAvatarIntegrationRequest> Requests(VrchatDesiredStateReconciliationRequest request, List<Candidate> candidates, string outputFolder, bool previews) { var result = new List<ModularAvatarIntegrationRequest>(); for (var i = 0; i < candidates.Count; i++) result.Add(new ModularAvatarIntegrationRequest(request.Avatar, previews ? candidates[i].Preview : candidates[i].Clip, outputFolder, candidates[i].Animation.DisplayName, candidates[i].Animation.AnimationId)); return result; }
+        /// <summary>
+        /// Creates FaceMotion's canonical default output root while the transaction is running.
+        /// Preflight never writes, and an explicit custom path is never created for the user.
+        /// </summary>
+        private static bool CreateManagedOutputRoot(string outputFolder, List<string> createdFolders)
+        {
+            if (AssetDatabase.IsValidFolder(outputFolder)) return true;
+            if (!OneClickIntegrationService.IsCanonicalDefaultOutputFolder(outputFolder)) return false;
+            var segments = outputFolder.Replace('\\', '/').Split('/');
+            var current = segments[0];
+            for (var i = 1; i < segments.Length; i++)
+            {
+                var next = current + "/" + segments[i];
+                if (!AssetDatabase.IsValidFolder(next))
+                {
+                    if (string.IsNullOrEmpty(AssetDatabase.CreateFolder(current, segments[i]))) return false;
+                    createdFolders.Add(next);
+                }
+                current = next;
+            }
+            return AssetDatabase.IsValidFolder(outputFolder);
+        }
+
+        private static void DeleteCreatedFolders(List<string> createdFolders)
+        {
+            if (createdFolders == null) return;
+            for (var i = createdFolders.Count - 1; i >= 0; i--)
+            {
+                var folder = createdFolders[i];
+                if (!AssetDatabase.IsValidFolder(folder)) continue;
+                string full = FullPath(folder);
+                if (Directory.Exists(full) && Directory.GetFileSystemEntries(full).Length > 0)
+                    throw new InvalidOperationException("The transaction created '" + folder + "' but it is not empty after rollback.");
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
         private static VrchatDesiredStateReconciliationResult Finish(bool succeeded, VrchatDesiredStateReconciliationOutcome outcome, List<VrchatDesiredStateReconciliationItem> actions, List<FaceMotionDiagnostic> diagnostics, string error) { if (!string.IsNullOrEmpty(error)) diagnostics.Add(Error(error)); return new VrchatDesiredStateReconciliationResult(succeeded, outcome, actions, diagnostics); }
         private static List<FaceMotionAnimationData> SnapshotDesired(VrchatDesiredStateReconciliationRequest request, List<FaceMotionDiagnostic> diagnostics) { var requested = new HashSet<string>(StringComparer.Ordinal); for (var i = 0; i < request.DesiredAnimationIds.Count; i++) if (!requested.Add(request.DesiredAnimationIds[i] ?? string.Empty)) diagnostics.Add(Error("Desired animation IDs must be unique.")); var result = new List<FaceMotionAnimationData>(); for (var i = 0; i < request.Project.Animations.Count; i++) { var animation = request.Project.Animations[i]; if (animation != null && requested.Remove(animation.AnimationId)) result.Add(animation); } result.Sort((a, b) => string.CompareOrdinal(a.AnimationId, b.AnimationId)); foreach (var missing in requested) diagnostics.Add(Error("Desired animation does not exist: " + missing)); return result; }
         private static void ValidateExportOwnership(FaceMotionAnimationData animation, string path, List<FaceMotionDiagnostic> diagnostics) { var main = AssetDatabase.LoadMainAssetAtPath(path); if (main != null && !(main is AnimationClip)) diagnostics.Add(Error("The export destination is occupied by a non-animation asset: " + path)); else if (main is AnimationClip && !ExportedClipRegistry.IsOwned(animation.AnimationId, path)) diagnostics.Add(Error("The export destination contains an AnimationClip not owned by this animation: " + path)); }

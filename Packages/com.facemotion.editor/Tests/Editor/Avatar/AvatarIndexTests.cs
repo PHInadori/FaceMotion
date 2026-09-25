@@ -3,6 +3,7 @@ using FaceMotion.Avatar;
 using FaceMotion.Data;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.Avatar;
+using FaceMotion.Editor.UI.Support;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -106,6 +107,29 @@ namespace FaceMotion.Editor.Tests
             Assert.That(index.ResolveBlendShape(cheekSmile).Status, Is.EqualTo(NameResolutionStatus.Unique));
             Assert.That(index.ResolveBlendShape(faceSmile).Entry.CurrentIndex, Is.EqualTo(3));
             Assert.That(index.ResolveBlendShape(cheekSmile).Entry.CurrentIndex, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void Scan_ZeroDeltaBlendShape_IsRetainedForExistingBindingsButHiddenFromCandidates()
+        {
+            _fixture = AvatarFixture.Create();
+            var mesh = new Mesh();
+            mesh.vertices = new[] { Vector3.zero };
+            mesh.AddBlendShapeFrame("===Custom", 100f, new[] { Vector3.zero }, new[] { Vector3.zero }, new[] { Vector3.zero });
+            mesh.AddBlendShapeFrame("NormalOnly", 100f, new[] { Vector3.zero }, new[] { Vector3.up }, new[] { Vector3.zero });
+            _fixture.FaceRenderer.sharedMesh = mesh;
+
+            AvatarIndex index = UnityAvatarScanner.Scan(_fixture.Root).Index;
+            BlendShapeResolution empty = index.ResolveBlendShape(new BlendShapeBinding(AvatarFixture.FaceRendererPath, "===Custom"));
+            BlendShapeResolution normalOnly = index.ResolveBlendShape(new BlendShapeBinding(AvatarFixture.FaceRendererPath, "NormalOnly"));
+
+            Assert.That(empty.Status, Is.EqualTo(NameResolutionStatus.Unique));
+            Assert.That(empty.Entry.HasVisibleDelta, Is.False);
+            Assert.That(normalOnly.Entry.HasVisibleDelta, Is.True);
+            Assert.That(AvatarCandidateSnapshot.Build(index).FilterBlendShapes(string.Empty), Has.None.Matches<AvatarCandidateSnapshot.BlendShapeCandidate>(candidate => candidate.BlendShapeName == "===Custom"));
+            Assert.That(AvatarCandidateSnapshot.Build(index).FilterBlendShapes(string.Empty), Has.Some.Matches<AvatarCandidateSnapshot.BlendShapeCandidate>(candidate => candidate.BlendShapeName == "NormalOnly"));
+
+            Object.DestroyImmediate(mesh);
         }
 
         [Test]
