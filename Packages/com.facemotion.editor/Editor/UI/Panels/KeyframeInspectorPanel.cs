@@ -12,6 +12,7 @@ namespace FaceMotion.Editor.UI.Panels
     public sealed class KeyframeInspectorPanel
     {
         internal const string EditableControlPrefix = "FaceMotion.KeyInspector.";
+        internal const float DefaultBlendShapeAuthoringValue = 100f;
 
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
@@ -19,7 +20,7 @@ namespace FaceMotion.Editor.UI.Panels
         private string _inspectedTrackId;
         private string _inspectedKeyId;
         private float _time = 0f;
-        private float _floatValue = 1f;
+        private float _floatValue = DefaultBlendShapeAuthoringValue;
         private Vector3 _vectorValue = Vector3.zero;
         private int _interpolationIndex = (int)InterpolationType.Linear;
         private int _loadedSessionVersion = -1;
@@ -215,7 +216,8 @@ namespace FaceMotion.Editor.UI.Panels
                 GetOnlySelectedKeyId();
 
             var track =
-                FindTrackForKey(inspected);
+                FindTrackForKey(inspected) ??
+                _session.GetSelectedTrack();
 
             string trackId =
                 track == null
@@ -322,13 +324,16 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 _time =
                     _session.ViewState.CurrentTime;
+                _floatValue = DefaultBlendShapeAuthoringValue;
+                _vectorValue = Vector3.zero;
+                _interpolationIndex = (int)InterpolationType.Linear;
 
                 return;
             }
 
             // A different key must never inherit an edit buffer
             // from the prior selection.
-            _floatValue = 1f;
+            _floatValue = DefaultBlendShapeAuthoringValue;
             _vectorValue = Vector3.zero;
             _interpolationIndex =
                 (int)InterpolationType.Linear;

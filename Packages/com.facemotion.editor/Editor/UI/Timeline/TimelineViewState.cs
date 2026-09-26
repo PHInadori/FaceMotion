@@ -24,6 +24,10 @@ namespace FaceMotion.Editor.UI.Timeline
 
         private float _zoom = 1f;
 
+        public bool IsAutoFitViewport { get; private set; } = true;
+
+        public float AutoFitDuration { get; private set; } = float.NaN;
+
         /// <summary>Zoom multiplier; 1 means BasePixelsPerSecond pixels per second.</summary>
         public float Zoom
         {
@@ -48,6 +52,28 @@ namespace FaceMotion.Editor.UI.Timeline
         public TimelineDragMode DragMode { get; set; }
 
         public float PixelsPerSecond => BasePixelsPerSecond * _zoom;
+
+        public bool NeedsAutoFit(float duration)
+        {
+            return IsAutoFitViewport && !Mathf.Approximately(AutoFitDuration, duration);
+        }
+
+        public void MarkAutoFit(float duration)
+        {
+            IsAutoFitViewport = true;
+            AutoFitDuration = duration;
+        }
+
+        public void MarkManualViewport()
+        {
+            IsAutoFitViewport = false;
+        }
+
+        public void ResetAutoFit()
+        {
+            IsAutoFitViewport = true;
+            AutoFitDuration = float.NaN;
+        }
 
         public static float ClampZoom(float zoom)
         {

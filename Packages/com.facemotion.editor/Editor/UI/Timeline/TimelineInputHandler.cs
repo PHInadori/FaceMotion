@@ -387,6 +387,8 @@ namespace FaceMotion.Editor.UI.Timeline
             _session.ViewState.Zoom =
                 newZoom;
 
+            _session.ViewState.MarkManualViewport();
+
             _session.ViewState.ScrollTime =
                 TimelineGeometry.ComputeZoomedScroll(
                     newZoom,
@@ -439,6 +441,8 @@ namespace FaceMotion.Editor.UI.Timeline
             _session.ViewState.Zoom =
                 zoom;
 
+            _session.ViewState.MarkManualViewport();
+
             _session.ViewState.ScrollTime =
                 TimelineGeometry.ComputeZoomedScroll(
                     zoom,
@@ -457,6 +461,8 @@ namespace FaceMotion.Editor.UI.Timeline
             _session.ViewState.ScrollTime =
                 _session.ViewState.ScrollTime -
                 deltaSeconds;
+
+            _session.ViewState.MarkManualViewport();
 
             ClampScrollTo(
                 GetSelectedDuration(),
@@ -478,6 +484,8 @@ namespace FaceMotion.Editor.UI.Timeline
 
             _session.ViewState.ScrollTime =
                 0f;
+
+            _session.ViewState.MarkAutoFit(duration);
 
             _session.NotifyChanged();
         }

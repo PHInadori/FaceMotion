@@ -244,6 +244,18 @@ namespace FaceMotion.Editor.UI.Controllers
 
             float duration = animation.Timeline.Duration;
             float frameRate = animation.Timeline.FrameRate;
+            float earliest = float.PositiveInfinity;
+            float latest = float.NegativeInfinity;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                for (int j = 0; j < inputs[i].CurrentTimes.Count; j++)
+                {
+                    earliest = Mathf.Min(earliest, inputs[i].CurrentTimes[j]);
+                    latest = Mathf.Max(latest, inputs[i].CurrentTimes[j]);
+                }
+            }
+
+            deltaTime = TimelineTimeDomain.ConstrainGroupDelta(earliest, latest, deltaTime, duration);
 
             var commands =
                 new List<IProjectCommand>(inputs.Count);
@@ -1375,6 +1387,19 @@ namespace FaceMotion.Editor.UI.Controllers
 
             float frameRate =
                 animation.Timeline.FrameRate;
+
+            float earliest = float.PositiveInfinity;
+            float latest = float.NegativeInfinity;
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                for (int j = 0; j < inputs[i].CurrentTimes.Count; j++)
+                {
+                    earliest = Mathf.Min(earliest, inputs[i].CurrentTimes[j]);
+                    latest = Mathf.Max(latest, inputs[i].CurrentTimes[j]);
+                }
+            }
+
+            deltaTime = TimelineTimeDomain.ConstrainGroupDelta(earliest, latest, deltaTime, duration);
 
             bool changed = false;
 

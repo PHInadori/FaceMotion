@@ -14,6 +14,9 @@ namespace FaceMotion.Editor.UI.Timeline
         public const float DefaultLabelWidth = 180f;
         public const float RowHeight = 22f;
         public const float RulerHeight = 24f;
+        public const float MinimumFitPaddingSeconds = 0.5f;
+        public const float MaximumFitPaddingSeconds = 1f;
+        public const float FitPaddingRatio = 0.1f;
 
         private static readonly float[] RulerSteps =
         {
@@ -46,23 +49,35 @@ namespace FaceMotion.Editor.UI.Timeline
             return Mathf.Max(0.001f, plotWidth / pixelsPerSecond);
         }
 
-        /// <summary>Clamps the left-edge scroll time so content cannot scroll past its end.</summary>
+        public static float FitPadding(float duration)
+        {
+            return Mathf.Clamp(duration * FitPaddingRatio, MinimumFitPaddingSeconds, MaximumFitPaddingSeconds);
+        }
+
+        public static Vector2 FitVisibleRange(float duration)
+        {
+            float validDuration = Mathf.Max(0f, duration);
+            return new Vector2(0f, validDuration + FitPadding(validDuration));
+        }
+
+        /// <summary>Clamps scroll to the editable duration plus its trailing visual context.</summary>
         public static float ClampScrollTime(float scrollTime, float duration, float plotWidth, float pixelsPerSecond)
         {
             float visible = VisibleDuration(plotWidth, pixelsPerSecond);
-            float maxScroll = Mathf.Max(0f, duration - visible);
+            float maxScroll = Mathf.Max(0f, FitVisibleRange(duration).y - visible);
             return Mathf.Clamp(scrollTime, 0f, maxScroll);
         }
 
-        /// <summary>Zoom that fits the whole duration into the plot width (clamped to the allowed range).</summary>
+        /// <summary>Zoom that fits the editable duration and trailing context into the plot width.</summary>
         public static float FitZoom(float duration, float plotWidth)
         {
-            if (duration <= 0f || plotWidth <= 0f)
+            float fitDuration = FitVisibleRange(duration).y;
+            if (fitDuration <= 0f || plotWidth <= 0f)
             {
                 return MinZoom;
             }
 
-            return TimelineViewState.ClampZoom((plotWidth / duration) / BasePixelsPerSecond);
+            return TimelineViewState.ClampZoom((plotWidth / fitDuration) / BasePixelsPerSecond);
         }
 
         /// <summary>

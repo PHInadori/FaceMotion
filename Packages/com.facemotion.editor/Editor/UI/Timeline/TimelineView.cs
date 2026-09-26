@@ -18,6 +18,7 @@ namespace FaceMotion.Editor.UI.Timeline
         private readonly KeyframeController _keys;
         private readonly TrackController _tracks;
         private readonly TimelineInputHandler _input;
+        private string _lastAnimationId;
 
         public float LabelWidth = TimelineGeometry.DefaultLabelWidth;
 
@@ -62,6 +63,17 @@ namespace FaceMotion.Editor.UI.Timeline
 
             float duration = animation.Timeline.Duration;
             float plotWidth = Mathf.Max(1f, rect.width - LabelWidth);
+            if (!string.Equals(_lastAnimationId, animation.AnimationId, StringComparison.Ordinal))
+            {
+                _lastAnimationId = animation.AnimationId;
+                _session.ViewState.ResetAutoFit();
+            }
+
+            if (_session.ViewState.NeedsAutoFit(duration))
+            {
+                _input.FitToContent(plotWidth);
+            }
+
             float pps = _session.ViewState.PixelsPerSecond;
             _session.ViewState.ScrollTime = TimelineGeometry.ClampScrollTime(
                 _session.ViewState.ScrollTime,

@@ -43,6 +43,8 @@ namespace FaceMotion.Editor.UI.Support
                 used.AddRange(occupied);
             }
 
+            deltaTime = TimelineTimeDomain.ConstrainGroupDelta(currentTimes, deltaTime, duration);
+
             for (int i = 0; i < currentTimes.Count; i++)
             {
                 float candidate = currentTimes[i] + deltaTime;
@@ -51,7 +53,7 @@ namespace FaceMotion.Editor.UI.Support
                     candidate = currentTimes[i];
                 }
 
-                candidate = Math.Max(0f, Math.Min(duration, candidate));
+                candidate = TimelineTimeDomain.Clamp(candidate, duration);
                 if (snapEnabled)
                 {
                     candidate = FrameSnapper.Snap(candidate, frameRate, duration);

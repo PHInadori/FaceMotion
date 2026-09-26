@@ -624,7 +624,9 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void TimelineGeometry_FitZoom_Clamped()
         {
-            Assert.That(TimelineGeometry.FitZoom(10f, 1200f), Is.EqualTo(1f).Within(1e-3f));
+            Assert.That(
+                TimelineGeometry.FitZoom(10f, 1200f),
+                Is.EqualTo(1200f / (TimelineGeometry.FitVisibleRange(10f).y * TimelineGeometry.BasePixelsPerSecond)).Within(1e-3f));
             Assert.That(TimelineGeometry.FitZoom(600f, 120f), Is.GreaterThanOrEqualTo(TimelineGeometry.MinZoom));
             Assert.That(TimelineGeometry.FitZoom(0.001f, 120f), Is.GreaterThan(0f));
         }

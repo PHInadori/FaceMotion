@@ -1,5 +1,6 @@
 using FaceMotion.Avatar;
 using FaceMotion.Editor.UI.Timeline;
+using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Timeline;
 using UnityEngine;
@@ -55,12 +56,43 @@ namespace FaceMotion.Editor.UI.Timeline
             DrawRuler(new Rect(plot.x, plot.y, plot.width, rulerHeight), scroll, pps, plot.x, view.CurrentTime);
             DrawGrid(new Rect(plot.x, rowsTop, plot.width, Mathf.Max(0f, plot.height - rulerHeight)), scroll, pps, plot.x);
             DrawRows(new Rect(rect.x, rowsTop, rect.width, Mathf.Max(1f, plot.height - rulerHeight)), layout, selection, view.HoveredKeyId);
+            DrawOutsideDuration(plot, layout);
             DrawCursor(new Rect(plot.x, rowsTop, plot.width, Mathf.Max(0f, plot.height - rulerHeight)), view.CurrentTime, scroll, pps, plot.x);
 
             if (layout.RowCount == 0)
             {
                 GUI.Label(new Rect(plot.x + 10f, rowsTop + 8f, plot.width - 20f, 24f), FaceMotionUiText.Get("noTracks"), _hintLabel);
             }
+            }
+        }
+
+        private static void DrawOutsideDuration(Rect plot, TimelineLayoutSnapshot layout)
+        {
+            float boundaryX = TimelineGeometry.TimeToPixel(layout.Duration, layout.ScrollTime, layout.PixelsPerSecond, layout.PlotLeft);
+            Color muted = EditorGUIUtility.isProSkin
+                ? new Color(0f, 0f, 0f, 0.28f)
+                : new Color(0f, 0f, 0f, 0.12f);
+
+            if (boundaryX > plot.x)
+            {
+                float leftEnd = Mathf.Min(boundaryX, plot.xMax);
+                // Kept for future negative viewport support; normal scrolling begins at zero.
+                if (layout.ScrollTime < 0f)
+                {
+                    EditorGUI.DrawRect(new Rect(plot.x, plot.y, Mathf.Max(0f, leftEnd - plot.x), plot.height), muted);
+                }
+            }
+
+            if (boundaryX < plot.xMax)
+            {
+                EditorGUI.DrawRect(new Rect(Mathf.Max(plot.x, boundaryX), plot.y, Mathf.Max(0f, plot.xMax - boundaryX), plot.height), muted);
+            }
+
+            if (boundaryX >= plot.x && boundaryX <= plot.xMax)
+            {
+                EditorGUI.DrawRect(new Rect(boundaryX, plot.y, 1f, plot.height), EditorGUIUtility.isProSkin
+                    ? new Color(1f, 1f, 1f, 0.23f)
+                    : new Color(0f, 0f, 0f, 0.25f));
             }
         }
 

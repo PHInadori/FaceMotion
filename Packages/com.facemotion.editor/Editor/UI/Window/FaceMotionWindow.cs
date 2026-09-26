@@ -37,6 +37,12 @@ namespace FaceMotion.Editor.UI.Window
         internal const float MinimumTimelineWidth = 460f;
         internal const float SplitterWidth = 5f;
 
+        /// <summary>
+        /// Avatar id scheme for objects in unsaved scenes: those have no stable
+        /// GlobalObjectId, so the selection persists as an in-session instance id.
+        /// </summary>
+        internal const string AvatarInstanceIdScheme = "Instance:";
+
         private const float DefaultLeftColumnRatio = 0.36f;
         private const float DefaultPreviewHeightRatio = 0.5f;
         internal const float MinimumPreviewHeight = 280f;
@@ -84,6 +90,9 @@ namespace FaceMotion.Editor.UI.Window
         private string _pendingAvatarGlobalObjectId;
         private string _pendingAvatarScenePath;
         private int _pendingAvatarRestoreAttempts;
+        private string _persistedAvatarGlobalObjectId;
+        private string _persistedAvatarScenePath;
+        private VRCAvatarDescriptor _lastPersistedAvatar;
         private string _lastPreviewAnimationId;
         private readonly PreviewRepaintScheduler _previewRepaint = new PreviewRepaintScheduler();
         private readonly PreviewRepaintScheduler _previewDeferredRepaint = new PreviewRepaintScheduler();
@@ -167,13 +176,12 @@ namespace FaceMotion.Editor.UI.Window
             if (_session != null)
             {
                 _session.Changed -= OnSessionChanged;
-                FaceMotionSessionStateStore.Save(
-                    _session.ActiveProjectAssetPath,
-                    _session.SelectedAnimationId,
-                    _session.ViewState.CurrentTime,
-                    _session.ViewState.Zoom,
-                    GetAvatarGlobalObjectId(_session.ActiveDescriptor),
-                    GetAvatarScenePath(_session.ActiveDescriptor));
+
+                // Persist the tracked avatar identity instead of deriving it from the
+                // live descriptor: an unresolved pending restore never transitioned,
+                // so its stored id survives the close instead of flattening to empty.
+                SynchronizePersistedAvatar();
+                StoreSessionState();
             }
 
             EditorPrefs.SetFloat(LeftColumnRatioKey, _leftColumnRatio);
@@ -566,6 +574,12 @@ namespace FaceMotion.Editor.UI.Window
         private void RestoreSessionState()
         {
             FaceMotionSessionStateStore.Load(out string projectPath, out string animationId, out float time, out float zoom, out string avatarGlobalObjectId, out string avatarScenePath);
+
+            // Seed the tracked identity from the store before any restore attempt so a
+            // failed (pending) restore keeps the stored id instead of starting empty.
+            _persistedAvatarGlobalObjectId = avatarGlobalObjectId ?? string.Empty;
+            _persistedAvatarScenePath = avatarScenePath ?? string.Empty;
+
             if (!string.IsNullOrEmpty(projectPath))
             {
                 var asset = AssetDatabase.LoadAssetAtPath<FaceMotionProject>(projectPath);
@@ -587,6 +601,9 @@ namespace FaceMotion.Editor.UI.Window
             }
 
             RestoreAvatar(avatarGlobalObjectId, avatarScenePath);
+
+            // The restore itself must never be treated as a selection change.
+            _lastPersistedAvatar = NormalizeDescriptor(_session.ActiveDescriptor);
         }
 
         internal static bool TryResolveAvatarDescriptor(string globalObjectId, out VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
@@ -597,13 +614,31 @@ namespace FaceMotion.Editor.UI.Window
         internal static bool TryResolveAvatarDescriptor(string globalObjectId, string expectedScenePath, out VRC.SDK3.Avatars.Components.VRCAvatarDescriptor descriptor)
         {
             descriptor = null;
-            if (string.IsNullOrEmpty(globalObjectId)
-                || !GlobalObjectId.TryParse(globalObjectId, out var id))
+            if (string.IsNullOrEmpty(globalObjectId))
             {
                 return false;
             }
 
-            descriptor = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as VRC.SDK3.Avatars.Components.VRCAvatarDescriptor;
+            if (globalObjectId.StartsWith(AvatarInstanceIdScheme, StringComparison.Ordinal))
+            {
+                // In-session instance id for avatars in unsaved scenes.
+                if (!int.TryParse(globalObjectId.Substring(AvatarInstanceIdScheme.Length), out int instanceId))
+                {
+                    return false;
+                }
+
+                descriptor = EditorUtility.InstanceIDToObject(instanceId) as VRC.SDK3.Avatars.Components.VRCAvatarDescriptor;
+            }
+            else
+            {
+                if (!GlobalObjectId.TryParse(globalObjectId, out var id))
+                {
+                    return false;
+                }
+
+                descriptor = GlobalObjectId.GlobalObjectIdentifierToObjectSlow(id) as VRC.SDK3.Avatars.Components.VRCAvatarDescriptor;
+            }
+
             if (descriptor == null || !descriptor.gameObject.scene.IsValid() || !descriptor.gameObject.scene.isLoaded
                 // A valid avatar may be in a loaded additive scene which is not active.
                 || (!string.IsNullOrEmpty(expectedScenePath)
@@ -621,6 +656,13 @@ namespace FaceMotion.Editor.UI.Window
             if (descriptor == null || EditorUtility.IsPersistent(descriptor) || !descriptor.gameObject.scene.IsValid())
             {
                 return string.Empty;
+            }
+
+            // An unsaved scene has no stable GlobalObjectId; persist an in-session
+            // instance id so close/reopen still restores the selection.
+            if (string.IsNullOrEmpty(descriptor.gameObject.scene.path))
+            {
+                return AvatarInstanceIdScheme + descriptor.GetInstanceID();
             }
 
             return GlobalObjectId.GetGlobalObjectIdSlow(descriptor).ToString();
@@ -754,6 +796,10 @@ namespace FaceMotion.Editor.UI.Window
 
         private void OnSessionChanged()
         {
+            // Runs before the compile/update gate: an avatar change must persist even
+            // when the rest of the session work is deferred to a later event.
+            SynchronizePersistedAvatar();
+
             if (EditorApplication.isCompiling || EditorApplication.isUpdating)
             {
                 return;
@@ -768,6 +814,62 @@ namespace FaceMotion.Editor.UI.Window
             SynchronizePreviewFromSession();
             SetPlaybackUpdateActive(_playback != null && _playback.IsPlaying);
             RequestPreviewRepaint();
+        }
+
+        /// <summary>
+        /// Tracks the avatar selection independently of live scene state and writes it
+        /// through on every descriptor transition. An explicit clear (or a destroyed
+        /// descriptor, treated as a clear) wipes the stored id; a new descriptor
+        /// replaces it; an unresolved pending restore never transitions, so its stored
+        /// id is kept untouched.
+        /// </summary>
+        private void SynchronizePersistedAvatar()
+        {
+            if (_session == null)
+            {
+                return;
+            }
+
+            VRCAvatarDescriptor current = NormalizeDescriptor(_session.ActiveDescriptor);
+            if (ReferenceEquals(current, _lastPersistedAvatar))
+            {
+                return;
+            }
+
+            _lastPersistedAvatar = current;
+            _pendingAvatarGlobalObjectId = null;
+            _pendingAvatarScenePath = null;
+            _pendingAvatarRestoreAttempts = 0;
+
+            if (current == null)
+            {
+                _persistedAvatarGlobalObjectId = string.Empty;
+                _persistedAvatarScenePath = string.Empty;
+            }
+            else
+            {
+                _persistedAvatarGlobalObjectId = GetAvatarGlobalObjectId(current);
+                _persistedAvatarScenePath = GetAvatarScenePath(current);
+            }
+
+            StoreSessionState();
+        }
+
+        private void StoreSessionState()
+        {
+            FaceMotionSessionStateStore.Save(
+                _session.ActiveProjectAssetPath,
+                _session.SelectedAnimationId,
+                _session.ViewState.CurrentTime,
+                _session.ViewState.Zoom,
+                _persistedAvatarGlobalObjectId,
+                _persistedAvatarScenePath);
+        }
+
+        /// <summary>Normalizes Unity's fake-null (destroyed object) to a real null so identity transitions compare safely.</summary>
+        private static VRCAvatarDescriptor NormalizeDescriptor(VRCAvatarDescriptor descriptor)
+        {
+            return descriptor != null ? descriptor : null;
         }
 
         private void SetPlaybackUpdateActive(bool active)

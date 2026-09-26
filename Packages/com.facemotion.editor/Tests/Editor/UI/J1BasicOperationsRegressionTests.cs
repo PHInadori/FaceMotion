@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using FaceMotion.Animation;
 using FaceMotion.Data;
@@ -265,6 +266,239 @@ namespace FaceMotion.Editor.Tests
             }
             finally
             {
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void AvatarSelection_PersistsAcrossReopenWhenSceneIsUnsaved()
+        {
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            var root = new GameObject("FaceMotion J1 Unsaved Avatar");
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            FaceMotionWindow reopened = null;
+            try
+            {
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, string.Empty, string.Empty);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                GetPrivateField<AvatarController>(window, "_avatar").SetDescriptor(descriptor);
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out string avatarId, out string scenePath);
+                Assert.That(avatarId, Does.StartWith(FaceMotionWindow.AvatarInstanceIdScheme), "An unsaved scene has no stable GlobalObjectId and must persist as an instance id.");
+                Assert.That(scenePath, Is.Empty);
+                Assert.That(FaceMotionWindow.TryResolveAvatarDescriptor(avatarId, scenePath, out var restored), Is.True);
+                Assert.That(restored, Is.SameAs(descriptor));
+
+                window.Close();
+                window = null;
+
+                reopened = EditorWindow.GetWindow<FaceMotionWindow>();
+                Assert.That(GetPrivateField<FaceMotionEditorSession>(reopened, "_session").ActiveDescriptor, Is.SameAs(descriptor));
+            }
+            finally
+            {
+                reopened?.Close();
+                window?.Close();
+                Object.DestroyImmediate(root);
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void AvatarSelectionChange_PersistsSessionStateWithoutClosingTheWindow()
+        {
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            Scene avatarScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            string avatarScenePath = _temp.Folder + "/J1PersistAvatar.unity";
+            var root = new GameObject("FaceMotion J1 Persist Avatar");
+            SceneManager.MoveGameObjectToScene(root, avatarScene);
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            try
+            {
+                Assert.That(EditorSceneManager.SaveScene(avatarScene, avatarScenePath), Is.True);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, string.Empty, string.Empty);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                GetPrivateField<AvatarController>(window, "_avatar").SetDescriptor(descriptor);
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out string avatarId, out string scenePath);
+
+                Assert.That(avatarId, Is.EqualTo(GlobalObjectId.GetGlobalObjectIdSlow(descriptor).ToString()));
+                Assert.That(scenePath, Is.EqualTo(avatarScenePath));
+            }
+            finally
+            {
+                window?.Close();
+                Object.DestroyImmediate(root);
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void ExplicitAvatarClear_PersistsEmptySelectionAcrossClose()
+        {
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            Scene avatarScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            string avatarScenePath = _temp.Folder + "/J1ClearAvatar.unity";
+            var root = new GameObject("FaceMotion J1 Clear Avatar");
+            SceneManager.MoveGameObjectToScene(root, avatarScene);
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            try
+            {
+                Assert.That(EditorSceneManager.SaveScene(avatarScene, avatarScenePath), Is.True);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, string.Empty, string.Empty);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                GetPrivateField<AvatarController>(window, "_avatar").SetDescriptor(descriptor);
+                GetPrivateField<FaceMotionEditorSession>(window, "_session").ClearAvatar();
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out string avatarId, out string scenePath);
+                Assert.That(avatarId, Is.Empty);
+                Assert.That(scenePath, Is.Empty);
+
+                window.Close();
+                window = null;
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out avatarId, out scenePath);
+                Assert.That(avatarId, Is.Empty, "Closing the window must not resurrect the cleared selection.");
+                Assert.That(scenePath, Is.Empty);
+            }
+            finally
+            {
+                window?.Close();
+                Object.DestroyImmediate(root);
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void UnresolvedAvatarRestore_KeepsStoredIdentityAcrossClose()
+        {
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            Scene avatarScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            string avatarScenePath = _temp.Folder + "/J1PendingAvatar.unity";
+            var root = new GameObject("FaceMotion J1 Pending Avatar");
+            SceneManager.MoveGameObjectToScene(root, avatarScene);
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            try
+            {
+                Assert.That(EditorSceneManager.SaveScene(avatarScene, avatarScenePath), Is.True);
+                string unresolvableId = GlobalObjectId.GetGlobalObjectIdSlow(descriptor).ToString();
+                Object.DestroyImmediate(root);
+
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, unresolvableId, avatarScenePath);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                Assert.That(GetPrivateField<FaceMotionEditorSession>(window, "_session").ActiveDescriptor, Is.Null);
+
+                window.Close();
+                window = null;
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out string avatarId, out string scenePath);
+                Assert.That(avatarId, Is.EqualTo(unresolvableId), "An unresolved pending restore must keep its stored id across close.");
+                Assert.That(scenePath, Is.EqualTo(avatarScenePath));
+            }
+            finally
+            {
+                window?.Close();
+                if (root != null)
+                {
+                    Object.DestroyImmediate(root);
+                }
+
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void DeletedAvatar_KeepsStoredStateEmptyAndReopensWithoutException()
+        {
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            Scene avatarScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            string avatarScenePath = _temp.Folder + "/J1DeletedAvatar.unity";
+            var root = new GameObject("FaceMotion J1 Deleted Avatar");
+            SceneManager.MoveGameObjectToScene(root, avatarScene);
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            FaceMotionWindow reopened = null;
+            try
+            {
+                Assert.That(EditorSceneManager.SaveScene(avatarScene, avatarScenePath), Is.True);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, string.Empty, string.Empty);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                GetPrivateField<AvatarController>(window, "_avatar").SetDescriptor(descriptor);
+
+                Object.DestroyImmediate(root);
+                GetPrivateField<FaceMotionEditorSession>(window, "_session").NotifyChanged();
+
+                FaceMotionSessionStateStore.Load(out _, out _, out _, out _, out string avatarId, out _);
+                Assert.That(avatarId, Is.Empty, "A destroyed avatar must persist as an empty selection.");
+
+                window.Close();
+                window = null;
+
+                reopened = EditorWindow.GetWindow<FaceMotionWindow>();
+                Assert.That(GetPrivateField<FaceMotionEditorSession>(reopened, "_session").ActiveDescriptor, Is.Null);
+            }
+            finally
+            {
+                reopened?.Close();
+                window?.Close();
+                if (root != null)
+                {
+                    Object.DestroyImmediate(root);
+                }
+
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
+            }
+        }
+
+        [Test]
+        public void AvatarSelection_DoesNotModifyTheProjectAsset()
+        {
+            var project = FaceMotionProject.CreateNew();
+            string projectAssetPath = _temp.AssetPath("J1PersistProject");
+            AssetDatabase.CreateAsset(project, projectAssetPath);
+            AssetDatabase.SaveAssets();
+
+            string projectRoot = Application.dataPath.Substring(0, Application.dataPath.Length - "Assets".Length);
+            string absolutePath = projectRoot + projectAssetPath;
+
+            FaceMotionSessionStateStore.Load(out string oldProject, out string oldAnimation, out float oldTime, out float oldZoom, out string oldAvatar, out string oldScene);
+            Scene avatarScene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            string avatarScenePath = _temp.Folder + "/J1ProjectMutationAvatar.unity";
+            var root = new GameObject("FaceMotion J1 Project Mutation Avatar");
+            SceneManager.MoveGameObjectToScene(root, avatarScene);
+            var descriptor = root.AddComponent<VRCAvatarDescriptor>();
+            FaceMotionWindow window = null;
+            try
+            {
+                Assert.That(EditorSceneManager.SaveScene(avatarScene, avatarScenePath), Is.True);
+                FaceMotionSessionStateStore.Save(projectAssetPath, oldAnimation, oldTime, oldZoom, string.Empty, string.Empty);
+                window = EditorWindow.GetWindow<FaceMotionWindow>();
+                Assert.That(GetPrivateField<FaceMotionEditorSession>(window, "_session").ActiveProjectAssetPath, Is.EqualTo(projectAssetPath));
+
+                // Read after the project load so the assertion isolates avatar selection.
+                string before = File.ReadAllText(absolutePath);
+                GetPrivateField<AvatarController>(window, "_avatar").SetDescriptor(descriptor);
+                window.Close();
+                window = null;
+
+                string after = File.ReadAllText(absolutePath);
+                Assert.That(after, Is.EqualTo(before), "Avatar selection must never be written into the project asset.");
+            }
+            finally
+            {
+                window?.Close();
+                Object.DestroyImmediate(root);
+                EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
                 FaceMotionSessionStateStore.Save(oldProject, oldAnimation, oldTime, oldZoom, oldAvatar, oldScene);
             }
         }
