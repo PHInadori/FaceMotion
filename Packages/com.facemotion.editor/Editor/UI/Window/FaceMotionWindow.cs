@@ -326,6 +326,11 @@ namespace FaceMotion.Editor.UI.Window
             Event current = Event.current;
             if (current != null)
             {
+                HandlePreviewSpace(current, focusedWindow == this,
+                    EditorGUIUtility.editingTextField, GUI.GetNameOfFocusedControl(),
+                    _previewSession != null && _previewSession.IsActive,
+                    GUIUtility.hotControl != 0 || _session.ViewState.DragMode != TimelineDragMode.None,
+                    _previewPanel);
                 ReleaseTextFocusOnBackgroundMouseDown(
                     current.type,
                     current.button,
@@ -333,6 +338,28 @@ namespace FaceMotion.Editor.UI.Window
                     EditorGUIUtility.editingTextField);
             }
             }
+        }
+
+        internal static bool HandlePreviewSpace(
+            Event current,
+            bool windowFocused,
+            bool editingTextField,
+            string focusedControlName,
+            bool previewActive,
+            bool gestureActive,
+            PreviewPanel panel)
+        {
+            if (current == null || current.type != EventType.KeyDown ||
+                current.keyCode != KeyCode.Space || current.modifiers != EventModifiers.None ||
+                !windowFocused || !previewActive || gestureActive || panel == null ||
+                !CanHandleQuickKeyShortcut(editingTextField, focusedControlName) ||
+                !panel.TogglePlayback())
+            {
+                return false;
+            }
+
+            current.Use();
+            return true;
         }
 
         internal static bool ReleaseTextFocusOnBackgroundMouseDown(

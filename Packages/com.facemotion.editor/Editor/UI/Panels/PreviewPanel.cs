@@ -77,14 +77,10 @@ namespace FaceMotion.Editor.UI.Panels
                 bool fit = false;
                 bool reset = false;
                 EditorGUI.BeginDisabledGroup(!_playback.CanPlay);
-                if (GUI.Button(controls.Play, FaceMotionUiText.Get("previewPlay"), EditorStyles.miniButton))
+                string playbackLabel = FaceMotionUiText.Get(_playback.IsPlaying ? "previewPause" : "previewPlay");
+                if (GUI.Button(controls.Play, new GUIContent(playbackLabel, playbackLabel), EditorStyles.miniButton))
                 {
-                    StartPlayback();
-                }
-
-                if (GUI.Button(controls.Pause, FaceMotionUiText.Get("previewPause"), EditorStyles.miniButton))
-                {
-                    _playback.Pause();
+                    TogglePlayback();
                 }
 
                 if (GUI.Button(controls.PlaybackStop, FaceMotionUiText.Get("previewStop"), EditorStyles.miniButton))
@@ -162,6 +158,18 @@ namespace FaceMotion.Editor.UI.Panels
             return true;
         }
 
+        /// <summary>The visible playback control and the window's Space shortcut share this path.</summary>
+        internal bool TogglePlayback()
+        {
+            if (_playback.IsPlaying)
+            {
+                _playback.Pause();
+                return true;
+            }
+
+            return StartPlayback();
+        }
+
         public static PreviewPanelLayout CalculateLayout(Rect assignedRect)
         {
             float width = Mathf.Max(0f, assignedRect.width - Padding * 2f);
@@ -182,8 +190,7 @@ namespace FaceMotion.Editor.UI.Panels
             layout.AddAction(ButtonWidth("stopPreview"));
             layout.AddAction(sceneWidth);
             layout.BeginPlaybackRow();
-            layout.AddPlayback(ButtonWidth("previewPlay"));
-            layout.AddPlayback(ButtonWidth("previewPause"));
+            layout.AddPlayback(Mathf.Max(ButtonWidth("previewPlay"), ButtonWidth("previewPause")));
             layout.AddPlayback(ButtonWidth("previewStop"));
             layout.AddPlayback(ButtonWidth("fitAvatar"));
             layout.AddPlayback(ButtonWidth("resetView"));
@@ -229,7 +236,6 @@ namespace FaceMotion.Editor.UI.Panels
             StopPreview = default;
             SceneApply = default;
             Play = default;
-            Pause = default;
             PlaybackStop = default;
             Fit = default;
             Reset = default;
@@ -241,7 +247,6 @@ namespace FaceMotion.Editor.UI.Panels
         public Rect StopPreview { get; private set; }
         public Rect SceneApply { get; private set; }
         public Rect Play { get; private set; }
-        public Rect Pause { get; private set; }
         public Rect PlaybackStop { get; private set; }
         public Rect Fit { get; private set; }
         public Rect Reset { get; private set; }
@@ -268,7 +273,6 @@ namespace FaceMotion.Editor.UI.Panels
         {
             Rect rect = Add(width);
             if (Play.width == 0f) Play = rect;
-            else if (Pause.width == 0f) Pause = rect;
             else if (PlaybackStop.width == 0f) PlaybackStop = rect;
             else if (Fit.width == 0f) Fit = rect;
             else Reset = rect;
