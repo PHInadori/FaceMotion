@@ -79,7 +79,7 @@ namespace FaceMotion.Editor.UI.Panels
                 EditorGUI.BeginDisabledGroup(!_playback.CanPlay);
                 if (GUI.Button(controls.Play, FaceMotionUiText.Get("previewPlay"), EditorStyles.miniButton))
                 {
-                    _playback.Play();
+                    StartPlayback();
                 }
 
                 if (GUI.Button(controls.Pause, FaceMotionUiText.Get("previewPause"), EditorStyles.miniButton))
@@ -146,6 +146,19 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             lastChangeCount = overrideState.ChangeCount;
+            return true;
+        }
+
+        /// <summary>Only the visible Preview Play control acknowledges review of current content.</summary>
+        internal bool StartPlayback()
+        {
+            _playback.Play();
+            if (!_playback.IsPlaying)
+            {
+                return false;
+            }
+
+            _session.MarkCurrentAnimationReviewed();
             return true;
         }
 

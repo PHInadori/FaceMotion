@@ -280,6 +280,7 @@ namespace FaceMotion.Editor
                 if (index >= 0)
                 {
                     keys[index].Value = _value;
+                    keys[index].MarkManualIfBaseline();
                 }
             }
         }
@@ -357,6 +358,7 @@ namespace FaceMotion.Editor
                 if (index >= 0)
                 {
                     keys[index].Value = _value;
+                    keys[index].MarkManualIfBaseline();
                 }
             }
         }
@@ -443,6 +445,7 @@ namespace FaceMotion.Editor
                     if (keys[i] != null && string.Equals(keys[i].KeyId, _keyId, StringComparison.Ordinal))
                     {
                         keys[i].Interpolation = _interpolation;
+                        keys[i].MarkManualIfBaseline();
                         return;
                     }
                 }
@@ -455,6 +458,7 @@ namespace FaceMotion.Editor
                     if (keys[i] != null && string.Equals(keys[i].KeyId, _keyId, StringComparison.Ordinal))
                     {
                         keys[i].Interpolation = _interpolation;
+                        keys[i].MarkManualIfBaseline();
                         return;
                     }
                 }

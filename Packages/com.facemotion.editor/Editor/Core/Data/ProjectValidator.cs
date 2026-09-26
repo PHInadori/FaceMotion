@@ -408,7 +408,7 @@ namespace FaceMotion.Data
                     "Move the key, or extend the duration."));
             }
 
-            if (origin.Kind == OriginKind.Manual)
+            if (origin.Kind == OriginKind.Manual || origin.IsBaseline)
             {
                 if (!string.IsNullOrEmpty(origin.GenerationId))
                 {

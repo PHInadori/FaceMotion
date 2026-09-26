@@ -21,7 +21,10 @@ namespace FaceMotion.Editor.UI.Controllers
     /// </summary>
     public static class UICommandRunner
     {
-        public static OperationResult Run(FaceMotionEditorSession session, IProjectCommand command)
+        public static OperationResult Run(
+            FaceMotionEditorSession session,
+            IProjectCommand command,
+            bool affectsAuthoring = true)
         {
             var result = new OperationResult();
             FaceMotionProject project = session?.ActiveProject;
@@ -38,7 +41,14 @@ namespace FaceMotion.Editor.UI.Controllers
                 result.Succeeded = ProjectCommandExecutor.TryExecute(command, project, transaction, out result.Error);
             }
 
-            session.RefreshPose();
+            if (result.Succeeded && affectsAuthoring)
+            {
+                session.RefreshPose();
+            }
+            else
+            {
+                session.RefreshAll();
+            }
             return result;
         }
 

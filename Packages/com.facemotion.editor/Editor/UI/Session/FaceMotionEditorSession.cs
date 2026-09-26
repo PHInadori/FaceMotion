@@ -26,6 +26,10 @@ namespace FaceMotion.Editor.UI.Session
             new Dictionary<string, TrackBindingValidation>(StringComparer.Ordinal);
         private readonly HashSet<string> _batchAnimationIds = new HashSet<string>(StringComparer.Ordinal);
         private FaceMotionDiagnostic _lastOperationDiagnostic;
+        private readonly Dictionary<string, int> _authoringRevisions =
+            new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> _reviewedAuthoringRevisions =
+            new Dictionary<string, int>(StringComparer.Ordinal);
 
         public ValidationReport LastProjectValidation { get; set; }
 
@@ -117,12 +121,42 @@ namespace FaceMotion.Editor.UI.Session
             NotifyChanged();
         }
 
+        /// <summary>Marks the current animation as explicitly reviewed through Preview playback.</summary>
+        public void MarkCurrentAnimationReviewed()
+        {
+            if (!string.IsNullOrEmpty(SelectedAnimationId))
+            {
+                _reviewedAuthoringRevisions[SelectedAnimationId] =
+                    GetAuthoringRevision(SelectedAnimationId);
+            }
+        }
+
+        public bool HasReviewedCurrentAnimation()
+        {
+            return !string.IsNullOrEmpty(SelectedAnimationId)
+                && _reviewedAuthoringRevisions.TryGetValue(
+                    SelectedAnimationId,
+                    out int reviewedRevision)
+                && reviewedRevision == GetAuthoringRevision(SelectedAnimationId);
+        }
+
+        public void ClearAnimationReview(string animationId)
+        {
+            if (!string.IsNullOrEmpty(animationId))
+            {
+                _reviewedAuthoringRevisions.Remove(animationId);
+                _authoringRevisions.Remove(animationId);
+            }
+        }
+
         public void SetActiveProject(FaceMotionProject project, string assetPath)
         {
             ActiveProject = project;
             ActiveProjectAssetPath = assetPath;
             SelectedAnimationId = null;
             _batchAnimationIds.Clear();
+            _authoringRevisions.Clear();
+            _reviewedAuthoringRevisions.Clear();
             SelectedTrackId = null;
             Selection.Clear();
             ViewState.CurrentTime = 0f;
@@ -242,6 +276,10 @@ namespace FaceMotion.Editor.UI.Session
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
             ValidateSelections();
+            // Unity's undo callback does not identify the animation it restored. Clear only
+            // ephemeral review acknowledgements rather than attributing a cross-animation undo
+            // to the currently selected animation.
+            _reviewedAuthoringRevisions.Clear();
             NotifyPoseChanged();
         }
 
@@ -306,7 +344,26 @@ namespace FaceMotion.Editor.UI.Session
         {
             RecomputeBindingDiagnostics();
             RecomputeDiagnostics();
+            NotifyAuthoringChanged();
+        }
+
+        private void NotifyAuthoringChanged()
+        {
+            if (!string.IsNullOrEmpty(SelectedAnimationId))
+            {
+                _authoringRevisions[SelectedAnimationId] =
+                    GetAuthoringRevision(SelectedAnimationId) + 1;
+            }
+
             NotifyPoseChanged();
+        }
+
+        private int GetAuthoringRevision(string animationId)
+        {
+            return !string.IsNullOrEmpty(animationId) &&
+                   _authoringRevisions.TryGetValue(animationId, out int revision)
+                ? revision
+                : 0;
         }
 
         public bool TryGetTrackBinding(string trackId, out TrackBindingValidation validation)

@@ -12,7 +12,8 @@ namespace FaceMotion.Timeline
         Preset = 1,
         Blink = 2,
         Random = 3,
-        Imported = 4
+        Imported = 4,
+        Baseline = 5
     }
 
     /// <summary>
@@ -33,11 +34,16 @@ namespace FaceMotion.Timeline
 
         public static KeyOrigin Manual => new KeyOrigin(OriginKind.Manual, null);
 
+        /// <summary>Scene-derived track initialization, not an authored animation key.</summary>
+        public static KeyOrigin Baseline => new KeyOrigin(OriginKind.Baseline, null);
+
         public OriginKind Kind => _kind;
 
         public string GenerationId => _generationId;
 
-        public bool IsGenerated => _kind != OriginKind.Manual;
+        public bool IsGenerated => _kind != OriginKind.Manual && _kind != OriginKind.Baseline;
+
+        public bool IsBaseline => _kind == OriginKind.Baseline;
 
         /// <summary>True when generated but no generation ID is recorded.</summary>
         public bool IsOrphaned => IsGenerated && string.IsNullOrEmpty(_generationId);

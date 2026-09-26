@@ -22,7 +22,7 @@ namespace FaceMotion.Editor.Tests
         private static readonly string[] J5Keys =
         {
             "guidanceNextAction", "guidanceStepFormat", "guidanceHintProject", "guidanceHintAvatar", "guidanceHintAnimation",
-            "guidanceHintTrack", "guidanceHintPreview", "guidanceHintReady", "guidanceCompleteBadge",
+            "guidanceHintTrack", "guidanceHintKey", "guidanceHintPreview", "guidanceHintSelectVrchat", "guidanceHintReady", "guidanceCompleteBadge",
             "emptyAnimations", "emptyTracks", "emptyKeys",
             "shortcutHelpTitle", "shortcutTimelineZoom", "shortcutDeleteKey", "shortcutPreviewCamera", "shortcutFocus",
             "shortcutSelectKey", "shortcutToggleMultiSelect", "shortcutRangeSelect", "shortcutClearSelection",
@@ -34,44 +34,50 @@ namespace FaceMotion.Editor.Tests
         };
 
         [Test]
-        public void Guidance_ForwardSteps_WalkAllSixBeginnerStepsInOrder()
+        public void Guidance_ForwardSteps_WalkTheStateBasedBeginnerFlowInOrder()
         {
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(false, false, false, false, false),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(false, false, false, false, false, false, false),
                 FaceMotionUxState.CreateProject, 1, FaceMotionWorkflowHintService.HintCreateProject);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, false, false, false, false),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, false, false, false, false, false, false),
                 FaceMotionUxState.SelectAvatar, 2, FaceMotionWorkflowHintService.HintSelectAvatar);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, false, false, false),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, false, false, false, false, false),
                 FaceMotionUxState.CreateAnimation, 3, FaceMotionWorkflowHintService.HintCreateAnimation);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, false, false),
-                FaceMotionUxState.StartPreview, 4, FaceMotionWorkflowHintService.HintStartPreview);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, false, true),
-                FaceMotionUxState.AddTrack, 5, FaceMotionWorkflowHintService.HintAddTrack);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true),
-                FaceMotionUxState.PreviewAndIntegrate, 6, FaceMotionWorkflowHintService.HintPreviewAndIntegrate);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, false, false, false, false),
+                FaceMotionUxState.AddTrack, 4, FaceMotionWorkflowHintService.HintAddTrack);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, false, false, false),
+                FaceMotionUxState.AddKey, 5, FaceMotionWorkflowHintService.HintAddKey);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, false, false),
+                FaceMotionUxState.StartPreview, 6, FaceMotionWorkflowHintService.HintStartPreview);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, true, false),
+                FaceMotionUxState.SelectForVrchat, 7, FaceMotionWorkflowHintService.HintSelectForVrchat);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, true, true),
+                FaceMotionUxState.PreviewAndIntegrate, 8, FaceMotionWorkflowHintService.HintPreviewAndIntegrate);
         }
 
         [Test]
         public void Guidance_BackwardTransition_RemovingAnyPrerequisiteStepsBack()
         {
             // Each case keeps every later prerequisite satisfied, so only the removed one can win.
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, false),
-                FaceMotionUxState.StartPreview, 4, FaceMotionWorkflowHintService.HintStartPreview);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, false, true),
-                FaceMotionUxState.AddTrack, 5, FaceMotionWorkflowHintService.HintAddTrack);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, false, true, true),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, false, true),
+                FaceMotionUxState.StartPreview, 6, FaceMotionWorkflowHintService.HintStartPreview);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, false, true, true),
+                FaceMotionUxState.AddKey, 5, FaceMotionWorkflowHintService.HintAddKey);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, true, false, true, true, true),
+                FaceMotionUxState.AddTrack, 4, FaceMotionWorkflowHintService.HintAddTrack);
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, true, false, true, true, true, true),
                 FaceMotionUxState.CreateAnimation, 3, FaceMotionWorkflowHintService.HintCreateAnimation);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, false, true, true, true),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(true, false, true, true, true, true, true),
                 FaceMotionUxState.SelectAvatar, 2, FaceMotionWorkflowHintService.HintSelectAvatar);
-            AssertStep(FaceMotionWorkflowHintService.Evaluate(false, true, true, true, true),
+            AssertStep(FaceMotionWorkflowHintService.Evaluate(false, true, true, true, true, true, true),
                 FaceMotionUxState.CreateProject, 1, FaceMotionWorkflowHintService.HintCreateProject);
         }
 
         [Test]
         public void Guidance_FinalStep_ReportsComplete()
         {
-            FaceMotionGuidanceModel model = FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true);
+            FaceMotionGuidanceModel model = FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, true, true);
             Assert.That(model.IsComplete, Is.True);
-            Assert.That(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, false).IsComplete, Is.False);
+            Assert.That(FaceMotionWorkflowHintService.Evaluate(true, true, true, true, true, true, false).IsComplete, Is.False);
         }
 
         [Test]
@@ -91,9 +97,11 @@ namespace FaceMotion.Editor.Tests
             Assert.That((int)FaceMotionUxState.CreateProject, Is.EqualTo(1));
             Assert.That((int)FaceMotionUxState.SelectAvatar, Is.EqualTo(2));
             Assert.That((int)FaceMotionUxState.CreateAnimation, Is.EqualTo(3));
-            Assert.That((int)FaceMotionUxState.StartPreview, Is.EqualTo(4));
-            Assert.That((int)FaceMotionUxState.AddTrack, Is.EqualTo(5));
-            Assert.That((int)FaceMotionUxState.PreviewAndIntegrate, Is.EqualTo(6));
+            Assert.That((int)FaceMotionUxState.AddTrack, Is.EqualTo(4));
+            Assert.That((int)FaceMotionUxState.AddKey, Is.EqualTo(5));
+            Assert.That((int)FaceMotionUxState.StartPreview, Is.EqualTo(6));
+            Assert.That((int)FaceMotionUxState.SelectForVrchat, Is.EqualTo(7));
+            Assert.That((int)FaceMotionUxState.PreviewAndIntegrate, Is.EqualTo(8));
         }
 
         [Test]

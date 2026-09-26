@@ -47,6 +47,15 @@ namespace FaceMotion.Editor.UI.Controllers
                 return new OperationResult();
             }
 
+            return CreateProjectAtPath(path);
+        }
+
+        /// <summary>
+        /// Creates a new project and its first editable animation. Loading and migration never
+        /// call this boundary, so an intentionally empty existing project stays empty.
+        /// </summary>
+        internal OperationResult CreateProjectAtPath(string path)
+        {
             var project = FaceMotionProject.CreateNew();
             AssetDatabase.CreateAsset(project, path);
             if (project == null || !AssetDatabase.Contains(project))
@@ -55,10 +64,16 @@ namespace FaceMotion.Editor.UI.Controllers
                 return new OperationResult();
             }
 
-            EditorUtility.SetDirty(project);
-            AssetDatabase.SaveAssets();
             _session.SetActiveProject(project, path);
-            return new OperationResult { Succeeded = true };
+            string initialAnimationId = new AnimationController(_session).Add();
+            bool succeeded = !string.IsNullOrEmpty(initialAnimationId);
+            if (succeeded)
+            {
+                EditorUtility.SetDirty(project);
+                AssetDatabase.SaveAssets();
+            }
+
+            return new OperationResult { Succeeded = succeeded };
         }
 
         public void LoadProject(FaceMotionProject asset)

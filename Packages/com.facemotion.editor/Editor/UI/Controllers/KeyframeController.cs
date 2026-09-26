@@ -411,9 +411,17 @@ namespace FaceMotion.Editor.UI.Controllers
 
         public void EndKeyDrag()
         {
+            bool changed = HasDragStoredChange();
             _drag.Commit();
             _dragInputs = null;
-            _session.RefreshAll();
+            if (changed)
+            {
+                _session.RefreshPose();
+            }
+            else
+            {
+                _session.RefreshAll();
+            }
         }
 
         public void CancelKeyDrag()
@@ -1664,6 +1672,29 @@ namespace FaceMotion.Editor.UI.Controllers
                 if (inputs[i].KeyIds.Count > 0)
                 {
                     return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool HasDragStoredChange()
+        {
+            if (_dragInputs == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < _dragInputs.Count; i++)
+            {
+                TrackMoveInput input = _dragInputs[i];
+                for (int j = 0; j < input.KeyIds.Count; j++)
+                {
+                    if (!TryGetKeyTime(input.Track, input.KeyIds[j], out float time) ||
+                        !Mathf.Approximately(time, input.CurrentTimes[j]))
+                    {
+                        return true;
+                    }
                 }
             }
 

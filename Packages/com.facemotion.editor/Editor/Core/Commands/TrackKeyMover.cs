@@ -45,7 +45,11 @@ namespace FaceMotion.Editor
             {
                 if (keys[i] != null && string.Equals(keys[i].KeyId, keyId, StringComparison.Ordinal))
                 {
-                    keys[i].Time = time;
+                    if (keys[i].Time != time)
+                    {
+                        keys[i].Time = time;
+                        keys[i].MarkManualIfBaseline();
+                    }
                     return;
                 }
             }
@@ -57,7 +61,11 @@ namespace FaceMotion.Editor
             {
                 if (keys[i] != null && string.Equals(keys[i].KeyId, keyId, StringComparison.Ordinal))
                 {
-                    keys[i].Time = time;
+                    if (keys[i].Time != time)
+                    {
+                        keys[i].Time = time;
+                        keys[i].MarkManualIfBaseline();
+                    }
                     return;
                 }
             }

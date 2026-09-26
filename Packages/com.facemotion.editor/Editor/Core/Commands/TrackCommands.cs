@@ -80,7 +80,7 @@ namespace FaceMotion.Editor
         {
             if (!project.TryGetAnimation(_animationId, out var animation) || animation.Timeline == null) return;
             var track = FaceTrackData.CreateBlendShape(_rendererPath, _blendShapeName);
-            track.BlendShape.AddKey(FloatKeyframeData.Create(0f, _initialValue, InterpolationType.Linear));
+            track.BlendShape.AddKey(FloatKeyframeData.Create(0f, _initialValue, InterpolationType.Linear, KeyOrigin.Baseline));
             track.BlendShape.SortKeys();
             animation.Timeline.AddTrack(track);
             CreatedTrackId = track.TrackId;

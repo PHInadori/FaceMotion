@@ -41,6 +41,14 @@ namespace FaceMotion.Timeline
 
         public KeyOrigin Origin => _origin;
 
+        public void MarkManualIfBaseline()
+        {
+            if (_origin.IsBaseline)
+            {
+                _origin = KeyOrigin.Manual;
+            }
+        }
+
         /// <summary>Creates a manual key with a new ID.</summary>
         public static Vector3KeyframeData Create(
             float time,
@@ -105,12 +113,16 @@ namespace FaceMotion.Timeline
         /// </summary>
         internal Vector3KeyframeData Duplicate(IReadOnlyDictionary<string, string> generationIdRemap)
         {
-            var origin = KeyOrigin.Manual;
+            var origin = _origin;
             if (_origin.IsGenerated
                 && generationIdRemap != null
                 && generationIdRemap.TryGetValue(_origin.GenerationId, out var remappedId))
             {
                 origin = new KeyOrigin(_origin.Kind, remappedId);
+            }
+            else if (_origin.IsGenerated)
+            {
+                origin = KeyOrigin.Manual;
             }
 
             var duplicate = new Vector3KeyframeData

@@ -45,7 +45,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             string name = "Animation " + (project.Animations.Count + 1);
-            var result = UICommandRunner.Run(_session, new AddAnimationCommand(name));
+            var result = UICommandRunner.Run(_session, new AddAnimationCommand(name), false);
             if (!result.Succeeded)
             {
                 return null;
@@ -72,7 +72,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             var command = new DuplicateAnimationCommand(id);
-            var result = UICommandRunner.Run(_session, command);
+            var result = UICommandRunner.Run(_session, command, false);
             if (!result.Succeeded)
             {
                 return null;
@@ -96,7 +96,7 @@ namespace FaceMotion.Editor.UI.Controllers
                 return false;
             }
 
-            var result = UICommandRunner.Run(_session, new RenameAnimationCommand(id, displayName));
+            var result = UICommandRunner.Run(_session, new RenameAnimationCommand(id, displayName), false);
             return result.Succeeded;
         }
 
@@ -109,10 +109,11 @@ namespace FaceMotion.Editor.UI.Controllers
                 return false;
             }
 
+            _session.ClearAnimationReview(id);
             _session.SelectedAnimationId = null;
             _session.SelectedTrackId = null;
             _session.Selection.Clear();
-            var result = UICommandRunner.Run(_session, new RemoveAnimationCommand(id));
+            var result = UICommandRunner.Run(_session, new RemoveAnimationCommand(id), false);
             return result.Succeeded;
         }
 
