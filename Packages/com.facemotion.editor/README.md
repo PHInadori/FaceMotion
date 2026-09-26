@@ -16,6 +16,7 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 - AnimationClip export
 - VRChat へのワンクリック統合（Export → Plan → Validate → Apply）、Direct Integration、任意の Modular Avatar Integration
 - 次の操作を示す workflow guidance、empty state、tooltip、shortcut help
+- Quick Key、Copy / Paste / Duplicate / Nudge による key 作成・編集の高速化
 
 ## 対応環境
 
@@ -42,6 +43,14 @@ VCC / ALCOM では `https://phinadori.github.io/PHInadori-VPM/index.json` を cu
 6. scene を保存し、VRChat SDK の Build & Test で動作を確認します。
 
 詳細: [Getting Started](Documentation~/Getting-Started.md)
+
+## Key editing
+
+- **Quick Key** は playhead の位置に設定値（0-100、EditorPrefs に保存）で BlendShape key を追加します。同じ位置に key がある場合は更新します。
+- **Key Actions** メニュー（Key Inspector）から Copy / Paste / Duplicate / Nudge（±1 / ±5 フレーム）を実行できます。timeline 上では Ctrl/Cmd+A / C / V / D も利用できます。
+- Paste は key をコピーした同じ animation 内でのみ有効で、playhead を基準に相対間隔を保ちます。同じ track・時刻に既にある key は value と補間だけを更新します（key identity は維持、重複 timestamp は作られません）。
+- 複数 key・複数 track はまとめて移動でき、選択済みの key を modifier なしで drag すると選択全体が移動します。
+- Native Shortcut Manager actions（Quick Key / Copy / Paste / Duplicate / Nudge）は既定の binding なしで登録されます。**Edit > Shortcuts** の `FaceMotion/Timeline` から割り当ててください。
 
 ## Direct と Modular Avatar
 

@@ -23,7 +23,9 @@ avatar root を選択すると binding 候補を取得できます。`トラッ�
 
 timeline で再生ヘッドを置き、key を追加して Inspector で値と `補間` を編集します。現在の interpolation は outgoing key（左側の key）の設定です。
 
-`キーインスペクター` では Time、BlendShape value または Transform X/Y/Z、補間を編集できます。**適用**で選択 key を更新し、**戻す**で読み直します。key 未選択時は入力した time / value で **キーを追加** できます。選択 key は Delete / Backspace で削除でき、追加操作は現在の track と playhead を使用します。
+`キーインスペクター` では Time、BlendShape value または Transform X/Y/Z、補間を編集できます。**適用**で選択 key を更新し、**戻す**で読み直します。key 未選択時は入力した time / value で **キーを追加** できます（BlendShape の既定値は 100）。選択 key は Delete / Backspace で削除でき、追加操作は現在の track と playhead を使用します。
+
+**Quick Key** は現在の時間に設定値（0-100、EditorPrefs に保存）で BlendShape key を追加し、同じ時間に key がある場合は更新します。**Key Actions** メニューから Copy / Paste / Duplicate / Nudge（±1 / ±5 フレーム）も実行できます。複数 key・複数 track をまとめて copy / paste / move でき、選択済みの key を modifier なしで drag すると選択全体が移動します。Paste は key をコピーした同じ animation 内でのみ有効です。native Shortcut Manager actions は既定の binding なしで登録されるため、必要な場合は **Edit > Shortcuts** の `FaceMotion/Timeline` から割り当ててください。
 
 - Hold
 - Linear
@@ -34,7 +36,7 @@ timeline で再生ヘッドを置き、key を追加して Inspector で値と `
 
 BlendShape、Position、Scale は補間値を評価します。Rotation は Euler として保存しますが、評価時は Quaternion shortest path を使用します。360 度を超える連続回転は current rotation mode では対象外です。
 
-`スナップ` を有効にすると時間は nearest frame に丸められ、`0..長さ` に制限されます。timeline は scrub、key drag、Delete/Backspace、Ctrl/Cmd-A/C/V、Escape cancel、Home（time zero）、middle drag pan、Ctrl/Cmd-wheel zoom、`全体表示`、`縮小`、`拡大` を利用できます。
+`スナップ` を有効にすると時間は nearest frame に丸められ、`0..長さ` に制限されます。timeline は scrub、key drag、Delete/Backspace、Ctrl/Cmd-A/C/V/D、Escape cancel、Home（time zero）、middle drag pan、Ctrl/Cmd-wheel zoom、`全体表示`、`縮小`、`拡大` を利用できます。
 
 ## Preview と Scene Apply
 

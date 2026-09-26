@@ -11,7 +11,7 @@
 
 ## Before Release
 
-- [ ] Create and verify tag `v0.1.0`.
+- [ ] Create and verify tag `v0.6.0`.
 - [ ] Confirm artifact filename and SHA-256 from `dist/release-info.json`.
 - [ ] Create the GitHub Release with the validated ZIP and `release-info.json`.
 - [ ] Update the VPM listing repository and publish its Pages build.

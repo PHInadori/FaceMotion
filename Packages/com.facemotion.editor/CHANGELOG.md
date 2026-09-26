@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.6.0] - 2026-09-26
+
+### Added
+
+- Quick Key: add a key at the playhead with a configurable BlendShape value (0-100) that persists across sessions. Quick Key updates the existing key at the same time instead of creating a duplicate.
+- Key Actions menu in the Key Inspector: Copy, Paste, Duplicate, and Nudge (±1 / ±5 frames) in one place.
+- Native Shortcut Manager actions for Quick Key, Copy, Paste, Duplicate, and Nudge (±1 / ±5 frames, earlier / later). They are registered without default bindings; assign keys in **Edit > Shortcuts**.
+
+### Improved
+
+- Timeline duration editing: the area beyond the animation length is greyed out, auto-fit includes long animations, and multi-key drags move as one group within the duration bounds.
+- Timeline settings (length, frame rate, loop) are editable from the animation list and stay synchronized while authoring.
+- Paste updates an existing key at the same track and time in place (value and interpolation, identity preserved) instead of skipping it; mixed insert and update happen as one atomic, undoable operation, and an invalid paste plan is rejected without changing the project.
+- Paste is limited to the animation the keys were copied from, keeps the copied group's relative spacing, and fits the group inside the duration.
+- Multi-track copy/paste and Duplicate now work across tracks; Duplicate keeps the group shape, snaps to frames, and rejects the whole operation if a destination collides with an unrelated key.
+- Grabbing an already-selected key with a plain mouse drag moves the whole selection, and a plain click without dragging keeps the multi-selection. Ctrl/Cmd toggle and Shift range selection are unchanged.
+- The Key Inspector's new-key default value for BlendShape tracks is 100, and text/numeric field focus is released when the selection or animation changes so shortcuts stay available.
+
+### Fixed
+
+- Quick Key after Timeline scrub / playhead movement, and background-click focus release.
+- Avatar selection restore when reopening the FaceMotion window, including avatars in unsaved scenes and interrupted restores.
+- Long-duration Timeline fit limitation and several selection, focus, and layout edge cases.
+
+### Compatibility
+
+- Existing projects remain supported; no project, mapping, or integration schema change is required.
+
 ## [0.5.1] - 2026-09-26
 
 ### Fixed / Improved
