@@ -446,6 +446,26 @@ namespace FaceMotion.Editor.UI.Controllers
 
             time = SnapTime(time);
 
+            if (!TryGetKeyTime(track, keyId, out float currentTime))
+            {
+                return false;
+            }
+
+            float[] planned =
+                KeyMovePlanner.PlanTrack(
+                    new[] { currentTime },
+                    CollectTrackTimes(track, keyId),
+                    time - currentTime,
+                    animation.Timeline.Duration,
+                    animation.Timeline.FrameRate,
+                    _session.ViewState.SnapEnabled);
+
+            if (planned.Length != 1 ||
+                Mathf.Approximately(planned[0], currentTime))
+            {
+                return false;
+            }
+
             var result =
                 UICommandRunner.Run(
                     _session,
@@ -453,7 +473,7 @@ namespace FaceMotion.Editor.UI.Controllers
                         animation.AnimationId,
                         track.TrackId,
                         new[] { keyId },
-                        new[] { time }));
+                        planned));
 
             return result.Succeeded;
         }
@@ -1816,7 +1836,8 @@ namespace FaceMotion.Editor.UI.Controllers
         }
 
         private static List<float> CollectTrackTimes(
-            FaceTrackData track)
+            FaceTrackData track,
+            string excludedKeyId = null)
         {
             var times =
                 new List<float>();
@@ -1831,7 +1852,11 @@ namespace FaceMotion.Editor.UI.Controllers
             {
                 foreach (var key in track.BlendShape.Keys)
                 {
-                    if (key != null)
+                    if (key != null &&
+                        !string.Equals(
+                            key.KeyId,
+                            excludedKeyId,
+                            StringComparison.Ordinal))
                     {
                         times.Add(
                             key.Time);
@@ -1843,7 +1868,11 @@ namespace FaceMotion.Editor.UI.Controllers
             {
                 foreach (var key in track.Transform.Keys)
                 {
-                    if (key != null)
+                    if (key != null &&
+                        !string.Equals(
+                            key.KeyId,
+                            excludedKeyId,
+                            StringComparison.Ordinal))
                     {
                         times.Add(
                             key.Time);
@@ -1852,6 +1881,42 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             return times;
+        }
+
+        private static bool TryGetKeyTime(
+            FaceTrackData track,
+            string keyId,
+            out float time)
+        {
+            time = 0f;
+            if (track.Kind == TrackKind.BlendShape &&
+                track.BlendShape != null)
+            {
+                foreach (var key in track.BlendShape.Keys)
+                {
+                    if (key != null &&
+                        string.Equals(key.KeyId, keyId, StringComparison.Ordinal))
+                    {
+                        time = key.Time;
+                        return true;
+                    }
+                }
+            }
+            else if (TrackKinds.IsTransform(track.Kind) &&
+                     track.Transform != null)
+            {
+                foreach (var key in track.Transform.Keys)
+                {
+                    if (key != null &&
+                        string.Equals(key.KeyId, keyId, StringComparison.Ordinal))
+                    {
+                        time = key.Time;
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static bool ContainsTime(

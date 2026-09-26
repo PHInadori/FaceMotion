@@ -24,5 +24,24 @@ namespace FaceMotion.Editor.UI.Support
             GUIUtility.keyboardControl = 0;
             EditorGUIUtility.editingTextField = false;
         }
+
+        internal static bool ReleaseForTimelinePointerDown(
+            EventType eventType,
+            int button,
+            int hotControl,
+            bool textControlOwnsKeyboard,
+            bool editingTextField)
+        {
+            if (eventType != EventType.MouseDown ||
+                button != 0 ||
+                hotControl != 0 ||
+                (!textControlOwnsKeyboard && !editingTextField))
+            {
+                return false;
+            }
+
+            ClearTextFocus();
+            return true;
+        }
     }
 }

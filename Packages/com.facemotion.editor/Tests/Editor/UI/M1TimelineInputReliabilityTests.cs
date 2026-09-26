@@ -423,6 +423,63 @@ namespace FaceMotion.Editor.Tests
             }
         }
 
+        [Test]
+        public void TEST20_FocusedNumericField_FirstTimelineKeyMouseDownStartsDrag()
+        {
+            SetupTimeline();
+            string trackId = AddBlendTrack("Smile");
+            string keyId = AddKey(trackId, 0.5f);
+            TimelineLayoutSnapshot layout = BuildLayout();
+            bool previousEditing = EditorGUIUtility.editingTextField;
+            int previousKeyboardControl = GUIUtility.keyboardControl;
+            try
+            {
+                EditorGUIUtility.editingTextField = true;
+                GUIUtility.keyboardControl = 1234;
+                float x = KeyX(layout, 0.5f);
+                float y = RowY(layout, trackId);
+
+                Assert.That(Route(Pointer(EventType.MouseDown, x, y), layout, true), Is.True);
+                Assert.That(_session.ViewState.DragMode, Is.EqualTo(TimelineDragMode.MoveKeys));
+                Assert.That(EditorGUIUtility.editingTextField, Is.False);
+                Assert.That(GUIUtility.keyboardControl, Is.Zero);
+                Assert.That(Route(Pointer(EventType.MouseDrag, x + 20f, y), layout, true), Is.True);
+                Assert.That(TimeOf(trackId, keyId), Is.GreaterThan(0.5f));
+            }
+            finally
+            {
+                EditorGUIUtility.editingTextField = previousEditing;
+                GUIUtility.keyboardControl = previousKeyboardControl;
+            }
+        }
+
+        [Test]
+        public void TEST21_FocusedNumericField_FirstEmptyTimelineMouseDownStartsScrub()
+        {
+            SetupTimeline();
+            string trackId = AddBlendTrack("Smile");
+            AddKey(trackId, 0.8f);
+            TimelineLayoutSnapshot layout = BuildLayout();
+            bool previousEditing = EditorGUIUtility.editingTextField;
+            int previousKeyboardControl = GUIUtility.keyboardControl;
+            try
+            {
+                EditorGUIUtility.editingTextField = true;
+                GUIUtility.keyboardControl = 1234;
+
+                Assert.That(Route(Pointer(EventType.MouseDown, KeyX(layout, 0.25f), RowY(layout, trackId)), layout, true), Is.True);
+                Assert.That(_session.ViewState.DragMode, Is.EqualTo(TimelineDragMode.Scrub));
+                Assert.That(_session.ViewState.CurrentTime, Is.EqualTo(0.25f).Within(1e-5f));
+                Assert.That(EditorGUIUtility.editingTextField, Is.False);
+                Assert.That(GUIUtility.keyboardControl, Is.Zero);
+            }
+            finally
+            {
+                EditorGUIUtility.editingTextField = previousEditing;
+                GUIUtility.keyboardControl = previousKeyboardControl;
+            }
+        }
+
         private void SetupTimeline(float duration = 1f, float frameRate = 60f)
         {
             var project = FaceMotionProject.CreateNew();
@@ -494,7 +551,7 @@ namespace FaceMotion.Editor.Tests
             return _input.HandleEvent(e, eventType, PlotRect(layout), layout, false);
         }
 
-        private bool Route(Event e, TimelineLayoutSnapshot layout)
+        private bool Route(Event e, TimelineLayoutSnapshot layout, bool textControlOwnsKeyboard = false)
         {
             return TimelineView.RoutePointerEvent(
                 e,
@@ -504,7 +561,7 @@ namespace FaceMotion.Editor.Tests
                 _session.ViewState,
                 PlotRect(layout),
                 layout,
-                false);
+                textControlOwnsKeyboard);
         }
 
         private void AssertCleanPointerState()

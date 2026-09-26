@@ -23,10 +23,14 @@ namespace FaceMotion.Editor.UI.Panels
         private string _inspectedTrackId;
         private string _inspectedKeyId;
         private float _time = 0f;
+        private float _loadedTime = 0f;
         private float _floatValue = DefaultBlendShapeAuthoringValue;
         private Vector3 _vectorValue = Vector3.zero;
         private int _interpolationIndex = (int)InterpolationType.Linear;
         private int _loadedSessionVersion = -1;
+        private string _autoApplyControlName;
+        private string _autoApplyKeyId;
+        private int _autoApplyUndoGroup = -1;
 
         public KeyframeInspectorPanel(
             FaceMotionEditorSession session,
@@ -52,6 +56,11 @@ namespace FaceMotion.Editor.UI.Panels
 
             Synchronize();
 
+            if (!OwnsKeyboardFocus())
+            {
+                ResetAutoApplyUndoSession();
+            }
+
             int selectionCount = _session.Selection.Count;
 
             // K5:
@@ -69,6 +78,8 @@ namespace FaceMotion.Editor.UI.Panels
 
                 return;
             }
+
+            DrawCurrentTrackAndAddKey();
 
             string inspected = GetOnlySelectedKeyId();
             var selectedTrack = FindTrackForKey(inspected);
@@ -93,10 +104,20 @@ namespace FaceMotion.Editor.UI.Panels
             }
             else
             {
+                EditorGUILayout.BeginHorizontal();
                 _time = DrawFloatField(
                     "time",
                     FaceMotionUiText.Get("time"),
                     _time);
+                using (new EditorGUI.DisabledScope(Mathf.Approximately(_time, _loadedTime)))
+                {
+                    if (GUILayout.Button(FaceMotionUiText.Get("moveKey"), GUILayout.Width(64f)))
+                    {
+                        ApplySelectedTime(inspected);
+                    }
+                }
+
+                EditorGUILayout.EndHorizontal();
 
                 var track = selectedTrack;
 
@@ -104,10 +125,16 @@ namespace FaceMotion.Editor.UI.Panels
                 {
                     if (track.Kind == TrackKind.BlendShape)
                     {
-                        _floatValue = DrawFloatField(
+                        EditorGUI.BeginChangeCheck();
+                        float value = DrawFloatField(
                             "blendShape",
                             FaceMotionUiText.Get("blendShape"),
                             _floatValue);
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            _floatValue = Mathf.Clamp(value, 0f, 100f);
+                            AutoApplySelectedValue(inspected, track);
+                        }
                     }
                     else if (TrackKinds.IsTransform(track.Kind))
                     {
@@ -116,6 +143,7 @@ namespace FaceMotion.Editor.UI.Panels
 
                         EditorGUI.indentLevel++;
 
+                        EditorGUI.BeginChangeCheck();
                         _vectorValue.x = DrawFloatField(
                             "x",
                             FaceMotionUiText.Get("xLocal"),
@@ -132,13 +160,23 @@ namespace FaceMotion.Editor.UI.Panels
                             _vectorValue.z);
 
                         EditorGUI.indentLevel--;
+
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            AutoApplySelectedValue(inspected, track);
+                        }
                     }
 
-                    _interpolationIndex =
-                        EditorGUILayout.Popup(
+                    EditorGUI.BeginChangeCheck();
+                    int interpolation = EditorGUILayout.Popup(
                             FaceMotionUiText.Get("interpolation"),
                             _interpolationIndex,
                             InterpolationNames);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        _interpolationIndex = interpolation;
+                        AutoApplySelectedInterpolation(inspected, track);
+                    }
                 }
             }
 
@@ -148,53 +186,9 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (GUILayout.Button(
                     new GUIContent(
-                        FaceMotionUiText.Get("apply"),
-                        FaceMotionUiText.Get("apply")),
-                    EditorStyles.miniButtonLeft,
-                    GUILayout.Height(22f)))
-            {
-                ApplyChanges(inspected);
-            }
-
-            if (GUILayout.Button(
-                    new GUIContent(
-                        FaceMotionUiText.Get("revert"),
-                        FaceMotionUiText.Get("revert")),
-                    EditorStyles.miniButtonRight,
-                    GUILayout.Height(22f)))
-            {
-                LoadFields(inspected);
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-
-            if (GUILayout.Button(
-                    new GUIContent(
-                        FaceMotionUiText.Get("addKey"),
-                        FaceMotionUiText.Get("addKey")),
-                    EditorStyles.miniButtonLeft,
-                    GUILayout.Height(22f)))
-            {
-                var created =
-                    _keys.AddKeyAtCurrentTime(
-                        _floatValue,
-                        _vectorValue,
-                        (InterpolationType)_interpolationIndex);
-
-                if (created != null)
-                {
-                    _inspectedKeyId = created;
-                    LoadFields(created);
-                }
-            }
-
-            if (GUILayout.Button(
-                    new GUIContent(
                         FaceMotionUiText.Get("selectAll"),
                         FaceMotionUiText.Get("selectAll")),
-                    EditorStyles.miniButtonMid,
+                    EditorStyles.miniButtonLeft,
                     GUILayout.Height(22f)))
             {
                 _keys.SelectAllKeys();
@@ -399,6 +393,169 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
+        private void DrawCurrentTrackAndAddKey()
+        {
+            FaceTrackData track = _session.GetSelectedTrack();
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("selectedTrack"), EditorStyles.miniLabel);
+
+            if (track == null)
+            {
+                EditorGUILayout.LabelField(FaceMotionUiText.Get("noTrackSelected"), EditorStyles.miniLabel);
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    GUILayout.Button("+ " + FaceMotionUiText.Get("addKey"), GUILayout.Height(24f));
+                }
+            }
+            else
+            {
+                EditorGUILayout.LabelField(GetTrackDisplayName(track), EditorStyles.boldLabel);
+                if (GUILayout.Button("+ " + FaceMotionUiText.Get("addKey"), GUILayout.Height(24f)))
+                {
+                    AddKeyFromInspector();
+                }
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+        internal bool AddKeyFromInspector()
+        {
+            if (_session.GetSelectedTrack() == null)
+            {
+                return false;
+            }
+
+            string created = _keys.AddKeyAtCurrentTime(
+                _floatValue,
+                _vectorValue,
+                (InterpolationType)_interpolationIndex);
+            if (created == null)
+            {
+                return false;
+            }
+
+            _inspectedKeyId = created;
+            LoadFields(created);
+            return true;
+        }
+
+        internal static string GetTrackDisplayName(FaceTrackData track)
+        {
+            if (track == null)
+            {
+                return FaceMotionUiText.Get("noTrackSelected");
+            }
+
+            if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
+            {
+                return FaceMotionUiText.Get("trackBlendShape") + ": " + track.BlendShape.BlendShapeName;
+            }
+
+            if (track.Transform != null)
+            {
+                string channel = track.Kind == TrackKind.TransformPosition
+                    ? FaceMotionUiText.Get("trackPosition")
+                    : track.Kind == TrackKind.TransformRotation
+                        ? FaceMotionUiText.Get("trackRotation")
+                        : FaceMotionUiText.Get("trackScale");
+                return channel + ": " + LastSegment(track.Transform.TransformPath);
+            }
+
+            return FaceMotionUiText.Get("noTrackSelected");
+        }
+
+        internal bool AutoApplySelectedValue(string keyId, FaceTrackData track)
+        {
+            return AutoApplySelectedValue(keyId, track, GUI.GetNameOfFocusedControl());
+        }
+
+        internal bool AutoApplySelectedValue(string keyId, FaceTrackData track, string focusedControlName)
+        {
+            if (keyId == null || track == null ||
+                !IsFinite(_floatValue) || !IsFinite(_vectorValue))
+            {
+                return false;
+            }
+
+            if (track.Kind == TrackKind.BlendShape)
+            {
+                _floatValue = Mathf.Clamp(_floatValue, 0f, 100f);
+            }
+
+            bool applied = _keys.SetKeyValue(keyId, _floatValue, _vectorValue);
+            CompleteAutoApply(keyId, applied, focusedControlName);
+            return applied;
+        }
+
+        internal bool AutoApplySelectedInterpolation(string keyId, FaceTrackData track)
+        {
+            if (keyId == null || track == null)
+            {
+                return false;
+            }
+
+            bool applied = _keys.SetKeyInterpolation(keyId, (InterpolationType)_interpolationIndex);
+            CompleteAutoApply(keyId, applied, GUI.GetNameOfFocusedControl());
+            return applied;
+        }
+
+        private void CompleteAutoApply(string keyId, bool applied, string focused)
+        {
+            if (!applied)
+            {
+                return;
+            }
+
+            if (!OwnsKeyboardFocus(focused))
+            {
+                ResetAutoApplyUndoSession();
+                return;
+            }
+
+            int currentGroup = Undo.GetCurrentGroup();
+            if (string.Equals(_autoApplyControlName, focused, StringComparison.Ordinal) &&
+                string.Equals(_autoApplyKeyId, keyId, StringComparison.Ordinal) &&
+                _autoApplyUndoGroup >= 0)
+            {
+                Undo.CollapseUndoOperations(_autoApplyUndoGroup);
+            }
+            else
+            {
+                _autoApplyControlName = focused;
+                _autoApplyKeyId = keyId;
+                _autoApplyUndoGroup = currentGroup;
+            }
+        }
+
+        private void ResetAutoApplyUndoSession()
+        {
+            _autoApplyControlName = null;
+            _autoApplyKeyId = null;
+            _autoApplyUndoGroup = -1;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static string LastSegment(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            int slash = path.LastIndexOf('/');
+            return slash >= 0 ? path.Substring(slash + 1) : path;
+        }
+
         private string GetOnlySelectedKeyId()
         {
             if (_session.Selection.Count != 1)
@@ -439,6 +596,7 @@ namespace FaceMotion.Editor.UI.Panels
                 _floatValue = DefaultBlendShapeAuthoringValue;
                 _vectorValue = Vector3.zero;
                 _interpolationIndex = (int)InterpolationType.Linear;
+                _loadedTime = _time;
 
                 return;
             }
@@ -508,6 +666,20 @@ namespace FaceMotion.Editor.UI.Panels
                 _time =
                     _session.ViewState.CurrentTime;
             }
+
+            _loadedTime = _time;
+        }
+
+        internal bool ApplySelectedTime(string keyId)
+        {
+            if (keyId == null || !IsFinite(_time) || Mathf.Approximately(_time, _loadedTime))
+            {
+                return false;
+            }
+
+            bool moved = _keys.SetKeyTime(keyId, _time);
+            LoadFields(keyId);
+            return moved;
         }
 
         private FaceTrackData FindTrackForKey(
@@ -569,23 +741,5 @@ namespace FaceMotion.Editor.UI.Panels
             return null;
         }
 
-        private void ApplyChanges(
-            string keyId)
-        {
-            if (keyId == null)
-            {
-                return;
-            }
-
-            if (_keys.ApplyKeyEdits(
-                    keyId,
-                    _time,
-                    _floatValue,
-                    _vectorValue,
-                    (InterpolationType)_interpolationIndex))
-            {
-                LoadFields(keyId);
-            }
-        }
     }
 }

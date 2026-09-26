@@ -2,6 +2,7 @@ using System;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
+using FaceMotion.Editor.UI.Support;
 using UnityEngine;
 using UnityEditor;
 
@@ -149,6 +150,13 @@ namespace FaceMotion.Editor.UI.Timeline
                     {
                         return false;
                     }
+
+                    FaceMotionFocusUtility.ReleaseForTimelinePointerDown(
+                        eventType,
+                        current.button,
+                        GUIUtility.hotControl,
+                        textControlOwnsKeyboard,
+                        EditorGUIUtility.editingTextField);
 
                     bool began = input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
                     if (began && viewState.DragMode != TimelineDragMode.None)
