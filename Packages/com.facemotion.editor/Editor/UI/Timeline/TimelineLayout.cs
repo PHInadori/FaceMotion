@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using FaceMotion.Avatar;
 using FaceMotion.Data;
 using FaceMotion.Timeline;
+using UnityEngine;
 
 namespace FaceMotion.Editor.UI.Timeline
 {
@@ -113,7 +114,8 @@ namespace FaceMotion.Editor.UI.Timeline
     /// <summary>Pure hit testing shared by the input handler and the view.</summary>
     public static class TimelineHitTest
     {
-        public const float KeyHitRadiusPixels = 6f;
+        // Keep marker rendering compact while providing a small, deliberate pointer cushion.
+        public const float KeyHitRadiusPixels = 10f;
 
         public static TimelineRow FindRowAt(TimelineLayoutSnapshot layout, float y)
         {
@@ -125,7 +127,10 @@ namespace FaceMotion.Editor.UI.Timeline
             for (int i = 0; i < layout.Rows.Count; i++)
             {
                 var row = layout.Rows[i];
-                if (y >= row.Y && y <= row.Y + row.Height)
+                bool includesBottom = i == layout.Rows.Count - 1;
+                if (y >= row.Y &&
+                    (y < row.Y + row.Height ||
+                     (includesBottom && y <= row.Y + row.Height)))
                 {
                     return row;
                 }
@@ -136,7 +141,7 @@ namespace FaceMotion.Editor.UI.Timeline
 
         public static bool TryFindKeyAt(
             TimelineLayoutSnapshot layout,
-            float plotLeft,
+            Rect plotRect,
             float x,
             float y,
             out TimelineRow row,
@@ -146,123 +151,98 @@ namespace FaceMotion.Editor.UI.Timeline
             row = null;
             keyId = null;
             time = 0f;
-            if (layout == null)
+            if (layout == null ||
+                x < plotRect.xMin || x > plotRect.xMax ||
+                y < plotRect.yMin || y > plotRect.yMax)
+            {
+                return false;
+            }
+
+            TimelineRow candidate = FindRowAt(layout, y);
+            if (candidate == null || candidate.Track == null)
             {
                 return false;
             }
 
             float pps = layout.PixelsPerSecond;
             float scroll = layout.ScrollTime;
-            for (int i = 0; i < layout.Rows.Count; i++)
+            float nearestDistance = float.MaxValue;
+            string nearestKeyId = null;
+            float nearestTime = 0f;
+            var track = candidate.Track;
+            if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
             {
-                var candidate = layout.Rows[i];
-                if (y < candidate.Y || y > candidate.Y + candidate.Height)
+                foreach (var key in track.BlendShape.Keys)
                 {
-                    continue;
-                }
-
-                var track = candidate.Track;
-                if (track == null)
-                {
-                    continue;
-                }
-
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
-                {
-                    foreach (var key in track.BlendShape.Keys)
+                    if (key == null)
                     {
-                        if (key == null)
-                        {
-                            continue;
-                        }
-
-                        float keyX = TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotLeft);
-                        if (Math.Abs(x - keyX) <= KeyHitRadiusPixels)
-                        {
-                            row = candidate;
-                            keyId = key.KeyId;
-                            time = key.Time;
-                            return true;
-                        }
+                        continue;
                     }
+
+                    ConsiderKey(
+                        key.KeyId,
+                        key.Time,
+                        TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotRect.xMin),
+                        x,
+                        ref nearestDistance,
+                        ref nearestKeyId,
+                        ref nearestTime);
                 }
-                else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+            }
+            else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
+            {
+                foreach (var key in track.Transform.Keys)
                 {
-                    foreach (var key in track.Transform.Keys)
+                    if (key == null)
                     {
-                        if (key == null)
-                        {
-                            continue;
-                        }
-
-                        float keyX = TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotLeft);
-                        if (Math.Abs(x - keyX) <= KeyHitRadiusPixels)
-                        {
-                            row = candidate;
-                            keyId = key.KeyId;
-                            time = key.Time;
-                            return true;
-                        }
+                        continue;
                     }
+
+                    ConsiderKey(
+                        key.KeyId,
+                        key.Time,
+                        TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotRect.xMin),
+                        x,
+                        ref nearestDistance,
+                        ref nearestKeyId,
+                        ref nearestTime);
                 }
             }
 
-            // Second pass: allow clicking just above/below a lane so small rows stay usable.
-            for (int i = 0; i < layout.Rows.Count; i++)
+            if (nearestKeyId == null)
             {
-                var candidate = layout.Rows[i];
-                if (y < candidate.Y - 6f || y > candidate.Y + candidate.Height + 6f)
-                {
-                    continue;
-                }
-
-                var track = candidate.Track;
-                if (track == null)
-                {
-                    continue;
-                }
-
-                if (track.Kind == TrackKind.BlendShape && track.BlendShape != null)
-                {
-                    foreach (var key in track.BlendShape.Keys)
-                    {
-                        if (key == null)
-                        {
-                            continue;
-                        }
-
-                        float keyX = TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotLeft);
-                        if (Math.Abs(x - keyX) <= KeyHitRadiusPixels)
-                        {
-                            row = candidate;
-                            keyId = key.KeyId;
-                            time = key.Time;
-                            return true;
-                        }
-                    }
-                }
-                else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
-                {
-                    foreach (var key in track.Transform.Keys)
-                    {
-                        if (key == null)
-                        {
-                            continue;
-                        }
-
-                        float keyX = TimelineGeometry.TimeToPixel(key.Time, scroll, pps, plotLeft);
-                        if (Math.Abs(x - keyX) <= KeyHitRadiusPixels)
-                        {
-                            row = candidate;
-                            keyId = key.KeyId;
-                            time = key.Time;
-                            return true;
-                        }
-                    }
-                }
+                return false;
             }
 
-            return false;
+            row = candidate;
+            keyId = nearestKeyId;
+            time = nearestTime;
+            return true;
+        }
+
+        private static void ConsiderKey(
+            string candidateKeyId,
+            float candidateTime,
+            float candidateX,
+            float pointerX,
+            ref float nearestDistance,
+            ref string nearestKeyId,
+            ref float nearestTime)
+        {
+            float distance = Math.Abs(pointerX - candidateX);
+            if (distance > KeyHitRadiusPixels)
+            {
+                return;
+            }
+
+            if (distance < nearestDistance ||
+                (Math.Abs(distance - nearestDistance) < 0.001f &&
+                 string.CompareOrdinal(candidateKeyId, nearestKeyId) < 0))
+            {
+                nearestDistance = distance;
+                nearestKeyId = candidateKeyId;
+                nearestTime = candidateTime;
+            }
         }
     }
 }

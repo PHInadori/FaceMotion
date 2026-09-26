@@ -482,6 +482,7 @@ namespace FaceMotion.Editor.UI.Timeline
             TimelineDragMode mode = _session.ViewState.DragMode;
             if (mode == TimelineDragMode.None)
             {
+                _keyDragAnchorPixelX = 0f;
                 return false;
             }
 
@@ -502,6 +503,7 @@ namespace FaceMotion.Editor.UI.Timeline
                 _scrubEnded?.Invoke();
             }
 
+            _keyDragAnchorPixelX = 0f;
             return true;
         }
 
@@ -530,27 +532,9 @@ namespace FaceMotion.Editor.UI.Timeline
                 return;
             }
 
-            bool inRuler =
-                p.y <
-                plotRect.y +
-                TimelineGeometry.RulerHeight;
-
-            if (inRuler)
-            {
-                _session.ViewState.DragMode =
-                    TimelineDragMode.Scrub;
-
-                ScrubTo(
-                    PixelToTime(
-                        p.x,
-                        plotRect));
-
-                return;
-            }
-
             if (TimelineHitTest.TryFindKeyAt(
                     layout,
-                    plotRect.x,
+                    plotRect,
                     p.x,
                     p.y,
                     out var row,
@@ -605,6 +589,24 @@ namespace FaceMotion.Editor.UI.Timeline
                 return;
             }
 
+            bool inRuler =
+                p.y <
+                plotRect.y +
+                TimelineGeometry.RulerHeight;
+
+            if (inRuler)
+            {
+                _session.ViewState.DragMode =
+                    TimelineDragMode.Scrub;
+
+                ScrubTo(
+                    PixelToTime(
+                        p.x,
+                        plotRect));
+
+                return;
+            }
+
             // Empty plot-area click clears the key selection.
             // Label/ruler/key clicks intentionally keep their existing behavior.
             if (_session.Selection.Count > 0)
@@ -654,7 +656,7 @@ namespace FaceMotion.Editor.UI.Timeline
             {
                 if (TimelineHitTest.TryFindKeyAt(
                         layout,
-                        plotRect.x,
+                        plotRect,
                         p.x,
                         p.y,
                         out _,

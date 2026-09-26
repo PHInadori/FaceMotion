@@ -75,7 +75,7 @@ namespace FaceMotion.Editor.Tests
             var layout = TimelineLayoutBuilder.Build(animation, null, 180f, 24f, 1f, 1f, animation.Timeline.Duration);
             float keyX = TimelineGeometry.TimeToPixel(1.5f, layout.ScrollTime, layout.PixelsPerSecond, layout.PlotLeft);
 
-            Assert.That(TimelineHitTest.TryFindKeyAt(layout, layout.PlotLeft, keyX, 35f, out _, out string hitKey, out _), Is.True);
+            Assert.That(TimelineHitTest.TryFindKeyAt(layout, new Rect(layout.PlotLeft, 0f, 800f, 600f), keyX, 35f, out _, out string hitKey, out _), Is.True);
             Assert.That(hitKey, Is.EqualTo(keyId));
 
             _session.Selection.SetSingle(keyId);

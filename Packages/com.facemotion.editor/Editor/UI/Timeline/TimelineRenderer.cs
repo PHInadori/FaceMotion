@@ -55,7 +55,7 @@ namespace FaceMotion.Editor.UI.Timeline
 
             DrawRuler(new Rect(plot.x, plot.y, plot.width, rulerHeight), scroll, pps, plot.x, view.CurrentTime);
             DrawGrid(new Rect(plot.x, rowsTop, plot.width, Mathf.Max(0f, plot.height - rulerHeight)), scroll, pps, plot.x);
-            DrawRows(new Rect(rect.x, rowsTop, rect.width, Mathf.Max(1f, plot.height - rulerHeight)), layout, selection, view.HoveredKeyId);
+            DrawRows(new Rect(rect.x, rowsTop, rect.width, Mathf.Max(1f, plot.height - rulerHeight)), plot, layout, selection, view.HoveredKeyId);
             DrawOutsideDuration(plot, layout);
             DrawCursor(new Rect(plot.x, rowsTop, plot.width, Mathf.Max(0f, plot.height - rulerHeight)), view.CurrentTime, scroll, pps, plot.x);
 
@@ -119,8 +119,9 @@ namespace FaceMotion.Editor.UI.Timeline
                 }
 
                 bool isMajor = TimelineGeometry.IsMajorTick(t, major);
-                EditorGUI.DrawRect(
+                DrawClippedTimeDomainRect(
                     new Rect(x, isMajor ? y : y + h * 0.5f, 1f, isMajor ? h : h * 0.5f),
+                    ruler,
                     isMajor ? MajorGridLine : GridLine);
 
                 if (isMajor)
@@ -128,7 +129,11 @@ namespace FaceMotion.Editor.UI.Timeline
                     drewLabel = true;
                     SetContent(FormatTime(t, major));
                     _rulerText.normal.textColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-                    GUI.Label(new Rect(x + 4f, y + 2f, 90f, h - 4f), _content, _rulerText);
+                    DrawClippedTimeDomainLabel(
+                        new Rect(x + 4f, y + 2f, 90f, h - 4f),
+                        ruler,
+                        _content,
+                        _rulerText);
                 }
             }
 
@@ -138,7 +143,11 @@ namespace FaceMotion.Editor.UI.Timeline
                 float x = TimelineGeometry.TimeToPixel(firstTick, scroll, pps, plotLeft);
                 SetContent(FormatTime(firstTick, minor));
                 _rulerText.normal.textColor = new Color(0.8f, 0.8f, 0.8f, 1f);
-                GUI.Label(new Rect(Mathf.Max(plotLeft, x + 4f), y + 2f, 90f, h - 4f), _content, _rulerText);
+                DrawClippedTimeDomainLabel(
+                    new Rect(Mathf.Max(plotLeft, x + 4f), y + 2f, 90f, h - 4f),
+                    ruler,
+                    _content,
+                    _rulerText);
             }
 
             float cursorX = TimelineGeometry.TimeToPixel(currentTime, scroll, pps, plotLeft);
@@ -146,7 +155,11 @@ namespace FaceMotion.Editor.UI.Timeline
             {
                 SetContent(FormatTime(currentTime, Mathf.Min(major, 0.1f)));
                 _rulerText.normal.textColor = CursorColor;
-                GUI.Label(new Rect(Mathf.Max(plotLeft, cursorX - 30f), y - 4f, 70f, h), _content, _rulerText);
+                DrawClippedTimeDomainLabel(
+                    new Rect(Mathf.Max(plotLeft, cursorX - 30f), y - 4f, 70f, h),
+                    ruler,
+                    _content,
+                    _rulerText);
             }
         }
 
@@ -172,12 +185,16 @@ namespace FaceMotion.Editor.UI.Timeline
                 }
 
                 bool isMajor = TimelineGeometry.IsMajorTick(t, major);
-                EditorGUI.DrawRect(new Rect(x, grid.y, 1f, grid.height), isMajor ? MajorGridLine : GridLine);
+                DrawClippedTimeDomainRect(
+                    new Rect(x, grid.y, 1f, grid.height),
+                    grid,
+                    isMajor ? MajorGridLine : GridLine);
             }
         }
 
         private static void DrawRows(
             Rect area,
+            Rect plot,
             TimelineLayoutSnapshot layout,
             TimelineSelection selection,
             string hoveredKeyId)
@@ -208,7 +225,7 @@ namespace FaceMotion.Editor.UI.Timeline
                             continue;
                         }
 
-                        DrawKey(row, layout, key.Time, selection != null && selection.Contains(key.KeyId), hoveredKeyId == key.KeyId);
+                        DrawKey(row, plot, layout, key.Time, selection != null && selection.Contains(key.KeyId), hoveredKeyId == key.KeyId);
                     }
                 }
                 else if (TrackKinds.IsTransform(track.Kind) && track.Transform != null)
@@ -220,7 +237,7 @@ namespace FaceMotion.Editor.UI.Timeline
                             continue;
                         }
 
-                        DrawKey(row, layout, key.Time, selection != null && selection.Contains(key.KeyId), hoveredKeyId == key.KeyId);
+                        DrawKey(row, plot, layout, key.Time, selection != null && selection.Contains(key.KeyId), hoveredKeyId == key.KeyId);
                     }
                 }
             }
@@ -261,16 +278,26 @@ namespace FaceMotion.Editor.UI.Timeline
             GUI.Label(cell, _content, _rowLabel);
         }
 
-        private static void DrawKey(TimelineRow row, TimelineLayoutSnapshot layout, float time, bool selected, bool hovered)
+        private static void DrawKey(TimelineRow row, Rect plot, TimelineLayoutSnapshot layout, float time, bool selected, bool hovered)
         {
             float x = TimelineGeometry.TimeToPixel(time, layout.ScrollTime, layout.PixelsPerSecond, layout.PlotLeft);
             float y = row.Y + row.Height * 0.5f;
-            float size = selected ? 9f : 7f;
+            float size = selected ? 11f : 9f;
 
             Color color = selected ? KeySelected : (hovered ? KeyHovered : KeyColor);
-            EditorGUI.DrawRect(new Rect(x - 0.5f, y - size * 0.5f, 1f, size), color);
+            DrawClippedTimeDomainRect(
+                new Rect(x - 0.5f, y - size * 0.5f, 1f, size),
+                plot,
+                color);
 
-            Rect marker = new Rect(x - size * 0.5f, y - size * 0.5f, size, size);
+            Rect marker = ClipTimeDomainRect(
+                GetKeyMarkerRect(x, y, selected),
+                plot);
+            if (marker.width <= 0f || marker.height <= 0f)
+            {
+                return;
+            }
+
             EditorGUI.DrawRect(marker, color);
             EditorGUIUtility.AddCursorRect(marker, MouseCursor.Link);
             SetContent(string.Empty, string.Format(FaceMotionUiText.Get("keyTooltip"), time));
@@ -290,7 +317,47 @@ namespace FaceMotion.Editor.UI.Timeline
                 return;
             }
 
-            EditorGUI.DrawRect(new Rect(x, area.y, 1f, area.height), CursorColor);
+            DrawClippedTimeDomainRect(
+                new Rect(x, area.y, 1f, area.height),
+                area,
+                CursorColor);
+        }
+
+        internal static Rect ClipTimeDomainRect(Rect visualRect, Rect plotRect)
+        {
+            return Rect.MinMaxRect(
+                Mathf.Max(visualRect.xMin, plotRect.xMin),
+                Mathf.Max(visualRect.yMin, plotRect.yMin),
+                Mathf.Min(visualRect.xMax, plotRect.xMax),
+                Mathf.Min(visualRect.yMax, plotRect.yMax));
+        }
+
+        internal static Rect GetKeyMarkerRect(float centerX, float centerY, bool selected)
+        {
+            float size = selected ? 11f : 9f;
+            return new Rect(
+                centerX - size * 0.5f,
+                centerY - size * 0.5f,
+                size,
+                size);
+        }
+
+        private static void DrawClippedTimeDomainRect(Rect visualRect, Rect plotRect, Color color)
+        {
+            Rect clipped = ClipTimeDomainRect(visualRect, plotRect);
+            if (clipped.width > 0f && clipped.height > 0f)
+            {
+                EditorGUI.DrawRect(clipped, color);
+            }
+        }
+
+        private static void DrawClippedTimeDomainLabel(Rect labelRect, Rect plotRect, GUIContent content, GUIStyle style)
+        {
+            Rect clipped = ClipTimeDomainRect(labelRect, plotRect);
+            if (clipped.width > 0f && clipped.height > 0f)
+            {
+                GUI.Label(clipped, content, style);
+            }
         }
 
         private static string LayerTag(TrackKind kind)

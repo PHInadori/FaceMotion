@@ -14,6 +14,7 @@ namespace FaceMotion.Editor.UI.Timeline
     /// </summary>
     public sealed class TimelineView
     {
+        private const int PointerControlHint = 0x464D544C;
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
         private readonly TrackController _tracks;
@@ -102,7 +103,8 @@ namespace FaceMotion.Editor.UI.Timeline
             DrawTimelineHeader(rect, animation.Timeline.FrameRate);
 
             Event current = Event.current;
-            int pointerControlId = GUIUtility.GetControlID(FocusType.Passive, rect);
+            // A stable hint preserves capture when selection changes alter earlier IMGUI controls.
+            int pointerControlId = GUIUtility.GetControlID(PointerControlHint, FocusType.Passive, rect);
             bool routed = RoutePointerEvent(current, pointerControlId, rect, _input, _session.ViewState, plotRect, layout, textControlOwnsKeyboard);
 
             if (routed)
@@ -167,9 +169,9 @@ namespace FaceMotion.Editor.UI.Timeline
                 case EventType.MouseUp:
                     if (!ownsPointer)
                     {
-                        // Unity can lose hotControl before delivering MouseUp. Finish the
-                        // stale gesture without consuming another control's MouseUp.
-                        input.EndPointerGesture(false);
+                        // Unity can lose hotControl before delivering MouseUp. Preserve the
+                        // last scrub time, but cancel a stale key move rather than commit it.
+                        input.EndPointerGesture(true);
                         return false;
                     }
 

@@ -690,7 +690,7 @@ namespace FaceMotion.Editor.Tests
             var layout = TimelineLayoutBuilder.Build(animation, null, 180f, 0f, 0f, 1f, animation.Timeline.Duration);
             float x = TimelineGeometry.TimeToPixel(0.1f, 0f, pps, layout.PlotLeft);
             Assert.That(
-                TimelineHitTest.TryFindKeyAt(layout, layout.PlotLeft, x, layout.Rows[0].Y + 11f, out _, out string keyId, out _),
+                TimelineHitTest.TryFindKeyAt(layout, new Rect(layout.PlotLeft, 0f, 800f, 600f), x, layout.Rows[0].Y + 11f, out _, out string keyId, out _),
                 Is.True);
             Assert.That(keyId, Is.Not.Null);
         }
