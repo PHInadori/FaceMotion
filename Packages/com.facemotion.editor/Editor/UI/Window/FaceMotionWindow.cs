@@ -6,11 +6,13 @@ using FaceMotion.Editor.UI.Panels;
 using FaceMotion.Editor.UI.Preview;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
+using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Timeline;
 using FaceMotion.Editor.Preview;
 using FaceMotion.Editor.VRChat.Integration;
 using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEditor.ShortcutManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Unity.Profiling;
@@ -31,7 +33,7 @@ namespace FaceMotion.Editor.UI.Window
         internal const float GuidanceHeight = 26f;
         internal const float MinimumWindowWidth = 900f;
         internal const float ToolbarHorizontalPadding = 8f;
-        internal const float MinimumWindowHeight = 700f;
+        internal const float MinimumWindowHeight = 720f;
         internal const float MinimumLeftColumnWidth = 320f;
         internal const float MaximumLeftColumnRatio = 0.4f;
         internal const float MinimumTimelineWidth = 460f;
@@ -47,7 +49,7 @@ namespace FaceMotion.Editor.UI.Window
         private const float DefaultPreviewHeightRatio = 0.5f;
         internal const float MinimumPreviewHeight = 280f;
         internal const float MinimumTimelineHeight = 160f;
-        internal const float InspectorHeight = 150f;
+        internal const float InspectorHeight = 220f;
         internal const float MaximumPreviewHeightRatio = 0.7f;
         private const string LeftColumnRatioKey = "FaceMotion.Window.v1.LeftColumnRatio";
         private const string PreviewHeightRatioKey = "FaceMotion.Window.v1.PreviewHeightRatio";
@@ -106,6 +108,42 @@ namespace FaceMotion.Editor.UI.Window
             var window = GetWindow<FaceMotionWindow>(false, WindowTitle, true);
             window.minSize = new Vector2(MinimumWindowWidth, MinimumWindowHeight);
             window.Show();
+        }
+
+        // No default binding: users assign a non-conflicting binding in Edit > Shortcuts.
+        [Shortcut("FaceMotion/Timeline/Quick Key")]
+        private static void InvokeQuickKeyShortcut()
+        {
+            if (focusedWindow is FaceMotionWindow window)
+            {
+                window.ApplyQuickKeyFromShortcut();
+            }
+        }
+
+        internal bool ApplyQuickKeyFromShortcut()
+        {
+            if (_session == null
+                || _inspectorPanel == null
+                || !CanHandleQuickKeyShortcut(
+                    EditorGUIUtility.editingTextField,
+                    GUI.GetNameOfFocusedControl()))
+            {
+                return false;
+            }
+
+            return _inspectorPanel.ApplyQuickKey() != null;
+        }
+
+        internal static bool CanHandleQuickKeyShortcut(
+            bool editingTextField,
+            string focusedControlName)
+        {
+            // The editing flag covers every IMGUI text/numeric field, including unnamed
+            // search fields. Named FaceMotion fields remain a second guard for the
+            // native Shortcut Manager callback, which bypasses timeline event routing.
+            return !editingTextField
+                && !AnimationListPanel.OwnsTextFocus(focusedControlName)
+                && !KeyframeInspectorPanel.OwnsKeyboardFocus(focusedControlName);
         }
 
         private void OnEnable()
@@ -214,9 +252,45 @@ namespace FaceMotion.Editor.UI.Window
 
             DrawLeftColumn(leftRect);
             DrawSplitter(splitterRect, area);
-                DrawRightColumn(rightRect);
+            DrawRightColumn(rightRect);
+
+            Event current = Event.current;
+            if (current != null)
+            {
+                ReleaseTextFocusOnBackgroundMouseDown(
+                    current.type,
+                    current.button,
+                    GUIUtility.hotControl,
+                    EditorGUIUtility.editingTextField);
+            }
             }
         }
+
+        internal static bool ReleaseTextFocusOnBackgroundMouseDown(
+            EventType eventType,
+            int button,
+            int hotControl,
+            bool editingTextField)
+        {
+            if (!FaceMotionFocusUtility.ShouldReleaseOnBackgroundMouseDown(
+                    eventType,
+                    button,
+                    hotControl,
+                    editingTextField))
+            {
+                return false;
+            }
+
+            FaceMotionFocusUtility.ClearTextFocus();
+            return true;
+        }
+
+        internal static float MinimumRequiredWindowHeight => ToolbarHeight
+            + GuidanceHeight
+            + MinimumPreviewHeight
+            + SplitterWidth
+            + MinimumTimelineHeight
+            + InspectorHeight;
 
         /// <summary>Computes an adaptive column width while preserving usable panel and timeline minima.</summary>
         internal static float CalculateLeftColumnWidth(float hostWidth, float ratio)

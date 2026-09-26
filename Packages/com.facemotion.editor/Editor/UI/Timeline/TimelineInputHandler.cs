@@ -178,25 +178,16 @@ namespace FaceMotion.Editor.UI.Timeline
                 case EventType.MouseUp:
                     if (e.button == 0)
                     {
-                        if (_session.ViewState.DragMode ==
-                            TimelineDragMode.MoveKeys)
-                        {
-                            _keys.EndKeyDrag();
-                        }
-
-                        bool scrubbed = _session.ViewState.DragMode ==
-                            TimelineDragMode.Scrub;
-                        _session.ViewState.DragMode =
-                            TimelineDragMode.None;
-                        if (scrubbed) _scrubEnded?.Invoke();
-
+                        EndPointerGesture(false);
                         return true;
                     }
 
                     if (e.button == 2)
                     {
-                        _session.ViewState.DragMode =
-                            TimelineDragMode.None;
+                        if (_session.ViewState.DragMode == TimelineDragMode.Pan)
+                        {
+                            EndPointerGesture(false);
+                        }
 
                         return true;
                     }
@@ -251,15 +242,7 @@ namespace FaceMotion.Editor.UI.Timeline
 
                     if (e.keyCode == KeyCode.Escape)
                     {
-                        if (_session.ViewState.DragMode ==
-                            TimelineDragMode.MoveKeys)
-                        {
-                            _keys.CancelKeyDrag();
-                        }
-
-                        _session.ViewState.DragMode =
-                            TimelineDragMode.None;
-
+                        EndPointerGesture(true);
                         return true;
                     }
 
@@ -490,6 +473,38 @@ namespace FaceMotion.Editor.UI.Timeline
             _session.NotifyChanged();
         }
 
+        /// <summary>
+        /// Ends a pointer gesture exactly once. Cancellation rolls back key moves but keeps
+        /// the last scrubbed playhead, which is already the authoritative session time.
+        /// </summary>
+        internal bool EndPointerGesture(bool cancelled)
+        {
+            TimelineDragMode mode = _session.ViewState.DragMode;
+            if (mode == TimelineDragMode.None)
+            {
+                return false;
+            }
+
+            _session.ViewState.DragMode = TimelineDragMode.None;
+            if (mode == TimelineDragMode.MoveKeys)
+            {
+                if (cancelled)
+                {
+                    _keys.CancelKeyDrag();
+                }
+                else
+                {
+                    _keys.EndKeyDrag();
+                }
+            }
+            else if (mode == TimelineDragMode.Scrub)
+            {
+                _scrubEnded?.Invoke();
+            }
+
+            return true;
+        }
+
         // ----- Private helpers -----------------------------------------------------------
 
         private void OnLeftMouseDown(
@@ -502,8 +517,9 @@ namespace FaceMotion.Editor.UI.Timeline
             bool inLabel =
                 p.x < plotRect.x;
 
-            _session.ViewState.DragMode =
-                TimelineDragMode.None;
+            // Recover from a pointer-up that Unity delivered after our hot control was
+            // lost. A stale scrub must not block authoring until another click.
+            EndPointerGesture(true);
 
             if (inLabel)
             {

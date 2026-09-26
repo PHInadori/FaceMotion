@@ -9,7 +9,8 @@ namespace FaceMotion.Editor.Tests
         public void WindowMinimumSize_IsUsableForTwoColumns()
         {
             Assert.That(FaceMotionWindow.MinimumWindowWidth, Is.EqualTo(900f));
-            Assert.That(FaceMotionWindow.MinimumWindowHeight, Is.EqualTo(700f));
+            Assert.That(FaceMotionWindow.MinimumWindowHeight, Is.EqualTo(720f));
+            Assert.That(FaceMotionWindow.MinimumWindowHeight, Is.GreaterThanOrEqualTo(FaceMotionWindow.MinimumRequiredWindowHeight));
             Assert.That(FaceMotionWindow.MinimumLeftColumnWidth, Is.GreaterThanOrEqualTo(320f));
             Assert.That(FaceMotionWindow.MinimumTimelineWidth, Is.GreaterThanOrEqualTo(460f));
         }

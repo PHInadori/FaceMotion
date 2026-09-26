@@ -76,6 +76,38 @@ namespace FaceMotion.Editor.UI.Controllers
                 interpolation);
         }
 
+        /// <summary>True when the selected BlendShape track can receive a Quick Key at the playhead.</summary>
+        public bool CanApplyQuickKey()
+        {
+            var animation = _session.GetSelectedAnimation();
+            var track = _session.GetSelectedTrack();
+            return _session.ActiveProject != null
+                && animation != null
+                && animation.Timeline != null
+                && track != null
+                && track.Kind == TrackKind.BlendShape
+                && track.BlendShape != null
+                && _session.ViewState.DragMode == TimelineDragMode.None
+                && TimelineTimeDomain.IsEditable(_session.ViewState.CurrentTime, animation.Timeline.Duration);
+        }
+
+        /// <summary>
+        /// Adds or updates the selected BlendShape key at the shared playhead using the
+        /// configured per-user Quick Key value.
+        /// </summary>
+        public string ApplyQuickKey(float value)
+        {
+            if (!CanApplyQuickKey() || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                return null;
+            }
+
+            return AddKeyAtCurrentTime(
+                Mathf.Clamp(value, 0f, 100f),
+                Vector3.zero,
+                InterpolationType.Linear);
+        }
+
         /// <summary>Adds or updates a key at the given time using the inspector values.</summary>
         public string AddKeyAt(
             float time,

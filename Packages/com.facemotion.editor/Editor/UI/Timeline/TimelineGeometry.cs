@@ -8,7 +8,7 @@ namespace FaceMotion.Editor.UI.Timeline
     /// </summary>
     public static class TimelineGeometry
     {
-        public const float MinZoom = 0.5f;
+        public const float MinZoom = TimelineViewState.MinZoom;
         public const float MaxZoom = 20f;
         public const float BasePixelsPerSecond = 120f;
         public const float DefaultLabelWidth = 180f;

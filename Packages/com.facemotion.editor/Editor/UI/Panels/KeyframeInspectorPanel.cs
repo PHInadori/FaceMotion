@@ -3,6 +3,7 @@ using FaceMotion.Data;
 using FaceMotion.Editor.UI.Controllers;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Session;
+using FaceMotion.Editor.UI.Support;
 using FaceMotion.Timeline;
 using UnityEditor;
 using UnityEngine;
@@ -13,6 +14,8 @@ namespace FaceMotion.Editor.UI.Panels
     {
         internal const string EditableControlPrefix = "FaceMotion.KeyInspector.";
         internal const float DefaultBlendShapeAuthoringValue = 100f;
+        internal const float MinimumQuickKeyValueWidth = 72f;
+        internal const float QuickKeyControlSpacing = 6f;
 
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
@@ -204,6 +207,8 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             EditorGUILayout.EndHorizontal();
+
+            DrawQuickKeyControls();
         }
 
         /// <summary>
@@ -257,11 +262,28 @@ namespace FaceMotion.Editor.UI.Panels
 
         internal static bool OwnsKeyboardFocus()
         {
-            return GUI
-                .GetNameOfFocusedControl()
-                .StartsWith(
+            return OwnsKeyboardFocus(GUI.GetNameOfFocusedControl());
+        }
+
+        internal static bool OwnsKeyboardFocus(string focusedControlName)
+        {
+            return !string.IsNullOrEmpty(focusedControlName)
+                && focusedControlName.StartsWith(
                     EditableControlPrefix,
                     StringComparison.Ordinal);
+        }
+
+        /// <summary>Shared Quick Key action used by the inspector button and Shortcut Manager.</summary>
+        internal string ApplyQuickKey()
+        {
+            string keyId = _keys.ApplyQuickKey(QuickKeyPreferences.Value);
+            if (keyId != null)
+            {
+                _inspectedKeyId = keyId;
+                LoadFields(keyId);
+            }
+
+            return keyId;
         }
 
         private static float DrawFloatField(
@@ -286,6 +308,77 @@ namespace FaceMotion.Editor.UI.Panels
             FaceMotionUiText.Get("easeInOut"),
             FaceMotionUiText.Get("smooth")
         };
+
+        private void DrawQuickKeyControls()
+        {
+            float configuredValue = QuickKeyPreferences.Value;
+            bool canApply = _keys.CanApplyQuickKey();
+            var valueContent = new GUIContent(
+                FaceMotionUiText.Get("quickKeyValue"),
+                FaceMotionUiText.Get("tooltipQuickKeyValue"));
+            var quickKeyContent = new GUIContent(
+                FaceMotionUiText.Get("quickKey"),
+                canApply
+                    ? FaceMotionUiText.Get("tooltipQuickKey")
+                    : FaceMotionUiText.Get("tooltipQuickKeyBlendShapeOnly"));
+            float buttonWidth = Mathf.Max(
+                76f,
+                EditorStyles.miniButton.CalcSize(quickKeyContent).x);
+            float availableWidth = Mathf.Max(0f, EditorGUIUtility.currentViewWidth - 28f);
+
+            if (ShouldStackQuickKeyControls(
+                    availableWidth,
+                    EditorStyles.label.CalcSize(valueContent).x,
+                    buttonWidth))
+            {
+                DrawQuickKeyValue(valueContent, configuredValue);
+                DrawQuickKeyButton(quickKeyContent, canApply, -1f);
+                return;
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            DrawQuickKeyValue(valueContent, configuredValue);
+            DrawQuickKeyButton(quickKeyContent, canApply, buttonWidth);
+            EditorGUILayout.EndHorizontal();
+        }
+
+        internal static bool ShouldStackQuickKeyControls(
+            float availableWidth,
+            float valueLabelWidth,
+            float buttonWidth)
+        {
+            return availableWidth < valueLabelWidth
+                + MinimumQuickKeyValueWidth
+                + buttonWidth
+                + QuickKeyControlSpacing;
+        }
+
+        private static void DrawQuickKeyValue(GUIContent content, float configuredValue)
+        {
+            GUI.SetNextControlName(EditableControlPrefix + "quickKeyValue");
+            float enteredValue = EditorGUILayout.FloatField(content, configuredValue);
+            if (!Mathf.Approximately(enteredValue, configuredValue))
+            {
+                QuickKeyPreferences.Value = enteredValue;
+            }
+        }
+
+        private void DrawQuickKeyButton(
+            GUIContent content,
+            bool canApply,
+            float width)
+        {
+            using (new EditorGUI.DisabledScope(!canApply))
+            {
+                GUILayoutOption[] options = width > 0f
+                    ? new[] { GUILayout.Width(width), GUILayout.Height(22f) }
+                    : new[] { GUILayout.ExpandWidth(true), GUILayout.Height(22f) };
+                if (GUILayout.Button(content, EditorStyles.miniButton, options))
+                {
+                    ApplyQuickKey();
+                }
+            }
+        }
 
         private string GetOnlySelectedKeyId()
         {

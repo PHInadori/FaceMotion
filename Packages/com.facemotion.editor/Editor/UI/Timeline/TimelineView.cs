@@ -157,19 +157,39 @@ namespace FaceMotion.Editor.UI.Timeline
                     return began;
 
                 case EventType.MouseDrag:
-                case EventType.MouseUp:
                     if (!ownsPointer)
                     {
                         return false;
                     }
 
+                    return input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
+
+                case EventType.MouseUp:
+                    if (!ownsPointer)
+                    {
+                        // Unity can lose hotControl before delivering MouseUp. Finish the
+                        // stale gesture without consuming another control's MouseUp.
+                        input.EndPointerGesture(false);
+                        return false;
+                    }
+
                     bool handled = input.HandleEvent(current, eventType, plotRect, layout, textControlOwnsKeyboard);
-                    if (eventType == EventType.MouseUp)
+                    GUIUtility.hotControl = 0;
+                    return handled;
+
+                case EventType.MouseLeaveWindow:
+                    if (!ownsPointer && viewState.DragMode == TimelineDragMode.None)
+                    {
+                        return false;
+                    }
+
+                    input.EndPointerGesture(true);
+                    if (ownsPointer)
                     {
                         GUIUtility.hotControl = 0;
                     }
 
-                    return handled;
+                    return ownsPointer;
 
                 case EventType.MouseMove:
                 case EventType.ScrollWheel:

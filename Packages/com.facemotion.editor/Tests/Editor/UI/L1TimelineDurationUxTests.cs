@@ -1,4 +1,7 @@
 using FaceMotion.Animation;
+using FaceMotion.Data;
+using FaceMotion.Editor.UI.Controllers;
+using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Support;
 using FaceMotion.Editor.UI.Timeline;
 using NUnit.Framework;
@@ -84,6 +87,33 @@ namespace FaceMotion.Editor.Tests
 
             state.ResetAutoFit();
             Assert.That(state.NeedsAutoFit(2f), Is.True);
+        }
+
+        [TestCase(1f, 1.5f)]
+        [TestCase(10f, 11f)]
+        [TestCase(15f, 16f)]
+        [TestCase(30f, 31f)]
+        [TestCase(60f, 61f)]
+        public void FitToContent_EffectiveViewportContainsTheEntireFitRange(float duration, float expectedVisibleEnd)
+        {
+            var session = new FaceMotionEditorSession();
+            var animations = new AnimationController(session);
+            var keys = new KeyframeController(session);
+            var tracks = new TrackController(session);
+            var input = new TimelineInputHandler(session, keys, tracks);
+            session.SetActiveProject(FaceMotionProject.CreateNew(), null);
+            animations.Add();
+            session.GetSelectedAnimation().Timeline.Duration = duration;
+
+            input.FitToContent(600f);
+
+            float visibleDuration = TimelineGeometry.VisibleDuration(
+                600f,
+                session.ViewState.PixelsPerSecond);
+            Assert.That(session.ViewState.ScrollTime, Is.Zero);
+            Assert.That(session.ViewState.IsAutoFitViewport, Is.True);
+            Assert.That(session.ViewState.AutoFitDuration, Is.EqualTo(duration));
+            Assert.That(visibleDuration, Is.EqualTo(expectedVisibleEnd).Within(1e-4f));
         }
     }
 }

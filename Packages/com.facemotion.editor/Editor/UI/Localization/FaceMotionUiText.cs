@@ -18,6 +18,8 @@ namespace FaceMotion.Editor.UI.Localization
             { "apply", "適用" },
             { "revert", "元に戻す" },
             { "addKey", "キーを追加" },
+            { "quickKey", "クイックキー" },
+            { "quickKeyValue", "クイックキー値" },
             { "selectAll", "すべて選択" },
             { "delete", "削除" },
             { "snap", "スナップ" },
@@ -276,7 +278,10 @@ namespace FaceMotion.Editor.UI.Localization
             { "successBackendLabel", "統合方式" },
             { "successAnimationLabel", "アニメーション" },
             { "animationName", "アニメーション名" },
-            { "tooltipAnimationName", "VRChat上のメニューにもこの名前が表示されます。" }
+            { "tooltipAnimationName", "VRChat上のメニューにもこの名前が表示されます。" },
+            { "tooltipQuickKey", "現在位置に設定値でキーを追加します" },
+            { "tooltipQuickKeyValue", "クイックキーで追加するブレンドシェイプの値（0〜100）" },
+            { "tooltipQuickKeyBlendShapeOnly", "クイックキーはブレンドシェイプのトラックで使用できます" }
         };
 
         private static readonly Dictionary<string, string> English = new Dictionary<string, string>
@@ -291,6 +296,8 @@ namespace FaceMotion.Editor.UI.Localization
             { "apply", "Apply" },
             { "revert", "Revert" },
             { "addKey", "Add Key" },
+            { "quickKey", "Quick Key" },
+            { "quickKeyValue", "Quick Key Value" },
             { "selectAll", "Select All" },
             { "delete", "Delete" },
             { "snap", "Snap" },
@@ -549,7 +556,10 @@ namespace FaceMotion.Editor.UI.Localization
             { "successBackendLabel", "Integration" },
             { "successAnimationLabel", "Animation" },
             { "animationName", "Animation Name" },
-            { "tooltipAnimationName", "This name is also used for the VRChat menu entry." }
+            { "tooltipAnimationName", "This name is also used for the VRChat menu entry." },
+            { "tooltipQuickKey", "Add a key at the current time using the configured value" },
+            { "tooltipQuickKeyValue", "BlendShape value added by Quick Key (0-100)" },
+            { "tooltipQuickKeyBlendShapeOnly", "Quick Key is available for BlendShape tracks" }
         };
 
         // Frequently surfaced diagnostic codes. Unknown diagnostics retain their original detail.

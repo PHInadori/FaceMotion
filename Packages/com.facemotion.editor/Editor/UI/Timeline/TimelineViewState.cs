@@ -18,7 +18,8 @@ namespace FaceMotion.Editor.UI.Timeline
     /// </summary>
     public sealed class TimelineViewState
     {
-        public const float MinZoom = 0.5f;
+        // Automatic Fit must be able to show long animations in supported window sizes.
+        public const float MinZoom = 0.01f;
         public const float MaxZoom = 20f;
         public const float BasePixelsPerSecond = 120f;
 
