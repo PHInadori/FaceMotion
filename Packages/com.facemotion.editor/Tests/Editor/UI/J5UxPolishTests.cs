@@ -194,7 +194,7 @@ namespace FaceMotion.Editor.Tests
         [Test]
         public void ShortcutHelp_ExposesExpectedShortcuts_Localized()
         {
-            Assert.That(ShortcutHelpPanel.ShortcutKeys, Has.Length.EqualTo(13));
+            Assert.That(ShortcutHelpPanel.ShortcutKeys, Has.Length.EqualTo(14));
             for (int i = 0; i < ShortcutHelpPanel.ShortcutKeys.Length; i++)
             {
                 string key = ShortcutHelpPanel.ShortcutKeys[i];

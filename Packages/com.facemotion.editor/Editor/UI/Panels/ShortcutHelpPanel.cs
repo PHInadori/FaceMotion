@@ -26,6 +26,7 @@ namespace FaceMotion.Editor.UI.Panels
             "shortcutCopyKeys",
             "shortcutPasteKeys",
             "shortcutDuplicateKeys",
+            "shortcutNudgeKeys",
             "shortcutMultiKeyInspector"
         };
 

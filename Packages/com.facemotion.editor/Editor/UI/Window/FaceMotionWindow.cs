@@ -120,6 +120,75 @@ namespace FaceMotion.Editor.UI.Window
             }
         }
 
+        [Shortcut("FaceMotion/Timeline/Copy Keys")]
+        private static void InvokeCopyKeysShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.Copy);
+
+        [Shortcut("FaceMotion/Timeline/Paste Keys")]
+        private static void InvokePasteKeysShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.Paste);
+
+        [Shortcut("FaceMotion/Timeline/Duplicate Keys")]
+        private static void InvokeDuplicateKeysShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.Duplicate);
+
+        [Shortcut("FaceMotion/Timeline/Nudge Left")]
+        private static void InvokeNudgeLeftShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.NudgeLeft);
+
+        [Shortcut("FaceMotion/Timeline/Nudge Right")]
+        private static void InvokeNudgeRightShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.NudgeRight);
+
+        [Shortcut("FaceMotion/Timeline/Nudge Left 5 Frames")]
+        private static void InvokeNudgeLeftFiveShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.NudgeLeftFive);
+
+        [Shortcut("FaceMotion/Timeline/Nudge Right 5 Frames")]
+        private static void InvokeNudgeRightFiveShortcut() => InvokeTimelineKeyAction(TimelineKeyAction.NudgeRightFive);
+
+        private static void InvokeTimelineKeyAction(TimelineKeyAction action)
+        {
+            if (focusedWindow is FaceMotionWindow window)
+            {
+                window.ApplyTimelineKeyActionFromShortcut(action);
+            }
+        }
+
+        internal bool ApplyTimelineKeyActionFromShortcut(TimelineKeyAction action)
+        {
+            if (_session == null || _keys == null || !CanHandleQuickKeyShortcut(EditorGUIUtility.editingTextField, GUI.GetNameOfFocusedControl()))
+            {
+                return false;
+            }
+
+            switch (action)
+            {
+                case TimelineKeyAction.Copy:
+                    _keys.CopySelection();
+                    return true;
+                case TimelineKeyAction.Paste:
+                    return _keys.PasteAt(_session.ViewState.CurrentTime).Succeeded;
+                case TimelineKeyAction.Duplicate:
+                    return _keys.DuplicateSelection();
+                case TimelineKeyAction.NudgeLeft:
+                    return _keys.NudgeSelectedKeys(-1);
+                case TimelineKeyAction.NudgeRight:
+                    return _keys.NudgeSelectedKeys(1);
+                case TimelineKeyAction.NudgeLeftFive:
+                    return _keys.NudgeSelectedKeys(-5);
+                case TimelineKeyAction.NudgeRightFive:
+                    return _keys.NudgeSelectedKeys(5);
+                default:
+                    return false;
+            }
+        }
+
+        internal enum TimelineKeyAction
+        {
+            Copy,
+            Paste,
+            Duplicate,
+            NudgeLeft,
+            NudgeRight,
+            NudgeLeftFive,
+            NudgeRightFive
+        }
+
         internal bool ApplyQuickKeyFromShortcut()
         {
             if (_session == null

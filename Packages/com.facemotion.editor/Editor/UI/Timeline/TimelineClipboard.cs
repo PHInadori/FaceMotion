@@ -22,15 +22,18 @@ namespace FaceMotion.Editor.UI.Timeline
 
         private readonly List<ClipboardItem> _items = new List<ClipboardItem>();
 
+        public string SourceAnimationId { get; private set; }
+
         public IReadOnlyList<ClipboardItem> Items => _items;
 
         public bool HasItems => _items.Count > 0;
 
         public int Count => _items.Count;
 
-        public void Set(IEnumerable<ClipboardItem> items)
+        public void Set(string sourceAnimationId, IEnumerable<ClipboardItem> items)
         {
             _items.Clear();
+            SourceAnimationId = sourceAnimationId;
             if (items == null)
             {
                 return;
@@ -38,13 +41,25 @@ namespace FaceMotion.Editor.UI.Timeline
 
             foreach (ClipboardItem item in items)
             {
-                _items.Add(item);
+                if (item != null)
+                {
+                    _items.Add(new ClipboardItem
+                    {
+                        TrackId = item.TrackId,
+                        Kind = item.Kind,
+                        RelativeTime = item.RelativeTime,
+                        FloatValue = item.FloatValue,
+                        VectorValue = item.VectorValue,
+                        Interpolation = item.Interpolation
+                    });
+                }
             }
         }
 
         public void Clear()
         {
             _items.Clear();
+            SourceAnimationId = null;
         }
     }
 }

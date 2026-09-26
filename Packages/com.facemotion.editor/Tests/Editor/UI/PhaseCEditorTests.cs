@@ -468,19 +468,28 @@ namespace FaceMotion.Editor.Tests
             var result = _keys.PasteAt(0.5f);
             Assert.That(result.Succeeded, Is.True);
             Assert.That(KeyCount(trackId), Is.EqualTo(2));
-            Assert.That(result.Skipped, Is.Zero);
+            Assert.That(result.Pasted, Is.EqualTo(1));
+            Assert.That(result.Updated, Is.Zero);
         }
 
         [Test]
-        public void KeyframeController_PasteAt_SkipsOccupiedTimes()
+        public void KeyframeController_PasteAt_OccupiedTimestamp_UpdatesInPlaceWithoutInserting()
         {
             SetupBlendShapeTrack(out _, out string trackId);
             _keys.AddKeyAt(0.1f, 0.5f, Vector3.zero, InterpolationType.Linear);
             _keys.CopySelection();
             Assert.That(_keys.PasteAt(0.5f).Succeeded, Is.True);
+            string destinationId = GetSelectedBlendTrack().BlendShape.Keys
+                .Single(key => Math.Abs(key.Time - 0.5f) <= 1e-4f).KeyId;
+
             var second = _keys.PasteAt(0.5f);
-            Assert.That(second.Skipped, Is.EqualTo(1));
+
+            Assert.That(second.Succeeded, Is.True);
+            Assert.That(second.Pasted, Is.Zero);
+            Assert.That(second.Updated, Is.EqualTo(1));
             Assert.That(KeyCount(trackId), Is.EqualTo(2));
+            Assert.That(GetSelectedBlendTrack().BlendShape.Keys
+                .Single(key => Math.Abs(key.Time - 0.5f) <= 1e-4f).KeyId, Is.EqualTo(destinationId));
         }
 
         [Test]

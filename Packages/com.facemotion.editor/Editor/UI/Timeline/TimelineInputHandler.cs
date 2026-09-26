@@ -226,12 +226,12 @@ namespace FaceMotion.Editor.UI.Timeline
 
                         if (e.keyCode == KeyCode.V)
                         {
-                            var result =
-                                _keys.PasteAt(
-                                    _session.ViewState.CurrentTime);
-
-                            return result.Succeeded ||
-                                   result.Skipped > 0;
+                            // Paste is all-or-nothing: occupied destinations are updated
+                            // in place, so a failed paste never consumed the key event.
+                            return _keys
+                                .PasteAt(
+                                    _session.ViewState.CurrentTime)
+                                .Succeeded;
                         }
 
                         if (e.keyCode == KeyCode.D)
@@ -587,8 +587,16 @@ namespace FaceMotion.Editor.UI.Timeline
                 }
                 else
                 {
-                    SelectKeySingle(
-                        keyId);
+                    // Grabbing an already-selected key keeps the whole blue working
+                    // group: the selection is only replaced when the pressed key is
+                    // not part of it, so MouseDown never collapses a live group and
+                    // a plain click without drag leaves the group intact.
+                    if (!_session.Selection.Contains(
+                            keyId))
+                    {
+                        SelectKeySingle(
+                            keyId);
+                    }
 
                     BeginMoveDrag(
                         p.x);

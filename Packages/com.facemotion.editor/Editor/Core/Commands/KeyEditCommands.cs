@@ -490,7 +490,11 @@ namespace FaceMotion.Editor
         }
     }
 
-    /// <summary>Describes one key to create during a paste.</summary>
+    /// <summary>
+    /// Describes one paste destination. A spec with an empty <see cref="TargetKeyId"/>
+    /// inserts a fresh key; a spec carrying an existing key ID overwrites that key's
+    /// value and interpolation in place while preserving its identity.
+    /// </summary>
     public struct PasteKeySpec
     {
         public string TrackId;
@@ -499,14 +503,20 @@ namespace FaceMotion.Editor
         public float FloatValue;
         public Vector3 VectorValue;
         public InterpolationType Interpolation;
+        public string TargetKeyId;
     }
 
     /// <summary>
-    /// Pastes keys into one animation in a single transaction. Keys get fresh IDs; the
-    /// created IDs are exposed for selection. Collision filtering happens in the caller.
+    /// Pastes keys into one animation in a single transaction: every spec without a
+    /// target inserts a fresh key, every spec with a target overwrites the existing key
+    /// that already occupies that track and timestamp. The whole plan validates before
+    /// any mutation, so a rejected paste never changes the project. All resulting key IDs
+    /// (inserted and overwritten) are exposed in spec order for selection.
     /// </summary>
     public sealed class PasteKeysCommand : IProjectCommand
     {
+        private const float TimeTolerance = 1e-4f;
+
         private readonly string _animationId;
         private readonly IReadOnlyList<PasteKeySpec> _specs;
 
@@ -516,7 +526,8 @@ namespace FaceMotion.Editor
             _specs = specs ?? new List<PasteKeySpec>();
         }
 
-        public IReadOnlyList<string> CreatedKeyIds { get; private set; }
+        /// <summary>Resulting key IDs in spec order: inserted fresh IDs and preserved overwrite IDs.</summary>
+        public IReadOnlyList<string> ResultKeyIds { get; private set; }
 
         public string UndoLabel => "Paste Keys";
 
@@ -548,6 +559,25 @@ namespace FaceMotion.Editor
                     error = CommandDiagnostics.InvalidArgument("Pastable key time must be a finite non-negative value.", spec.TrackId);
                     return false;
                 }
+
+                if (!string.IsNullOrEmpty(spec.TargetKeyId) && !HasKey(track, spec.TargetKeyId))
+                {
+                    error = CommandDiagnostics.TargetNotFound("key", spec.TargetKeyId);
+                    return false;
+                }
+
+                for (int j = i + 1; j < _specs.Count; j++)
+                {
+                    var other = _specs[j];
+                    if (string.Equals(other.TrackId, spec.TrackId, StringComparison.Ordinal)
+                        && Math.Abs(other.Time - spec.Time) <= TimeTolerance)
+                    {
+                        error = CommandDiagnostics.InvalidArgument(
+                            "The paste plan maps two keys onto the same track and timestamp.",
+                            spec.TrackId);
+                        return false;
+                    }
+                }
             }
 
             error = null;
@@ -556,7 +586,7 @@ namespace FaceMotion.Editor
 
         public void Execute(FaceMotionProject project)
         {
-            var created = new List<string>();
+            var results = new List<string>();
             if (project.TryGetAnimation(_animationId, out var animation) && animation.Timeline != null)
             {
                 var sortedTracks = new HashSet<string>(StringComparer.Ordinal);
@@ -570,15 +600,47 @@ namespace FaceMotion.Editor
 
                     if (spec.Kind == TrackKind.BlendShape && track.BlendShape != null)
                     {
-                        var key = FloatKeyframeData.Create(spec.Time, spec.FloatValue, spec.Interpolation);
-                        track.BlendShape.AddKey(key);
-                        created.Add(key.KeyId);
+                        var existing = FindFloatKey(track, spec.TargetKeyId);
+                        if (existing != null)
+                        {
+                            existing.Value = spec.FloatValue;
+                            existing.Interpolation = spec.Interpolation;
+                            results.Add(existing.KeyId);
+                        }
+                        else if (string.IsNullOrEmpty(spec.TargetKeyId))
+                        {
+                            var key = FloatKeyframeData.Create(spec.Time, spec.FloatValue, spec.Interpolation);
+                            track.BlendShape.AddKey(key);
+                            results.Add(key.KeyId);
+                        }
+                        else
+                        {
+                            continue;
+                        }
                     }
                     else if (TrackKinds.IsTransform(spec.Kind) && track.Transform != null)
                     {
-                        var key = Vector3KeyframeData.Create(spec.Time, spec.VectorValue, spec.Interpolation);
-                        track.Transform.AddKey(key);
-                        created.Add(key.KeyId);
+                        var existing = FindVector3Key(track, spec.TargetKeyId);
+                        if (existing != null)
+                        {
+                            existing.Value = spec.VectorValue;
+                            existing.Interpolation = spec.Interpolation;
+                            results.Add(existing.KeyId);
+                        }
+                        else if (string.IsNullOrEmpty(spec.TargetKeyId))
+                        {
+                            var key = Vector3KeyframeData.Create(spec.Time, spec.VectorValue, spec.Interpolation);
+                            track.Transform.AddKey(key);
+                            results.Add(key.KeyId);
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        continue;
                     }
 
                     sortedTracks.Add(spec.TrackId);
@@ -600,7 +662,50 @@ namespace FaceMotion.Editor
                 }
             }
 
-            CreatedKeyIds = created;
+            ResultKeyIds = results;
+        }
+
+        private static bool HasKey(FaceTrackData track, string keyId)
+        {
+            return FindFloatKey(track, keyId) != null || FindVector3Key(track, keyId) != null;
+        }
+
+        private static FloatKeyframeData FindFloatKey(FaceTrackData track, string keyId)
+        {
+            if (string.IsNullOrEmpty(keyId) || track.Kind != TrackKind.BlendShape || track.BlendShape == null)
+            {
+                return null;
+            }
+
+            var keys = track.BlendShape.Keys;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i] != null && string.Equals(keys[i].KeyId, keyId, StringComparison.Ordinal))
+                {
+                    return keys[i];
+                }
+            }
+
+            return null;
+        }
+
+        private static Vector3KeyframeData FindVector3Key(FaceTrackData track, string keyId)
+        {
+            if (string.IsNullOrEmpty(keyId) || !TrackKinds.IsTransform(track.Kind) || track.Transform == null)
+            {
+                return null;
+            }
+
+            var keys = track.Transform.Keys;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i] != null && string.Equals(keys[i].KeyId, keyId, StringComparison.Ordinal))
+                {
+                    return keys[i];
+                }
+            }
+
+            return null;
         }
 
         private static bool IsValidTime(float time)

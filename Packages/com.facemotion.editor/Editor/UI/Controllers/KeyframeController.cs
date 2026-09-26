@@ -24,9 +24,11 @@ namespace FaceMotion.Editor.UI.Controllers
 
             public int Pasted;
 
-            public int Skipped;
+            public int Updated;
 
             public string PastedKeyId;
+
+            public IReadOnlyList<string> ResultKeyIds;
         }
 
         private const float TimeTolerance = 1e-4f;
@@ -325,6 +327,21 @@ namespace FaceMotion.Editor.UI.Controllers
                 _session,
                 commands,
                 "Move Keys").Succeeded;
+        }
+
+        /// <summary>Nudges the selection by a signed number of timeline frames using normal move planning.</summary>
+        public bool NudgeSelectedKeys(int frameDelta)
+        {
+            var animation = _session.GetSelectedAnimation();
+            if (animation == null || animation.Timeline == null || frameDelta == 0)
+            {
+                return false;
+            }
+
+            float frameRate = animation.Timeline.FrameRate > 0f
+                ? animation.Timeline.FrameRate
+                : 60f;
+            return MoveSelectedKeysBy(frameDelta / frameRate, true);
         }
 
         public bool CanBeginKeyDrag()
@@ -928,7 +945,7 @@ namespace FaceMotion.Editor.UI.Controllers
                     minTime;
             }
 
-            _session.Clipboard.Set(items);
+            _session.Clipboard.Set(animation.AnimationId, items);
             _session.NotifyChanged();
         }
 
@@ -1021,10 +1038,15 @@ namespace FaceMotion.Editor.UI.Controllers
 
             // Preserve group shape.
             // Never clamp only the trailing keys.
-            if (maxTime + delta >
-                timeline.Duration + TimeTolerance)
+            if (maxTime + delta > timeline.Duration + TimeTolerance)
             {
-                return false;
+                // Keep the duplicated group intact by shifting it left as one group.
+                // A zero/negative offset would only reproduce the source keys.
+                delta = timeline.Duration - maxTime;
+                if (delta <= TimeTolerance)
+                {
+                    return false;
+                }
             }
 
             var specs =
@@ -1075,7 +1097,7 @@ namespace FaceMotion.Editor.UI.Controllers
                         }
 
                         float targetTime =
-                            key.Time + delta;
+                            SnapTime(key.Time + delta);
 
                         // Same collision tolerance as PasteAt.
                         // Reject the entire duplicate instead of creating
@@ -1129,7 +1151,7 @@ namespace FaceMotion.Editor.UI.Controllers
                         }
 
                         float targetTime =
-                            key.Time + delta;
+                            SnapTime(key.Time + delta);
 
                         if (ContainsTime(
                                 occupied,
@@ -1185,17 +1207,17 @@ namespace FaceMotion.Editor.UI.Controllers
                     command);
 
             if (!run.Succeeded ||
-                command.CreatedKeyIds == null ||
-                command.CreatedKeyIds.Count == 0)
+                command.ResultKeyIds == null ||
+                command.ResultKeyIds.Count == 0)
             {
                 return false;
             }
 
             string newPrimary =
-                command.CreatedKeyIds[0];
+                command.ResultKeyIds[0];
 
             if (previousPrimary != null &&
-                command.CreatedKeyIds.Count ==
+                command.ResultKeyIds.Count ==
                 sourceIds.Count)
             {
                 for (int i = 0;
@@ -1208,7 +1230,7 @@ namespace FaceMotion.Editor.UI.Controllers
                             StringComparison.Ordinal))
                     {
                         newPrimary =
-                            command.CreatedKeyIds[i];
+                            command.ResultKeyIds[i];
 
                         break;
                     }
@@ -1216,7 +1238,7 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             _session.Selection.SetSelection(
-                command.CreatedKeyIds);
+                command.ResultKeyIds);
 
             _session.Selection.SetPrimaryKeyId(
                 newPrimary);
@@ -1250,18 +1272,50 @@ namespace FaceMotion.Editor.UI.Controllers
                 return result;
             }
 
+            if (!string.Equals(_session.Clipboard.SourceAnimationId, animation.AnimationId, StringComparison.Ordinal))
+            {
+                return result;
+            }
+
             float cursor =
                 SnapTime(time);
+
+            float minRelative = float.PositiveInfinity;
+            float maxRelative = float.NegativeInfinity;
+            for (int i = 0; i < _session.Clipboard.Count; i++)
+            {
+                var item = _session.Clipboard.Items[i];
+                if (item == null || float.IsNaN(item.RelativeTime) || float.IsInfinity(item.RelativeTime))
+                {
+                    return result;
+                }
+
+                minRelative = Mathf.Min(minRelative, item.RelativeTime);
+                maxRelative = Mathf.Max(maxRelative, item.RelativeTime);
+            }
+
+            float duration = animation.Timeline.Duration;
+            if (maxRelative - minRelative > duration + TimeTolerance)
+            {
+                return result;
+            }
+
+            // Keep the copied group shape intact: the anchor slides as one unit so the
+            // group fits inside the duration instead of clamping individual keys.
+            float anchor = Mathf.Clamp(cursor, -minRelative, duration - maxRelative);
 
             var specs =
                 new List<PasteKeySpec>(
                     _session.Clipboard.Count);
 
-            var occupiedPerTrack =
+            // Destination times planned so far per track. An occupied destination is not an
+            // error: it becomes an UPDATE of the key that already lives there. Two clipboard
+            // items aiming at one track and timestamp would be ambiguous, so that rejects.
+            var plannedPerTrack =
                 new Dictionary<string, List<float>>(
                     StringComparer.Ordinal);
 
-            int skipped = 0;
+            int updated = 0;
 
             for (int i = 0;
                  i < _session.Clipboard.Count;
@@ -1269,6 +1323,13 @@ namespace FaceMotion.Editor.UI.Controllers
             {
                 TimelineClipboard.ClipboardItem item =
                     _session.Clipboard.Items[i];
+
+                if (item == null ||
+                    float.IsNaN(item.RelativeTime) ||
+                    float.IsInfinity(item.RelativeTime))
+                {
+                    return result;
+                }
 
                 if (!animation.Timeline.TryGetTrack(
                         item.TrackId,
@@ -1282,37 +1343,47 @@ namespace FaceMotion.Editor.UI.Controllers
                     return result;
                 }
 
-                float absolute =
-                    cursor +
-                    item.RelativeTime;
-
+                // One destination calculation per clipboard item.
                 float targetTime =
                     SnapTime(
-                        absolute);
+                        anchor + item.RelativeTime);
 
-                if (!occupiedPerTrack.TryGetValue(
-                        item.TrackId,
-                        out var occupied))
+                if (!IsPlanValidTime(targetTime))
                 {
-                    occupied =
-                        CollectTrackTimes(
-                            track);
+                    return result;
+                }
 
-                    occupiedPerTrack.Add(
+                if (!plannedPerTrack.TryGetValue(
                         item.TrackId,
-                        occupied);
+                        out var planned))
+                {
+                    planned =
+                        new List<float>();
+
+                    plannedPerTrack.Add(
+                        item.TrackId,
+                        planned);
                 }
 
                 if (ContainsTime(
-                        occupied,
+                        planned,
                         targetTime))
                 {
-                    skipped++;
-                    continue;
+                    return result;
                 }
 
-                occupied.Add(
+                planned.Add(
                     targetTime);
+
+                string existingKeyId =
+                    FindKeyAtTime(
+                        track,
+                        targetTime);
+
+                if (existingKeyId != null)
+                {
+                    updated++;
+                }
 
                 specs.Add(
                     new PasteKeySpec
@@ -1333,19 +1404,15 @@ namespace FaceMotion.Editor.UI.Controllers
                             item.VectorValue,
 
                         Interpolation =
-                            item.Interpolation
+                            item.Interpolation,
+
+                        TargetKeyId =
+                            existingKeyId
                     });
             }
 
             if (specs.Count == 0)
             {
-                result.Skipped =
-                    skipped;
-
-                SetOutcome(
-                    ControllerDiagnostics.PasteCollision(
-                        skipped));
-
                 return result;
             }
 
@@ -1359,35 +1426,24 @@ namespace FaceMotion.Editor.UI.Controllers
                     _session,
                     command);
 
-            if (!run.Succeeded)
+            if (!run.Succeeded ||
+                command.ResultKeyIds == null ||
+                command.ResultKeyIds.Count == 0)
             {
                 return result;
             }
 
             result.Succeeded = true;
-            result.Pasted = specs.Count;
-            result.Skipped = skipped;
+            result.Pasted = specs.Count - updated;
+            result.Updated = updated;
+            result.ResultKeyIds = command.ResultKeyIds;
+            result.PastedKeyId =
+                command.ResultKeyIds[0];
 
-            if (command.CreatedKeyIds != null &&
-                command.CreatedKeyIds.Count > 0)
-            {
-                result.PastedKeyId =
-                    command.CreatedKeyIds[0];
+            _session.Selection.SetSelection(
+                command.ResultKeyIds);
 
-                _session.Selection.SetSelection(
-                    command.CreatedKeyIds);
-            }
-
-            if (skipped > 0)
-            {
-                SetOutcome(
-                    ControllerDiagnostics.PasteCollision(
-                        skipped));
-            }
-            else
-            {
-                _session.NotifyChanged();
-            }
+            _session.NotifyChanged();
 
             return result;
         }
@@ -1815,6 +1871,14 @@ namespace FaceMotion.Editor.UI.Controllers
             }
 
             return false;
+        }
+
+        private static bool IsPlanValidTime(
+            float time)
+        {
+            return !float.IsNaN(time) &&
+                   !float.IsInfinity(time) &&
+                   time >= 0f;
         }
 
         private static TimelineClipboard.ClipboardItem NewItem(

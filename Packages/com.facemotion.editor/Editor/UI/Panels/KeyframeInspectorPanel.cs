@@ -41,9 +41,14 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(
-                FaceMotionUiText.Get("keyInspector"),
-                EditorStyles.boldLabel);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.LabelField(FaceMotionUiText.Get("keyInspector"), EditorStyles.boldLabel);
+            if (GUILayout.Button(FaceMotionUiText.Get("keyActions"), EditorStyles.miniButton, GUILayout.Width(72f)))
+            {
+                ShowKeyActionsMenu();
+            }
+
+            EditorGUILayout.EndHorizontal();
 
             Synchronize();
 
@@ -340,6 +345,20 @@ namespace FaceMotion.Editor.UI.Panels
             DrawQuickKeyValue(valueContent, configuredValue);
             DrawQuickKeyButton(quickKeyContent, canApply, buttonWidth);
             EditorGUILayout.EndHorizontal();
+        }
+
+        private void ShowKeyActionsMenu()
+        {
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("copyKeys")), false, _keys.CopySelection);
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("pasteKeys")), false, () => _keys.PasteAt(_session.ViewState.CurrentTime));
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("duplicateKeys")), false, () => _keys.DuplicateSelection());
+            menu.AddSeparator(string.Empty);
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("nudgeKeysEarlier")), false, () => _keys.NudgeSelectedKeys(-1));
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("nudgeKeysLater")), false, () => _keys.NudgeSelectedKeys(1));
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("nudgeKeysEarlierFive")), false, () => _keys.NudgeSelectedKeys(-5));
+            menu.AddItem(new GUIContent(FaceMotionUiText.Get("nudgeKeysLaterFive")), false, () => _keys.NudgeSelectedKeys(5));
+            menu.ShowAsContext();
         }
 
         internal static bool ShouldStackQuickKeyControls(
