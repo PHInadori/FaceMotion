@@ -199,6 +199,26 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void Execute_MissingDesiredAnimation_EmitsCurrentFmK2PreflightFailure()
+        {
+            var backend = new RecordingBackend();
+            var request = new VrchatDesiredStateReconciliationRequest(
+                _avatar, _project, new[] { "removed-animation-id" }, Folder, backend);
+
+            var result = VrchatDesiredStateReconciliationService.Execute(request);
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Outcome, Is.EqualTo(VrchatDesiredStateReconciliationOutcome.PreflightFailed));
+            Assert.That(result.Diagnostics, Has.Some.Matches<FaceMotionDiagnostic>(d =>
+                d.Code == FaceMotionDiagnosticCodes.BatchPreflightFailed
+                && d.Severity == FaceMotionDiagnosticSeverity.Error
+                && d.Blocking && d.ContextId == "ma-desired-state"
+                && d.Message.Contains("removed-animation-id")));
+            Assert.That(backend.ApplyCalls, Is.Zero);
+            Assert.That(backend.RemoveCalls, Is.Zero);
+        }
+
+        [Test]
         public void Execute_RemovalInvalidatesManagedStateCacheCallback()
         {
             var backend = new RecordingBackend(new ModularAvatarManagedState("obsolete", "FaceMotion_Obsolete"));

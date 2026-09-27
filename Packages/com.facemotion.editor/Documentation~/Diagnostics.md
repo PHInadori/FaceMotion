@@ -272,6 +272,8 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-K2-BATCH-ROLLBACK` | Recommended | integration-batch |
 | `FM-K2-PARTIAL-APPLY` | Recommended | integration-batch |
 
+これらの code は 0.3.0 から公開している安定識別子のため、現在の発行有無によらず保持します。`FM-K2-PREFLIGHT-FAILED` は現在の Modular Avatar desired-state 更新でも、入力・計画・処理上の問題を報告する場合があります（すべての事前検証失敗に必ず付くわけではありません）。`FM-K2-NO-SELECTION` と `FM-K2-DUPLICATE-EXPORT-PATH` は現行の通常 UI ではなく、保持されている旧 `BatchIntegrationService.Execute` 公開 API が返します。`FM-K2-BATCH-ROLLBACK` と `FM-K2-PARTIAL-APPLY` は互換性のため登録・翻訳を保持する予約 code であり、現在の production に発行箇所はありません。
+
 計 **154** code。全 code の `CanAutoFix` は `false` です。自動修復は行わず、常に safety を優先します。
 
 ## 関連ドキュメント

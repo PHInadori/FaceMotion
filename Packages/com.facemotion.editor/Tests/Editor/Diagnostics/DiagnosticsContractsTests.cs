@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using FaceMotion.Diagnostics;
 using FaceMotion.Editor.UI.Diagnostics;
 using FaceMotion.Editor.UI.Localization;
 using NUnit.Framework;
+using UnityEditor.PackageManager;
 using UnityEngine;
 
 namespace FaceMotion.Editor.Tests
@@ -128,6 +130,50 @@ namespace FaceMotion.Editor.Tests
                 Assert.That(japanese.SeverityText, Is.Not.EqualTo("severityError"), code);
                 Assert.That(english.SeverityText, Is.Not.EqualTo("severityError"), code);
             }
+        }
+
+        [TestCase(FaceMotionDiagnosticCodes.BatchNoSelection, "FM-K2-NO-SELECTION")]
+        [TestCase(FaceMotionDiagnosticCodes.BatchDuplicateExportPath, "FM-K2-DUPLICATE-EXPORT-PATH")]
+        [TestCase(FaceMotionDiagnosticCodes.BatchPreflightFailed, "FM-K2-PREFLIGHT-FAILED")]
+        [TestCase(FaceMotionDiagnosticCodes.BatchRollback, "FM-K2-BATCH-ROLLBACK")]
+        [TestCase(FaceMotionDiagnosticCodes.BatchPartialApply, "FM-K2-PARTIAL-APPLY")]
+        public void FM_K2_AllCodesRemainRegisteredAndLocalized(string code, string shippedId)
+        {
+            Assert.That(code, Is.EqualTo(shippedId), "Shipped diagnostic IDs must not be renamed or renumbered.");
+            DiagnosticDefinition definition = FaceMotionDiagnosticDefinitionRegistry.Get(code);
+            Assert.That(definition, Is.Not.Null, code);
+            Assert.That(definition.Category, Is.EqualTo("integration-batch"), code);
+
+            foreach (FaceMotionDiagnosticLanguage language in new[]
+            {
+                FaceMotionDiagnosticLanguage.Japanese,
+                FaceMotionDiagnosticLanguage.English
+            })
+            {
+                Assert.That(FaceMotionDiagnosticLocalizationCatalog.TryGet(code, language, out DiagnosticLocalizedText text), Is.True, code);
+                Assert.That(text.Title, Is.Not.Null.And.Not.Empty.And.Not.EqualTo(code), code);
+                Assert.That(text.Summary, Is.Not.Null.And.Not.Empty.And.Not.EqualTo(code), code);
+                Assert.That(text.Resolution, Is.Not.Null.And.Not.Empty, code);
+
+                var diagnostic = new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Error,
+                    "Raw generator message", string.Empty, true, "Raw suggested fix");
+                var presentation = new FaceMotionDiagnosticPresentation(diagnostic, language);
+                Assert.That(presentation.IsKnown, Is.True, code);
+                Assert.That(presentation.Code, Is.EqualTo(shippedId), code);
+                Assert.That(presentation.Title, Is.EqualTo(text.Title), code);
+                Assert.That(presentation.Summary, Is.EqualTo(text.Summary), code);
+                Assert.That(presentation.Resolution, Is.EqualTo(text.Resolution), code);
+            }
+        }
+
+        [TestCase(FaceMotionDiagnosticCodes.BatchRollback)]
+        [TestCase(FaceMotionDiagnosticCodes.BatchPartialApply)]
+        public void FM_K2_UnraisedReservedCodes_RemainDocumented(string code)
+        {
+            PackageInfo package = PackageInfo.FindForAssembly(typeof(FaceMotionDiagnosticCodes).Assembly);
+            Assert.That(package, Is.Not.Null);
+            string document = File.ReadAllText(Path.Combine(package.resolvedPath, "Documentation~", "Diagnostics.md"));
+            Assert.That(document, Does.Contain("`" + code + "`"));
         }
 
         [Test]
