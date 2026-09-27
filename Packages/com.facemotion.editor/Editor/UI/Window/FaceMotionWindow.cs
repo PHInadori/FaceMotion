@@ -305,6 +305,7 @@ namespace FaceMotion.Editor.UI.Window
 
             using (WindowOnGuiMarker.Auto())
             {
+            EventType inputEventType = Event.current == null ? EventType.Ignore : Event.current.type;
 
             GUILayout.BeginArea(new Rect(0f, 0f, position.width, ToolbarHeight));
             DrawToolbar();
@@ -319,7 +320,7 @@ namespace FaceMotion.Editor.UI.Window
             Rect splitterRect = new Rect(leftRect.xMax, area.y, SplitterWidth, area.height);
             Rect rightRect = new Rect(splitterRect.xMax, area.y, Mathf.Max(0f, area.xMax - splitterRect.xMax), area.height);
 
-            DrawLeftColumn(leftRect);
+            DrawLeftColumn(leftRect, inputEventType);
             DrawSplitter(splitterRect, area);
             DrawRightColumn(rightRect);
 
@@ -594,7 +595,7 @@ namespace FaceMotion.Editor.UI.Window
             menu.ShowAsContext();
         }
 
-        private void DrawLeftColumn(Rect rect)
+        private void DrawLeftColumn(Rect rect, EventType inputEventType)
         {
             GUILayout.BeginArea(rect);
             _leftScrollPosition = GUILayout.BeginScrollView(
@@ -609,7 +610,7 @@ namespace FaceMotion.Editor.UI.Window
             EditorGUILayout.Space();
             _animationListPanel.OnGUI();
             EditorGUILayout.Space();
-            _trackListPanel.OnGUI();
+            _trackListPanel.OnGUI(inputEventType);
             EditorGUILayout.Space();
             _integrationPanel.OnGUI();
             EditorGUILayout.Space();
@@ -1060,10 +1061,9 @@ namespace FaceMotion.Editor.UI.Window
         }
 
         /// <summary>
-        /// Requests a repaint for a preview-override (hover) change. Changes that land
-        /// during the Repaint pass are consumed and rendered in that same pass — the left
-        /// column hover handling runs before the right column preview — so scheduling
-        /// another repaint would render the already-current state a second time.
+        /// Request the next visual frame on the target-change event rather than waiting for
+        /// delayCall. Left-column hover is evaluated by the right column in this same OnGUI pass;
+        /// changes during Repaint are already drawn and need no second frame.
         /// </summary>
         private void RequestHoverPreviewRepaint()
         {
@@ -1072,7 +1072,8 @@ namespace FaceMotion.Editor.UI.Window
                 return;
             }
 
-            RequestPreviewRepaint();
+            Repaint();
+            EditorApplication.QueuePlayerLoopUpdate();
         }
 
         internal static bool ShouldScheduleHoverRepaint(Event current)

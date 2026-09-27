@@ -51,6 +51,7 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string> _blendTooltipCache =
             new Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string>();
         private AvatarCandidateSnapshot.BlendShapeCandidate _activeWarningCandidate;
+        internal AvatarCandidateSnapshot.BlendShapeCandidate ActiveWarningCandidate => _activeWarningCandidate;
         private FaceMotion.Data.FaceMotionAnimationData _addedBindingsAnimation;
         private HashSet<string> _addedBlendBindings;
 
@@ -69,7 +70,7 @@ namespace FaceMotion.Editor.UI.Panels
             _transformCandidateSplitter = new ResizableVerticalSplitter(prefix + "TransformHeight", DefaultCandidateListHeight, MinimumCandidateListHeight, MaximumCandidateListHeight);
         }
 
-        public void OnGUI()
+        public void OnGUI(EventType inputEventType = EventType.Ignore)
         {
             var state = FaceMotion.Editor.UI.Guidance.FaceMotionWorkflowHintService.Evaluate(_session, false).State;
             string helpKey = state == FaceMotion.Editor.UI.Guidance.FaceMotionUxState.AddTrack
@@ -88,7 +89,7 @@ namespace FaceMotion.Editor.UI.Panels
             }
 
             _search = EditorGUILayout.TextField(FaceMotionUiText.Get("search"), _search);
-            DrawAddSection();
+            DrawAddSection(inputEventType);
             EditorGUILayout.Space();
 
             Dictionary<string, TrackBindingValidation> bindings = BuildBindingMap();
@@ -124,7 +125,7 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
-        private void DrawAddSection()
+        private void DrawAddSection(EventType inputEventType)
         {
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button(FaceMotionUiText.Get("addBlendShape"), EditorStyles.miniButtonLeft))
@@ -141,7 +142,7 @@ namespace FaceMotion.Editor.UI.Panels
 
             if (_addMode == 1)
             {
-                DrawBlendShapePicker();
+                DrawBlendShapePicker(inputEventType);
             }
             else if (_addMode == 2)
             {
@@ -155,11 +156,11 @@ namespace FaceMotion.Editor.UI.Panels
             }
         }
 
-        private void DrawBlendShapePicker()
+        private void DrawBlendShapePicker(EventType inputEventType)
         {
             if (!TryRefreshCandidateFilters())
             {
-                _previewOverride?.Clear();
+                ClearHoverPreview();
                 EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAvatarForBlend"), MessageType.Info);
                 DrawBlendShapeFallback();
                 return;
@@ -169,7 +170,7 @@ namespace FaceMotion.Editor.UI.Panels
             if (!string.Equals(search, _blendCandidateSearch, StringComparison.Ordinal))
             {
                 _blendCandidateSearch = search;
-                _blendListDirty = true;
+                OnCandidateFilterChanged(true);
             }
 
             DrawBlendShapeFilters();
@@ -179,12 +180,26 @@ namespace FaceMotion.Editor.UI.Panels
                 _activeWarningCandidate = null;
             }
             _blendCandidateScroll = EditorGUILayout.BeginScrollView(_blendCandidateScroll, GUILayout.Height(_blendCandidateSplitter.Height));
-            bool hoveringCandidate = false;
-            DrawBlendShapeCandidates(_session.GetSelectedAnimation(), ref hoveringCandidate);
+            AvatarCandidateSnapshot.BlendShapeCandidate hoveredCandidate = null;
+            Rect hoveredRowScreen = default;
+            Vector2 pointerScreen = default;
+            DrawBlendShapeCandidates(_session.GetSelectedAnimation(),
+                ref hoveredCandidate, ref hoveredRowScreen, ref pointerScreen);
 
             EditorGUILayout.EndScrollView();
-            Event current = Event.current;
-            if (ShouldClearHoverPreview(current, hoveringCandidate))
+            // The ScrollView clips rows, but GetLastRect within it is a content-space rect.
+            // Compare the row and pointer in screen space against the actual viewport rect
+            // after leaving the ScrollView, before accepting a hover target.
+            Rect viewportScreen = hoveredCandidate != null
+                ? GUIUtility.GUIToScreenRect(GUILayoutUtility.GetLastRect())
+                : default;
+            bool hoveringCandidate = hoveredCandidate != null &&
+                IsVisibleCandidateHit(hoveredRowScreen, viewportScreen, pointerScreen);
+            if (hoveringCandidate)
+            {
+                SetHoverPreview(hoveredCandidate);
+            }
+            if (ShouldClearHoverPreview(inputEventType, hoveringCandidate))
             {
                 ClearHoverPreview();
             }
@@ -245,7 +260,7 @@ namespace FaceMotion.Editor.UI.Panels
             _blendSafeOnly = safe && !conflicts;
             if (conflictsChanged || safeChanged)
             {
-                _blendListDirty = true;
+                OnCandidateFilterChanged(true);
             }
 
             EditorGUILayout.EndHorizontal();
@@ -257,6 +272,7 @@ namespace FaceMotion.Editor.UI.Panels
             if (GUILayout.Toggle(selected, label, EditorStyles.toolbarButton) && !selected)
             {
                 _blendCategoryFilter = category;
+                OnCandidateFilterChanged(false);
             }
         }
 
@@ -266,10 +282,13 @@ namespace FaceMotion.Editor.UI.Panels
             if (GUILayout.Toggle(selected, label, EditorStyles.toolbarButton) && !selected)
             {
                 _blendFaceCategoryFilter = category;
+                OnCandidateFilterChanged(false);
             }
         }
 
-        private void DrawBlendShapeCandidates(FaceMotion.Data.FaceMotionAnimationData animation, ref bool hoveringCandidate)
+        private void DrawBlendShapeCandidates(FaceMotion.Data.FaceMotionAnimationData animation,
+            ref AvatarCandidateSnapshot.BlendShapeCandidate hoveredCandidate,
+            ref Rect hoveredRowScreen, ref Vector2 pointerScreen)
         {
             if (!ReferenceEquals(_addedBindingsAnimation, animation))
             {
@@ -308,10 +327,7 @@ namespace FaceMotion.Editor.UI.Panels
                 if (GUILayout.Button(new GUIContent(label, CachedTooltip(candidate)), EditorStyles.miniButton))
                 {
                     _tracks.AddBlendShapeTrack(candidate);
-                    _addMode = 0;
-                    _previewOverride?.Clear();
-                    _addedBindingsAnimation = null;
-                    _activeWarningCandidate = null;
+                    CloseBlendShapePickerAfterAdd();
                     GUIUtility.ExitGUI();
                 }
 
@@ -320,7 +336,7 @@ namespace FaceMotion.Editor.UI.Panels
                 if (hasWarning && GUILayout.Button(new GUIContent("?", FaceMotionUiText.Get("contextHelpTooltip")),
                         EditorStyles.miniButton, GUILayout.Width(24f), GUILayout.Height(20f)))
                 {
-                    _activeWarningCandidate = ReferenceEquals(_activeWarningCandidate, candidate) ? null : candidate;
+                    ToggleWarningDetails(candidate);
                 }
 
                 EditorGUILayout.EndHorizontal();
@@ -328,10 +344,18 @@ namespace FaceMotion.Editor.UI.Panels
                 if (_previewOverride != null && IsCandidateHoverEvent(current)
                     && candidateRect.Contains(current.mousePosition))
                 {
-                    SetHoverPreview(candidate.ToBinding());
-                    hoveringCandidate = true;
+                    hoveredCandidate = candidate;
+                    hoveredRowScreen = GUIUtility.GUIToScreenRect(candidateRect);
+                    pointerScreen = GUIUtility.GUIToScreenPoint(current.mousePosition);
                 }
             }
+        }
+
+        internal static bool IsVisibleCandidateHit(Rect rowScreen, Rect viewportScreen, Vector2 pointerScreen)
+        {
+            return rowScreen.width > 0f && rowScreen.height > 0f &&
+                viewportScreen.width > 0f && viewportScreen.height > 0f &&
+                rowScreen.Contains(pointerScreen) && viewportScreen.Contains(pointerScreen);
         }
 
         private bool FilterAllowsCandidate(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
@@ -499,6 +523,7 @@ namespace FaceMotion.Editor.UI.Panels
             AvatarCandidateSnapshot candidates = _session.Candidates;
             if (candidates == null)
             {
+                ClearHoverPreview();
                 _candidateSource = null;
                 _blendCandidates = null;
                 _transformCandidates = null;
@@ -520,14 +545,43 @@ namespace FaceMotion.Editor.UI.Panels
             return true;
         }
 
-        private void SetHoverPreview(BlendShapeBinding binding)
+        internal bool SetHoverPreview(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
         {
-            ApplyHoverPreviewChange(_previewOverride, binding, _requestPreviewRepaint);
+            if (candidate == null || _previewOverride == null) return false;
+            BlendShapeBinding? active = _previewOverride.Binding;
+            if (active.HasValue &&
+                string.Equals(active.Value.RendererPath, candidate.RendererPath, StringComparison.Ordinal) &&
+                string.Equals(active.Value.BlendShapeName, candidate.BlendShapeName, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return ApplyHoverPreviewChange(_previewOverride, candidate.ToBinding(), _requestPreviewRepaint);
         }
 
         private void ClearHoverPreview()
         {
             ApplyHoverPreviewChange(_previewOverride, null, _requestPreviewRepaint);
+        }
+
+        internal void OnCandidateFilterChanged(bool rebuildList)
+        {
+            if (rebuildList) _blendListDirty = true;
+            ClearHoverPreview();
+        }
+
+        internal void ToggleWarningDetails(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            ClearHoverPreview();
+            _activeWarningCandidate = ReferenceEquals(_activeWarningCandidate, candidate) ? null : candidate;
+        }
+
+        internal void CloseBlendShapePickerAfterAdd()
+        {
+            _addMode = 0;
+            ClearHoverPreview();
+            _addedBindingsAnimation = null;
+            _activeWarningCandidate = null;
         }
 
         internal static bool ApplyHoverPreviewChange(
@@ -555,15 +609,23 @@ namespace FaceMotion.Editor.UI.Panels
         {
             return current != null
                 && (current.type == EventType.MouseEnterWindow
-                    || current.type == EventType.MouseMove
-                    || current.type == EventType.Repaint);
+                    || current.type == EventType.MouseMove);
         }
 
         internal static bool ShouldClearHoverPreview(Event current, bool hoveringCandidate)
         {
-            return current != null
-                && (current.type == EventType.MouseLeaveWindow
-                    || (!hoveringCandidate && IsCandidateHoverEvent(current)));
+            return current != null && ShouldClearHoverPreview(current.type, hoveringCandidate);
+        }
+
+        internal static bool ShouldClearHoverPreview(EventType inputEventType, bool hoveringCandidate)
+        {
+            // The outer scroll view may consume ScrollWheel before the candidate rows draw.
+            // Use the type captured at the start of the window's OnGUI pass.
+            return inputEventType == EventType.ScrollWheel
+                || inputEventType == EventType.MouseDrag
+                || inputEventType == EventType.MouseLeaveWindow
+                || (!hoveringCandidate && (inputEventType == EventType.MouseMove
+                    || inputEventType == EventType.MouseEnterWindow));
         }
 
         private void RefreshBlendView()

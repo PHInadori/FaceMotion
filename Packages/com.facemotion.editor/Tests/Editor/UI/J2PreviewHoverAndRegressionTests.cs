@@ -120,7 +120,8 @@ namespace FaceMotion.Editor.Tests
         {
             Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.MouseEnterWindow }), Is.True);
             Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.MouseMove }), Is.True);
-            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.Repaint }), Is.True);
+            Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.Repaint }), Is.False,
+                "A passive repaint must not resurrect a cleared hover.");
             Assert.That(TrackListPanel.IsCandidateHoverEvent(new Event { type = EventType.Layout }), Is.False);
         }
 
