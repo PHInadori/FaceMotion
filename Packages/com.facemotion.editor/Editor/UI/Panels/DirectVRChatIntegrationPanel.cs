@@ -105,7 +105,7 @@ namespace FaceMotion.Editor.UI.Panels
                 for (int i = 0; i < _optionalPlan.Diagnostics.Count; i++)
                 {
                     var diagnostic = _optionalPlan.Diagnostics[i];
-                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), MessageType.Error);
+                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), DiagnosticMessageType(diagnostic));
                 }
                 return;
             }
@@ -116,7 +116,7 @@ namespace FaceMotion.Editor.UI.Panels
                 for (int i = 0; i < _modularAvatarPlan.Diagnostics.Count; i++)
                 {
                     var diagnostic = _modularAvatarPlan.Diagnostics[i];
-                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), diagnostic.Blocking ? MessageType.Error : MessageType.Info);
+                    EditorGUILayout.HelpBox(FormatDiagnostic(diagnostic), DiagnosticMessageType(diagnostic));
                 }
                 using (new EditorGUI.DisabledScope(!_modularAvatarPlan.IsValid || MaBackend == null))
                     if (GUILayout.Button(FaceMotionUiText.Get("applyModularAvatarIntegration")))
@@ -135,7 +135,7 @@ namespace FaceMotion.Editor.UI.Panels
             for (int i = 0; i < _plan.Diagnostics.Count; i++)
             {
                 var d = _plan.Diagnostics[i];
-                EditorGUILayout.HelpBox(FormatDiagnostic(d), d.Blocking ? MessageType.Error : MessageType.Info);
+                EditorGUILayout.HelpBox(FormatDiagnostic(d), DiagnosticMessageType(d));
             }
             using (new EditorGUI.DisabledScope(!_plan.IsValid))
             {
@@ -165,6 +165,17 @@ namespace FaceMotion.Editor.UI.Panels
             bool modularAvatarAvailable)
         {
             return IntegrationBackendSelectionStore.ResolveInitial(hasExplicitSelection, explicitSelection, modularAvatarAvailable);
+        }
+
+        internal static MessageType DiagnosticMessageType(FaceMotionDiagnostic diagnostic)
+        {
+            if (diagnostic == null) return MessageType.None;
+            switch (diagnostic.Severity)
+            {
+                case FaceMotionDiagnosticSeverity.Error: return MessageType.Error;
+                case FaceMotionDiagnosticSeverity.Warning: return MessageType.Warning;
+                default: return MessageType.Info;
+            }
         }
 
         internal static string FormatDiagnostic(

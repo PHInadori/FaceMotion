@@ -25,6 +25,7 @@ namespace FaceMotion.Editor.UI.Panels
         private int _addMode;
         private bool _advancedBlend;
         private bool _advancedTransform;
+        private bool _helpOpen;
         private string _rendererPath;
         private string _blendShapeName;
         private string _transformPath;
@@ -49,6 +50,7 @@ namespace FaceMotion.Editor.UI.Panels
         private bool _blendListDirty = true;
         private readonly Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string> _blendTooltipCache =
             new Dictionary<AvatarCandidateSnapshot.BlendShapeCandidate, string>();
+        private AvatarCandidateSnapshot.BlendShapeCandidate _activeWarningCandidate;
         private FaceMotion.Data.FaceMotionAnimationData _addedBindingsAnimation;
         private HashSet<string> _addedBlendBindings;
 
@@ -69,7 +71,13 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(new GUIContent(FaceMotionUiText.Get("tracks"), FaceMotionUiText.Get("tooltipTrack")), EditorStyles.boldLabel);
+            var state = FaceMotion.Editor.UI.Guidance.FaceMotionWorkflowHintService.Evaluate(_session, false).State;
+            string helpKey = state == FaceMotion.Editor.UI.Guidance.FaceMotionUxState.AddTrack
+                ? "contextHelpAddTrack"
+                : state == FaceMotion.Editor.UI.Guidance.FaceMotionUxState.AddKey
+                    ? "contextHelpAddKey"
+                    : "contextHelpTrack";
+            ContextHelp.DrawHeader("tracks", helpKey, ref _helpOpen);
 
             var animation = _session.GetSelectedAnimation();
             if (animation == null || animation.Timeline == null)
@@ -166,6 +174,10 @@ namespace FaceMotion.Editor.UI.Panels
 
             DrawBlendShapeFilters();
             RefreshBlendView();
+            if (!IsVisibleWarningCandidate(_activeWarningCandidate))
+            {
+                _activeWarningCandidate = null;
+            }
             _blendCandidateScroll = EditorGUILayout.BeginScrollView(_blendCandidateScroll, GUILayout.Height(_blendCandidateSplitter.Height));
             bool hoveringCandidate = false;
             DrawBlendShapeCandidates(_session.GetSelectedAnimation(), ref hoveringCandidate);
@@ -177,7 +189,28 @@ namespace FaceMotion.Editor.UI.Panels
                 ClearHoverPreview();
             }
             _blendCandidateSplitter.Draw(MinimumCandidateListHeight, MaximumCandidateListHeight);
+            if (_activeWarningCandidate != null)
+            {
+                EditorGUILayout.HelpBox(CandidateWarningText(_activeWarningCandidate), MessageType.Warning);
+            }
             DrawBlendShapeFallback();
+        }
+
+        private bool IsVisibleWarningCandidate(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            if (candidate == null || _blendCandidates == null ||
+                !FilterAllowsCandidate(candidate) ||
+                !MatchesCategorySelection(candidate, _blendCategoryFilter, _blendFaceCategoryFilter))
+            {
+                return false;
+            }
+
+            for (int i = 0; i < _blendCandidates.Count; i++)
+            {
+                if (ReferenceEquals(candidate, _blendCandidates[i])) return true;
+            }
+
+            return false;
         }
 
         private void DrawBlendShapeFilters()
@@ -266,9 +299,11 @@ namespace FaceMotion.Editor.UI.Panels
                 }
                 else if (candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning)
                 {
-                    label += " [" + FaceMotionUiText.Get("browserCaution") + "]";
+                    label += " [" + CandidateWarningLabel(candidate) + "]";
                 }
 
+                bool hasWarning = !alreadyAdded && candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning;
+                EditorGUILayout.BeginHorizontal();
                 EditorGUI.BeginDisabledGroup(alreadyAdded);
                 if (GUILayout.Button(new GUIContent(label, CachedTooltip(candidate)), EditorStyles.miniButton))
                 {
@@ -276,13 +311,22 @@ namespace FaceMotion.Editor.UI.Panels
                     _addMode = 0;
                     _previewOverride?.Clear();
                     _addedBindingsAnimation = null;
+                    _activeWarningCandidate = null;
                     GUIUtility.ExitGUI();
                 }
 
                 EditorGUI.EndDisabledGroup();
+                Rect candidateRect = GUILayoutUtility.GetLastRect();
+                if (hasWarning && GUILayout.Button(new GUIContent("?", FaceMotionUiText.Get("contextHelpTooltip")),
+                        EditorStyles.miniButton, GUILayout.Width(24f), GUILayout.Height(20f)))
+                {
+                    _activeWarningCandidate = ReferenceEquals(_activeWarningCandidate, candidate) ? null : candidate;
+                }
+
+                EditorGUILayout.EndHorizontal();
                 Event current = Event.current;
                 if (_previewOverride != null && IsCandidateHoverEvent(current)
-                    && GUILayoutUtility.GetLastRect().Contains(current.mousePosition))
+                    && candidateRect.Contains(current.mousePosition))
                 {
                     SetHoverPreview(candidate.ToBinding());
                     hoveringCandidate = true;
@@ -380,7 +424,42 @@ namespace FaceMotion.Editor.UI.Panels
                     + "\n" + FaceMotionUiText.Get("source") + ": " + candidate.ConflictSource;
             }
 
+            if (candidate.ConflictStatus == AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning)
+            {
+                text += "\n" + CandidateWarningText(candidate);
+            }
+
             return text;
+        }
+
+        internal static string CandidateWarningLabel(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            if (candidate == null || candidate.ConflictStatus != AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning)
+            {
+                return string.Empty;
+            }
+
+            switch (candidate.ConflictReason)
+            {
+                case "Existing FX Animator": return FaceMotionUiText.Get("browserWarningFx");
+                case "Modular Avatar Merge Animator": return FaceMotionUiText.Get("browserWarningMa");
+                default: return FaceMotionUiText.Get("browserWarningOther");
+            }
+        }
+
+        internal static string CandidateWarningText(AvatarCandidateSnapshot.BlendShapeCandidate candidate)
+        {
+            if (candidate == null || candidate.ConflictStatus != AvatarCandidateSnapshot.BlendShapeConflictStatus.Warning)
+            {
+                return string.Empty;
+            }
+
+            switch (candidate.ConflictReason)
+            {
+                case "Existing FX Animator": return FaceMotionUiText.Get("browserWarningFxHelp");
+                case "Modular Avatar Merge Animator": return FaceMotionUiText.Get("browserWarningMaHelp");
+                default: return FaceMotionUiText.Get("browserWarningOtherHelp");
+            }
         }
 
         private void DrawTransformPicker()
@@ -435,6 +514,7 @@ namespace FaceMotion.Editor.UI.Panels
                 _blendListDirty = true;
                 _blendTooltipCache.Clear();
                 _addedBindingsAnimation = null;
+                _activeWarningCandidate = null;
             }
 
             return true;

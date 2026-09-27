@@ -30,6 +30,7 @@ namespace FaceMotion.Editor.UI.Panels
         private string _desiredResultSelectionSignature;
         private readonly ModularAvatarManagedStateCache _managedStateCache;
         private readonly Action<VRCAvatarDescriptor> _refreshAvatarIndexAfterIntegration;
+        private bool _helpOpen;
 
         public OneClickIntegrationPanel(FaceMotionEditorSession session, ModularAvatarManagedStateCache managedStateCache, Action<VRCAvatarDescriptor> refreshAvatarIndexAfterIntegration = null)
         {
@@ -44,16 +45,7 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("vrchatApply"), EditorStyles.boldLabel);
-            var avatar = _session.ActiveAvatarRoot == null
-                ? null
-                : _session.ActiveAvatarRoot.GetComponent<VRCAvatarDescriptor>();
-
-            if (avatar == null)
-            {
-                EditorGUILayout.HelpBox(FaceMotionUiText.Get("selectAvatar"), MessageType.Info);
-            }
-
+            ContextHelp.DrawHeader("vrchatApply", "contextHelpVrchat", ref _helpOpen);
             DrawDesiredState();
             EditorGUILayout.Space();
         }
@@ -112,8 +104,8 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 string reason;
                 if (!backendAvailable) reason = FaceMotionUiText.Get("reflectRequiresModularAvatar");
-                else if (!avatarAvailable) reason = FaceMotionUiText.Get("selectAvatar");
-                else reason = FaceMotionUiText.Get("noProject");
+                else if (!avatarAvailable) reason = FaceMotionUiText.Get("selectAvatarForIntegration");
+                else reason = FaceMotionUiText.Get("selectProjectForIntegration");
                 EditorGUILayout.HelpBox(reason, MessageType.Info);
             }
             else if (count == 0)
@@ -185,7 +177,13 @@ namespace FaceMotion.Editor.UI.Panels
                     break;
             }
 
-            for (var i = 0; i < presentation.TechnicalDetails.Count; i++)
+        }
+
+        private void DrawDesiredStateTechnicalDetails()
+        {
+            if (_desiredResult == null) return;
+            var presentation = DesiredStateResultPresenter.Build(_desiredResult);
+            for (int i = 0; i < presentation.TechnicalDetails.Count; i++)
             {
                 EditorGUILayout.HelpBox(presentation.TechnicalDetails[i], MessageType.Error);
             }
@@ -270,6 +268,7 @@ namespace FaceMotion.Editor.UI.Panels
         /// <summary>Called by the window's single Advanced foldout.</summary>
         public void DrawAdvanced()
         {
+            DrawDesiredStateTechnicalDetails();
             var animation = _session.GetSelectedAnimation();
             if (animation == null)
             {
@@ -291,7 +290,7 @@ namespace FaceMotion.Editor.UI.Panels
             for (int i = 0; i < preflight.Diagnostics.Count; i++)
             {
                 var d = preflight.Diagnostics[i];
-                EditorGUILayout.HelpBox(DirectVRChatIntegrationPanel.FormatDiagnostic(d), d.Blocking ? MessageType.Error : MessageType.Info);
+                EditorGUILayout.HelpBox(DirectVRChatIntegrationPanel.FormatDiagnostic(d), DirectVRChatIntegrationPanel.DiagnosticMessageType(d));
             }
 
             GUILayout.Label(

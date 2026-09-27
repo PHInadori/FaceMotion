@@ -413,19 +413,19 @@ namespace FaceMotion.Editor.UI.Localization
                 new DiagnosticLocalizedFields
                 {
                     Title = "アバターFXの既存アニメーションと対象が競合しています",
-                    Summary = "このAnimationClipが動かす同じ対象を、FaceMotion管理外のアバターFXコントローラーもアニメーションしています。",
+                    Summary = "既存のFX Animatorも同じ表情や動きを操作しているため、FaceMotionを安全に追加できません。",
                     Cause = "同じ相対パス、コンポーネント、property名を持つAnimationClip bindingがアバターFX内に存在します。",
                     Impact = "どちらのアニメーションが優先されるかをFaceMotionが安全に判断できないため、統合は適用されません。アバターや既存アセットは変更されていません。",
-                    Resolution = "Contextに表示されたFXコントローラー、AnimationClip、bindingを確認し、同じ対象を動かす外部bindingを整理してから、もう一度「統合を計画して検証」を実行してください。",
+                    Resolution = "既存のFXアニメーションで重複するBlendShapeやボーンを確認し、重複を調整してから再試行してください。既存の動きを残す場合は、該当アニメーションを反映対象から外してください。対象の詳細は技術情報で確認できます。",
                     Caution = ""
                 },
                 new DiagnosticLocalizedFields
                 {
                     Title = "An existing avatar FX animation targets the same binding",
-                    Summary = "A non-FaceMotion-owned avatar FX controller also animates a target used by this AnimationClip.",
+                    Summary = "An existing FX Animator also moves the same expression or target, so FaceMotion cannot add it safely.",
                     Cause = "An avatar FX clip has an AnimationClip binding with the same relative path, component, and property name.",
                     Impact = "FaceMotion cannot safely determine which animation should win, so integration is not applied. The avatar and existing assets have not been modified.",
-                    Resolution = "Check the FX controller, AnimationClip, and binding shown in Context, resolve the external binding that animates the same target, then run Plan and Validate Integration again.",
+                    Resolution = "Check the existing FX animations for overlapping BlendShapes or bones and adjust them before retrying. To keep the existing motion, leave the conflicting animation unchecked. Technical details identify the target.",
                     Caution = ""
                 });
 

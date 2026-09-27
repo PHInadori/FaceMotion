@@ -24,6 +24,7 @@ namespace FaceMotion.Editor.UI.Panels
         private float _durationBuffer;
         private float _frameRateBuffer;
         private bool _loopBuffer;
+        private bool _helpOpen;
 
         public AnimationListPanel(FaceMotionEditorSession session, AnimationController animation)
         {
@@ -33,7 +34,7 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI()
         {
-            EditorGUILayout.LabelField(FaceMotionUiText.Get("animations"), EditorStyles.boldLabel);
+            ContextHelp.DrawHeader("animations", "contextHelpAnimation", ref _helpOpen);
 
             // Unity can refresh a serialized project while this IMGUI event is drawing. Render a
             // stable snapshot so a list shrink cannot invalidate an already observed count.

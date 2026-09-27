@@ -23,6 +23,7 @@ namespace FaceMotion.Editor.UI.Panels
         private readonly Action _ensureAvatarIndex;
         private readonly Action _previewRebuilt;
         private int _lastOverrideChangeCount;
+        private bool _helpOpen;
 
         public PreviewPanel(FaceMotionEditorSession session, PreviewSession preview, SceneApplySession sceneApply, PreviewPlaybackController playback, Action ensureAvatarIndex = null, Action previewRebuilt = null)
         {
@@ -36,9 +37,21 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI(Rect assignedRect, bool textControlOwnsKeyboard = false)
         {
-            var layout = CalculateLayout(assignedRect);
+            var layout = CalculateLayout(assignedRect, _helpOpen);
             GUI.Label(layout.HeaderRect, FaceMotionUiText.Get("preview"), EditorStyles.boldLabel);
-            GUI.Label(new Rect(layout.HeaderRect.x + 65f, layout.HeaderRect.y, layout.HeaderRect.width - 65f, HeaderHeight), FaceMotionUiText.Get("previewIsolation"), EditorStyles.miniLabel);
+            GUI.Label(new Rect(layout.HeaderRect.x + 65f, layout.HeaderRect.y, Mathf.Max(0f, layout.HeaderRect.width - 93f), HeaderHeight), FaceMotionUiText.Get("previewIsolation"), EditorStyles.miniLabel);
+            Rect helpButton = new Rect(layout.HeaderRect.xMax - 24f, layout.HeaderRect.y, 24f, HeaderHeight);
+            if (GUI.Button(helpButton, new GUIContent("?", FaceMotionUiText.Get("contextHelpTooltip")), EditorStyles.miniButton))
+            {
+                _helpOpen = ContextHelp.Toggle(_helpOpen);
+            }
+
+            if (_helpOpen)
+            {
+                EditorGUI.HelpBox(new Rect(layout.HeaderRect.x, layout.HeaderRect.yMax + Padding,
+                    layout.HeaderRect.width, HelpHeight(layout.HeaderRect.width)), ContextHelp.Text("contextHelpPreview"), MessageType.Info);
+            }
+
             if (_session.ActiveAvatarRoot == null)
             {
                 EditorGUI.HelpBox(layout.RenderRect, FaceMotionUiText.Get("selectAvatarToPreview"), MessageType.Info);
@@ -170,15 +183,22 @@ namespace FaceMotion.Editor.UI.Panels
             return StartPlayback();
         }
 
-        public static PreviewPanelLayout CalculateLayout(Rect assignedRect)
+        public static PreviewPanelLayout CalculateLayout(Rect assignedRect, bool showHelp = false,
+            SystemLanguage language = SystemLanguage.Japanese)
         {
             float width = Mathf.Max(0f, assignedRect.width - Padding * 2f);
             var header = new Rect(assignedRect.x + Padding, assignedRect.y + Padding, width, HeaderHeight);
-            float controlsY = header.yMax + Padding;
+            float controlsY = header.yMax + Padding + (showHelp ? HelpHeight(width, language) + Padding : 0f);
             PreviewControlsLayout controlLayout = CalculateControlsLayout(new Rect(header.x, controlsY, width, 0f));
             var controls = new Rect(header.x, controlsY, width, Mathf.Max(ControlsHeight, controlLayout.Height));
             var render = new Rect(controls.x, controls.yMax + Padding, width, Mathf.Max(0f, assignedRect.yMax - (controls.yMax + Padding)));
             return new PreviewPanelLayout(header, controls, render);
+        }
+
+        internal static float HelpHeight(float width, SystemLanguage language = SystemLanguage.Japanese)
+        {
+            string text = FaceMotionUiText.Get("contextHelpPreview", language);
+            return Mathf.Ceil(Mathf.Max(1f, text.Length) / Mathf.Max(1f, (width - 32f) / 16f)) * 16f + 16f;
         }
 
         internal static PreviewControlsLayout CalculateControlsLayout(Rect controlsRect)

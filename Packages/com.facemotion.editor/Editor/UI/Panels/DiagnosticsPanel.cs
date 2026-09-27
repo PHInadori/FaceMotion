@@ -10,7 +10,7 @@ namespace FaceMotion.Editor.UI.Panels
 {
     /// <summary>
     /// Diagnostics list with a drill-down detail view. Rows show severity icon, title,
-    /// summary, action level, and code. The detail view keeps user-facing guidance separate
+    /// summary and action level. The detail view keeps user-facing guidance separate
     /// from the raw generator message, which is available in a collapsed technical foldout.
     /// The "Select" button never mutates anything: it only highlights the resolved object in
     /// the Hierarchy.
@@ -98,11 +98,6 @@ namespace FaceMotion.Editor.UI.Panels
             GUILayout.FlexibleSpace();
             GUILayout.Label(p.ActionLevelText, EditorStyles.miniLabel);
 
-            if (GUILayout.Button(p.Code, EditorStyles.miniLabel))
-            {
-                Copy(p);
-            }
-
             if (GUILayout.Button(CopyLabel(p), EditorStyles.miniButton))
             {
                 Copy(p);
@@ -133,7 +128,6 @@ namespace FaceMotion.Editor.UI.Panels
 
             EditorGUILayout.LabelField(p.Title, EditorStyles.boldLabel);
 
-            DrawField(Text("diagnosticCode"), p.Code);
             DrawField(Text("severity"), p.SeverityText);
             DrawField(Text("actionLevel"), p.ActionLevelText);
             DrawField(Text("context"), p.ContextId);

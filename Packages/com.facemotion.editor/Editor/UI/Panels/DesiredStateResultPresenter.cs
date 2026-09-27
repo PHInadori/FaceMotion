@@ -10,12 +10,13 @@ namespace FaceMotion.Editor.UI.Panels
     /// <summary>Immutable presentation model for the single beginner-facing update result.</summary>
     public sealed class DesiredStateResultPresentation
     {
-        public DesiredStateResultPresentation(DesiredStateResultKind kind, string titleKey, int appliedCount, bool hasBindingConflict, string conflictObjectName, IReadOnlyList<string> technicalDetails)
+        public DesiredStateResultPresentation(DesiredStateResultKind kind, string titleKey, int appliedCount, bool hasBindingConflict, bool hasCrossBindingConflict, string conflictObjectName, IReadOnlyList<string> technicalDetails)
         {
             Kind = kind;
             TitleKey = titleKey ?? string.Empty;
             AppliedCount = appliedCount;
             HasBindingConflict = hasBindingConflict;
+            HasCrossBindingConflict = hasCrossBindingConflict;
             ConflictObjectName = conflictObjectName ?? string.Empty;
             TechnicalDetails = technicalDetails ?? Array.Empty<string>();
         }
@@ -24,6 +25,7 @@ namespace FaceMotion.Editor.UI.Panels
         public string TitleKey { get; }
         public int AppliedCount { get; }
         public bool HasBindingConflict { get; }
+        public bool HasCrossBindingConflict { get; }
         public string ConflictObjectName { get; }
         public IReadOnlyList<string> TechnicalDetails { get; }
     }
@@ -48,6 +50,7 @@ namespace FaceMotion.Editor.UI.Panels
         public const string TitleFailed = "resultGenericFailed";
         public const string ConflictBeginnerGeneric = "conflictBindingBeginner";
         public const string ConflictBeginnerNamed = "conflictBindingOther";
+        public const string ConflictBeginnerFx = "conflictBindingFx";
 
         public static DesiredStateResultPresentation Build(VrchatDesiredStateReconciliationResult result)
         {
@@ -55,6 +58,7 @@ namespace FaceMotion.Editor.UI.Panels
             int removes = 0;
             int keeps = 0;
             bool hasBindingConflict = false;
+            bool hasCrossBindingConflict = false;
             string conflictObjectName = string.Empty;
             IReadOnlyList<FaceMotionDiagnostic> diagnostics = result == null ? null : result.Diagnostics;
             if (diagnostics != null)
@@ -68,6 +72,10 @@ namespace FaceMotion.Editor.UI.Panels
                     }
 
                     hasBindingConflict = true;
+                    if (diagnostic.Code == FaceMotionDiagnosticCodes.ModularAvatarCrossBindingConflict)
+                    {
+                        hasCrossBindingConflict = true;
+                    }
                     if (string.IsNullOrEmpty(conflictObjectName))
                     {
                         conflictObjectName = ResolveConflictObjectName(diagnostic);
@@ -152,11 +160,17 @@ namespace FaceMotion.Editor.UI.Panels
                 }
             }
 
-            return new DesiredStateResultPresentation(kind, titleKey, adds, hasBindingConflict, conflictObjectName, technical);
+            return new DesiredStateResultPresentation(kind, titleKey, adds, hasBindingConflict,
+                hasCrossBindingConflict, hasCrossBindingConflict ? string.Empty : conflictObjectName, technical);
         }
 
         public static string ConflictBeginnerKey(DesiredStateResultPresentation presentation)
         {
+            if (presentation != null && presentation.HasCrossBindingConflict)
+            {
+                return ConflictBeginnerFx;
+            }
+
             return string.IsNullOrEmpty(presentation == null ? string.Empty : presentation.ConflictObjectName)
                 ? ConflictBeginnerGeneric
                 : ConflictBeginnerNamed;

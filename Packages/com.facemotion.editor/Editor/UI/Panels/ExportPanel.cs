@@ -46,7 +46,7 @@ namespace FaceMotion.Editor.UI.Panels
             {
                 var diagnostic = validation.Diagnostics[i];
                 string message = FaceMotionUiText.FormatDiagnostic(diagnostic.Code, diagnostic.Message, diagnostic.SuggestedFix);
-                EditorGUILayout.HelpBox(message, diagnostic.Blocking ? MessageType.Error : MessageType.Warning);
+                EditorGUILayout.HelpBox(message, DirectVRChatIntegrationPanel.DiagnosticMessageType(diagnostic));
             }
             using (new EditorGUI.DisabledScope(!validation.IsValid))
             {
