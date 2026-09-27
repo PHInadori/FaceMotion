@@ -21,6 +21,7 @@ namespace FaceMotion.Editor.UI.Timeline
         private readonly TrackController _tracks;
         private readonly TimelineInputHandler _input;
         private string _lastAnimationId;
+        private int _pointerControlId;
 
         public float LabelWidth = TimelineGeometry.DefaultLabelWidth;
 
@@ -105,7 +106,9 @@ namespace FaceMotion.Editor.UI.Timeline
 
             Event current = Event.current;
             // A stable hint preserves capture when selection changes alter earlier IMGUI controls.
-            int pointerControlId = GUIUtility.GetControlID(PointerControlHint, FocusType.Passive, rect);
+            int allocatedControlId = GUIUtility.GetControlID(PointerControlHint, FocusType.Passive, rect);
+            int pointerControlId = ResolvePointerControlId(allocatedControlId, GUIUtility.hotControl, _pointerControlId);
+            _pointerControlId = pointerControlId;
             bool routed = RoutePointerEvent(current, pointerControlId, rect, _input, _session.ViewState, plotRect, layout, textControlOwnsKeyboard);
 
             if (routed)
@@ -114,6 +117,21 @@ namespace FaceMotion.Editor.UI.Timeline
             }
 
             TimelineRenderer.Draw(rect, layout, _session.ViewState, _session.Selection);
+        }
+
+        /// <summary>
+        /// Freezes the pointer control ID for as long as this view owns the pointer hot
+        /// control. IMGUI allocates fresh control IDs every pass, and the allocation shifts
+        /// when earlier controls change (startup avatar/panel churn, selection changes).
+        /// Rebinding mid-gesture would make the MouseUp ownership check fail and cancel a
+        /// valid gesture — including an already completed key move, whose cancel path
+        /// reverts the undo group. Pure state rule (ownership identity), never timing.
+        /// </summary>
+        internal static int ResolvePointerControlId(int allocatedControlId, int hotControl, int currentPointerControlId)
+        {
+            return hotControl != 0 && hotControl == currentPointerControlId
+                ? currentPointerControlId
+                : allocatedControlId;
         }
 
         /// <summary>

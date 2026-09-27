@@ -165,6 +165,53 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void Session_ValidateSelections_KeepsValidKeysWhenTrackSelectionIsMissing()
+        {
+            var project = CreateProject(_temp, "SessionKeyKeep");
+            _session.SetActiveProject(project, "a.asset");
+            _animations.Add();
+            var animation = _session.GetSelectedAnimation();
+            var track = FaceTrackData.CreateBlendShape("Body/Face", "Mouth_Smile");
+            animation.Timeline.AddTrack(track);
+            _tracks.Select(track.TrackId);
+            string keyId = _keys.AddKeyAt(1f, 50f, Vector3.zero, InterpolationType.Linear);
+            Assert.That(keyId, Is.Not.Null);
+
+            // Window-open state: no track row has been clicked yet, so no track is selected.
+            _session.SelectedTrackId = null;
+            _session.Selection.SetSelection(new[] { keyId, "dead-key" });
+
+            _session.ValidateSelections();
+
+            Assert.That(_session.SelectedTrackId, Is.Null);
+            Assert.That(_session.Selection.Contains(keyId), Is.True, "a valid key must survive a missing track selection");
+            Assert.That(_session.Selection.Contains("dead-key"), Is.False, "IDs no longer in the animation must still be pruned");
+        }
+
+        [Test]
+        public void Session_RefreshAfterUndo_KeepsKeySelectionWhenNoTrackSelected()
+        {
+            var project = CreateProject(_temp, "SessionUndoKeyKeep");
+            _session.SetActiveProject(project, "a.asset");
+            _animations.Add();
+            var animation = _session.GetSelectedAnimation();
+            var track = FaceTrackData.CreateBlendShape("Body/Face", "Mouth_Smile");
+            animation.Timeline.AddTrack(track);
+            _tracks.Select(track.TrackId);
+            string keyId = _keys.AddKeyAt(0.5f, 50f, Vector3.zero, InterpolationType.Linear);
+
+            // A pointer-gesture cancel rolls back an empty undo group, which fires the
+            // session's undo refresh. With no track selected that refresh must not drop
+            // the key selection the user just made.
+            _session.SelectedTrackId = null;
+            _session.Selection.SetSingle(keyId);
+            _session.RefreshAfterUndo();
+
+            Assert.That(_session.Selection.Contains(keyId), Is.True);
+            Assert.That(_session.SelectedTrackId, Is.Null);
+        }
+
+        [Test]
         public void AnimationListSnapshot_RemainsReadableWhenTheSourceListShrinks()
         {
             var source = new List<FaceMotionAnimationData> { null, null };

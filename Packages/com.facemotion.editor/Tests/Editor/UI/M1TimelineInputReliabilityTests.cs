@@ -480,6 +480,50 @@ namespace FaceMotion.Editor.Tests
             }
         }
 
+        [Test]
+        public void TEST22_PointerControlId_FrozenWhileGestureOwned()
+        {
+            Assert.That(
+                TimelineView.ResolvePointerControlId(7011, 0, 0),
+                Is.EqualTo(7011),
+                "no pointer capture yet -> adopt the fresh allocation");
+
+            Assert.That(
+                TimelineView.ResolvePointerControlId(7777, 7011, 7011),
+                Is.EqualTo(7011),
+                "this view owns the gesture -> the captured ID must survive an allocation shift");
+
+            Assert.That(
+                TimelineView.ResolvePointerControlId(7777, 4242, 7011),
+                Is.EqualTo(7777),
+                "a foreign hot control -> adopt the fresh allocation");
+        }
+
+        [Test]
+        public void TEST23_MouseUpAfterControlIdShift_KeepsOwnershipAndSelection()
+        {
+            SetupTimeline();
+            string trackId = AddBlendTrack("Smile");
+            string keyId = AddKey(trackId, 0.5f);
+            TimelineLayoutSnapshot layout = BuildLayout();
+            float x = KeyX(layout, 0.5f);
+            float y = RowY(layout, trackId);
+
+            int pointerId = TimelineView.ResolvePointerControlId(7011, GUIUtility.hotControl, 0);
+            Assert.That(Route(Pointer(EventType.MouseDown, x, y), layout, false, pointerId), Is.True);
+            Assert.That(_session.ViewState.DragMode, Is.EqualTo(TimelineDragMode.MoveKeys));
+            Assert.That(_session.Selection.Contains(keyId), Is.True);
+            Assert.That(GUIUtility.hotControl, Is.EqualTo(pointerId));
+
+            int shiftedId = TimelineView.ResolvePointerControlId(7777, GUIUtility.hotControl, pointerId);
+            Assert.That(shiftedId, Is.EqualTo(pointerId), "capture must not rebind when earlier control counts shift");
+
+            Assert.That(Route(Pointer(EventType.MouseUp, x, y), layout, false, shiftedId), Is.True);
+            Assert.That(_session.ViewState.DragMode, Is.EqualTo(TimelineDragMode.None));
+            Assert.That(GUIUtility.hotControl, Is.Zero);
+            Assert.That(_session.Selection.Contains(keyId), Is.True, "a completed click must keep its selection");
+        }
+
         private void SetupTimeline(float duration = 1f, float frameRate = 60f)
         {
             var project = FaceMotionProject.CreateNew();
@@ -551,11 +595,11 @@ namespace FaceMotion.Editor.Tests
             return _input.HandleEvent(e, eventType, PlotRect(layout), layout, false);
         }
 
-        private bool Route(Event e, TimelineLayoutSnapshot layout, bool textControlOwnsKeyboard = false)
+        private bool Route(Event e, TimelineLayoutSnapshot layout, bool textControlOwnsKeyboard = false, int controlId = 7011)
         {
             return TimelineView.RoutePointerEvent(
                 e,
-                7011,
+                controlId,
                 new Rect(0f, 0f, 980f, 300f),
                 _input,
                 _session.ViewState,

@@ -253,18 +253,14 @@ namespace FaceMotion.Editor.UI.Session
             if (animation == null) return;
 
             if (string.IsNullOrEmpty(SelectedTrackId)
-                || !animation.Timeline.TryGetTrack(SelectedTrackId, out var track))
+                || !animation.Timeline.TryGetTrack(SelectedTrackId, out var track)
+                || track == null)
             {
+                // The key selection is animation-scoped stable IDs (ADR-013): a missing or
+                // stale track selection (e.g. right after window open, before any track row
+                // click) must not cascade into dropping valid keys. Only the track selection
+                // is reset here; dead key IDs are pruned below against the animation.
                 SelectedTrackId = null;
-                Selection.Clear();
-                return;
-            }
-
-            if (track == null)
-            {
-                SelectedTrackId = null;
-                Selection.Clear();
-                return;
             }
 
             Selection.Prune(ExistsInAnimation(animation));
