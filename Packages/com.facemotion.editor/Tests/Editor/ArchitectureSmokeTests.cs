@@ -1,16 +1,45 @@
 using System.IO;
+using System.Reflection;
 using FaceMotion.Diagnostics;
+using FaceMotion.Editor.UI.Diagnostics;
+using FaceMotion.Editor.UI.Window;
 using FaceMotion.Versioning;
 using NUnit.Framework;
 using UnityEditor.PackageManager;
 using UnityEngine;
 using VRC.SDK3.Avatars.Components;
 using VRC.SDK3.Avatars.ScriptableObjects;
+using MenuItem = UnityEditor.MenuItem;
 
 namespace FaceMotion.Editor.Tests
 {
     public sealed class ArchitectureSmokeTests
     {
+        [Test]
+        public void PerformanceProbe_HasNoPublicBenchmarkMenuItem()
+        {
+            MethodInfo run = typeof(PerformanceProbe).GetMethod("Run", BindingFlags.Public | BindingFlags.Static);
+            Assert.That(run, Is.Not.Null);
+            Assert.That(run.GetCustomAttributes(typeof(MenuItem), false), Is.Empty,
+                "The batch-only probe must not be available from ordinary Unity menus.");
+        }
+
+        [Test]
+        public void PerformanceProbe_ImplementationStillExists()
+        {
+            Assert.That(typeof(PerformanceProbe).GetMethod("Run", BindingFlags.Public | BindingFlags.Static), Is.Not.Null);
+            Assert.That(typeof(PerformanceProbe).GetMethod("RunCore", BindingFlags.NonPublic | BindingFlags.Static), Is.Not.Null);
+            // Metadata inspection only: invoking Run would exit the Unity Editor.
+        }
+
+        [Test]
+        public void FaceMotionWindow_StillHasItsMenuEntry()
+        {
+            MethodInfo open = typeof(FaceMotionWindow).GetMethod("OpenWindow", BindingFlags.Public | BindingFlags.Static);
+            Assert.That(open, Is.Not.Null);
+            Assert.That(open.GetCustomAttributes(typeof(MenuItem), false), Has.Length.EqualTo(1));
+        }
+
         [Test]
         public void Versions_StartAtDefinedValues()
         {

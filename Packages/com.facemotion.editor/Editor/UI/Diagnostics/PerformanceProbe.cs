@@ -22,7 +22,6 @@ namespace FaceMotion.Editor.UI.Diagnostics
     {
         private const string OutputRelative = "opencode\\komane-perf.json";
 
-        [MenuItem("Tools/FaceMotion/Diagnostics/Benchmark Avatar")]
         public static void Run()
         {
             try
