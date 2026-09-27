@@ -331,7 +331,8 @@ namespace FaceMotion.Editor.UI.Panels
             return layout;
         }
 
-        private static float ButtonWidth(string localizationKey, SystemLanguage language = SystemLanguage.Japanese)
+        // Internal (not private) so layout tests can assert the Play/Pause max-reservation contract.
+        internal static float ButtonWidth(string localizationKey, SystemLanguage language = SystemLanguage.Japanese)
         {
             string label = FaceMotionUiText.Get(localizationKey, language);
             if (Event.current == null)

@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using FaceMotion.Editor.UI.Localization;
 using FaceMotion.Editor.UI.Panels;
 using NUnit.Framework;
@@ -36,7 +39,9 @@ namespace FaceMotion.Editor.Tests
             "contextHelpPreview",
         };
 
-        private static readonly float[] HeaderWidths = { 537f, 400f, 320f, 180f, 100f };
+        private static readonly float[] HeaderWidths = { 1200f, 900f, 700f, 537f, 500f, 400f, 320f, 180f, 100f };
+
+        private static readonly float[] MatrixWidths = { 1200f, 900f, 700f, 500f, 400f, 320f };
 
         [Test]
         public void PreviewLocalizationKeys_ResolveInJapaneseAndEnglish_WithoutKeyFallback()
@@ -441,6 +446,181 @@ namespace FaceMotion.Editor.Tests
             AssertRect(layout.RenderRect, $"no-avatar render at {width}");
             Assert.That(layout.HeaderRect.yMax, Is.LessThanOrEqualTo(layout.ControlsRect.y + 0.001f), $"{width}");
             Assert.That(layout.ControlsRect.yMax, Is.LessThanOrEqualTo(layout.RenderRect.y + 0.001f), $"{width}");
+        }
+
+        [TestCase(1200f)]
+        [TestCase(900f)]
+        [TestCase(700f)]
+        [TestCase(500f)]
+        [TestCase(400f)]
+        [TestCase(320f)]
+        public void ResponsiveMatrix_AllStatesAndLanguages_StayValid(float width)
+        {
+            foreach (SystemLanguage language in new[] { SystemLanguage.Japanese, SystemLanguage.English })
+            {
+                foreach (bool previewActive in new[] { false, true })
+                {
+                    // No avatar: nothing is drawn, so nothing may be reserved.
+                    PreviewPanelLayout empty = PreviewPanel.CalculateLayout(new Rect(0f, 0f, width, 400f),
+                        false, language, previewActive, false);
+                    Assert.That(empty.ControlsRect.height, Is.Zero,
+                        $"no-avatar height at {width} {language} active={previewActive}");
+                    AssertPanelGeometryValid(empty, $"no-avatar {width} {language} active={previewActive}");
+
+                    // Selected avatar: geometry, containment, non-overlap, and order for visible rows.
+                    PreviewPanelLayout layout = PreviewPanel.CalculateLayout(new Rect(0f, 0f, width, 400f),
+                        false, language, previewActive, true);
+                    PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(
+                        layout.ControlsRect, previewActive, language);
+                    AssertPanelGeometryValid(layout, $"selected {width} {language} active={previewActive}");
+                    AssertControlsValid(layout, controls, previewActive,
+                        $"selected {width} {language} active={previewActive}");
+                }
+            }
+        }
+
+        [TestCase(SystemLanguage.Japanese)]
+        [TestCase(SystemLanguage.English)]
+        public void Controls_PlayPauseReservation_PreventsStateShift(SystemLanguage language)
+        {
+            // The Play slot reserves max(play, pause) for both labels, so switching state
+            // can never change the row allocation or move any neighboring control.
+            float reserved = Mathf.Max(
+                PreviewPanel.ButtonWidth("previewPlay", language),
+                PreviewPanel.ButtonWidth("previewPause", language));
+            Assert.That(PreviewPanel.ButtonWidth("previewPlay", language), Is.LessThanOrEqualTo(reserved + 0.001f));
+            Assert.That(PreviewPanel.ButtonWidth("previewPause", language), Is.LessThanOrEqualTo(reserved + 0.001f));
+
+            foreach (float width in new[] { 500f, 320f })
+            {
+                PreviewPanelLayout layout = PreviewPanel.CalculateLayout(new Rect(0f, 0f, width, 400f),
+                    false, language, true, true);
+                PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(layout.ControlsRect, true, language);
+
+                Assert.That(controls.Play.width, Is.EqualTo(reserved).Within(0.001f),
+                    $"{width} {language}");
+                Assert.That(controls.PlaybackStop.x,
+                    Is.EqualTo(controls.Play.xMax + PreviewPanel.ControlSpacing).Within(0.001f),
+                    $"{width} {language}");
+            }
+        }
+
+        [Test]
+        public void PureLayout_HelpersAcceptNoPlaybackStateInputs()
+        {
+            // Disabled playback (BeginDisabledGroup around Play/Pause) is interaction-only:
+            // no layout helper may take playback/session/domain state, so CanPlay, IsPlaying,
+            // or any avatar scan cannot influence geometry.
+            MethodInfo calculateLayout = typeof(PreviewPanel).GetMethod("CalculateLayout",
+                BindingFlags.Public | BindingFlags.Static);
+            Assert.That(calculateLayout, Is.Not.Null);
+            ParameterInfo[] layoutParams = calculateLayout.GetParameters();
+            Assert.That(
+                string.Join(",", layoutParams.Select(p => p.ParameterType.Name)),
+                Is.EqualTo("Rect,Boolean,SystemLanguage,Boolean,Boolean"));
+            Assert.That(layoutParams[3].Name, Is.EqualTo("previewActive"));
+            Assert.That(layoutParams[4].Name, Is.EqualTo("hasAvatar"));
+
+            MethodInfo controlsLayout = typeof(PreviewPanel).GetMethod("CalculateControlsLayout",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(controlsLayout, Is.Not.Null);
+            ParameterInfo[] controlsParams = controlsLayout.GetParameters();
+            Assert.That(
+                string.Join(",", controlsParams.Select(p => p.ParameterType.Name)),
+                Is.EqualTo("Rect,Boolean,SystemLanguage"));
+
+            foreach (Type type in layoutParams.Select(p => p.ParameterType)
+                         .Concat(controlsParams.Select(p => p.ParameterType)))
+            {
+                Assert.That(type.Name,
+                    Does.Not.Contain("Playback").And.Not.Contain("Session").And.Not.Contain("Controller"));
+            }
+        }
+
+        [TestCase(1200f)]
+        [TestCase(900f)]
+        [TestCase(700f)]
+        [TestCase(500f)]
+        [TestCase(400f)]
+        [TestCase(320f)]
+        public void HelpHeight_ReservesSpaceWithoutOverlap_AcrossMatrix(float width)
+        {
+            foreach (SystemLanguage language in new[] { SystemLanguage.Japanese, SystemLanguage.English })
+            {
+                foreach (bool hasAvatar in new[] { false, true })
+                {
+                    string context = $"width {width} {language} hasAvatar={hasAvatar}";
+                    PreviewPanelLayout layout = PreviewPanel.CalculateLayout(new Rect(0f, 0f, width, 400f),
+                        true, language, false, hasAvatar);
+
+                    float helpHeight = PreviewPanel.HelpHeight(layout.HeaderRect.width, language);
+                    Assert.That(helpHeight, Is.GreaterThan(0f), context);
+                    Assert.That(float.IsNaN(helpHeight), Is.False, context);
+                    Assert.That(float.IsInfinity(helpHeight), Is.False, context);
+                    Assert.That(layout.HeaderRect.width, Is.GreaterThanOrEqualTo(0f), context);
+
+                    // The help box occupies exactly [header.yMax+Padding, +HelpHeight] and the
+                    // controls row starts one Padding below it — no overlap in either direction.
+                    float helpBottom = layout.HeaderRect.yMax + PreviewPanel.Padding + helpHeight;
+                    Assert.That(layout.ControlsRect.y, Is.GreaterThanOrEqualTo(helpBottom + 0.001f), context);
+                    Assert.That(layout.ControlsRect.yMax,
+                        Is.LessThanOrEqualTo(layout.RenderRect.y + 0.001f), context);
+                    Assert.That(layout.RenderRect.height, Is.GreaterThanOrEqualTo(0f), context);
+                }
+            }
+        }
+
+        private static void AssertPanelGeometryValid(PreviewPanelLayout layout, string context)
+        {
+            AssertRect(layout.HeaderRect, context + " header");
+            AssertRect(layout.ControlsRect, context + " controls");
+            AssertRect(layout.RenderRect, context + " render");
+            Assert.That(layout.HeaderRect.yMax, Is.LessThanOrEqualTo(layout.ControlsRect.y + 0.001f), context);
+            Assert.That(layout.ControlsRect.yMax, Is.LessThanOrEqualTo(layout.RenderRect.y + 0.001f), context);
+            Assert.That(layout.RenderRect.height, Is.GreaterThanOrEqualTo(0f), context);
+        }
+
+        private static void AssertControlsValid(PreviewPanelLayout layout, PreviewControlsLayout controls,
+            bool includePlayback, string context)
+        {
+            Rect[] rects = includePlayback
+                ? VisibleControlRects(controls)
+                : new[] { controls.Start, controls.StopPreview, controls.SceneApply };
+            Rect bounds = layout.ControlsRect;
+
+            foreach (Rect rect in rects)
+            {
+                AssertRect(rect, context);
+                Assert.That(rect.xMin, Is.GreaterThanOrEqualTo(bounds.xMin - 0.001f), $"{context}: {rect}");
+                Assert.That(rect.xMax, Is.LessThanOrEqualTo(bounds.xMax + 0.001f), $"{context}: {rect}");
+                Assert.That(rect.yMax, Is.LessThanOrEqualTo(bounds.yMax + 0.001f), $"{context}: {rect}");
+            }
+
+            for (int i = 0; i < rects.Length; i++)
+            {
+                for (int j = i + 1; j < rects.Length; j++)
+                {
+                    if (Mathf.Abs(rects[i].y - rects[j].y) > 0.001f)
+                    {
+                        continue;
+                    }
+
+                    bool separated = rects[i].xMax <= rects[j].xMin + 0.001f
+                                     || rects[j].xMax <= rects[i].xMin + 0.001f;
+                    Assert.That(separated, Is.True, $"{context}: overlap {rects[i]} vs {rects[j]}");
+                }
+            }
+
+            for (int i = 1; i < rects.Length; i++)
+            {
+                bool laterRow = rects[i].y > rects[i - 1].y + 0.001f;
+                bool sameRowFurtherRight = Mathf.Abs(rects[i].y - rects[i - 1].y) <= 0.001f
+                                           && rects[i].x > rects[i - 1].x + 0.001f;
+                Assert.That(laterRow || sameRowFurtherRight, Is.True,
+                    $"{context}: order broken between {rects[i - 1]} and {rects[i]}");
+            }
+
+            Assert.That(layout.RenderRect.y, Is.GreaterThanOrEqualTo(bounds.yMax), context);
         }
 
         private static Rect[] VisibleControlRects(PreviewControlsLayout controls)
