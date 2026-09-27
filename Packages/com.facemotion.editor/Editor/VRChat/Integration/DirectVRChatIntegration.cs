@@ -459,8 +459,83 @@ namespace FaceMotion.Editor.VRChat.Integration
                 for (int i = 0; i < batch.Items.Length; i++)
                     if (batch.Items[i] != null && !string.IsNullOrEmpty(batch.Items[i].ClipPath) && string.Equals(batch.Items[i].ClipPath, clipPath, StringComparison.Ordinal))
                         return batch.Items[i].ParameterName;
+                return FindBatchGeneratedClipOwner(batch, batch.GeneratedFx, clipPath);
             }
             return null;
+        }
+
+        /// <summary>
+        /// Shipped Direct batch manifests record source clips in Items but record generated
+        /// reset clips only in OwnedAssetPaths. Trust a reset only when the current, manifest-
+        /// owned FX references it in the Off state of exactly one item-owned layer whose On
+        /// state still references that item's source clip. Never infer ownership from a name.
+        /// </summary>
+        private static string FindBatchGeneratedClipOwner(DirectBatchIntegrationManifest batch, AnimatorController fx, string clipPath)
+        {
+            if (string.IsNullOrEmpty(clipPath) || batch.OwnedAssetPaths == null) return null;
+            string root = Path.GetDirectoryName(AssetDatabase.GetAssetPath(batch))?.Replace('\\', '/');
+            if (!GeneratedAssetOwnership.IsSafeOwnedAssetPath(clipPath, root)) return null;
+            string fxPath = AssetDatabase.GetAssetPath(fx);
+            bool ownsClip = false;
+            bool ownsFx = false;
+            foreach (string path in batch.OwnedAssetPaths)
+            {
+                ownsClip |= string.Equals(path, clipPath, StringComparison.Ordinal);
+                ownsFx |= string.Equals(path, fxPath, StringComparison.Ordinal);
+            }
+            if (!ownsClip || !ownsFx) return null;
+
+            string owner = null;
+            var layers = fx.layers;
+            foreach (var layer in layers)
+            {
+                if (layer == null || layer.stateMachine == null) continue;
+                bool hasReset = false;
+                foreach (var child in layer.stateMachine.states)
+                {
+                    var state = child.state;
+                    var motion = state == null ? null : state.motion as AnimationClip;
+                    if (motion == null || !string.Equals(AssetDatabase.GetAssetPath(motion), clipPath, StringComparison.Ordinal)) continue;
+                    // Another use of this clip (even in the same layer) is ambiguous.
+                    if (hasReset || !string.Equals(state.name, "Off", StringComparison.Ordinal)) return null;
+                    hasReset = true;
+                }
+                if (!hasReset) continue;
+                if (owner != null) return null;
+
+                DirectBatchIntegrationManifest.Item item = null;
+                foreach (var candidate in batch.Items)
+                {
+                    if (candidate == null || !string.Equals(candidate.LayerName, layer.name, StringComparison.Ordinal)) continue;
+                    if (item != null) return null;
+                    item = candidate;
+                }
+                if (item == null || string.IsNullOrEmpty(item.ParameterName) || string.IsNullOrEmpty(item.ClipPath)
+                    || string.Equals(item.ClipPath, clipPath, StringComparison.Ordinal)) return null;
+
+                // A duplicate layer name cannot be mapped unambiguously to the manifest item.
+                foreach (var other in layers)
+                    if (other != layer && other != null && string.Equals(other.name, layer.name, StringComparison.Ordinal)) return null;
+
+                bool sourceInOnState = false;
+                foreach (var child in layer.stateMachine.states)
+                {
+                    var state = child.state;
+                    var motion = state == null ? null : state.motion as AnimationClip;
+                    if (state == null || !string.Equals(state.name, "On", StringComparison.Ordinal) || motion == null
+                        || !string.Equals(AssetDatabase.GetAssetPath(motion), item.ClipPath, StringComparison.Ordinal)) continue;
+                    if (sourceInOnState) return null;
+                    sourceInOnState = true;
+                }
+                if (!sourceInOnState) return null;
+
+                bool parameterInFx = false;
+                foreach (var parameter in fx.parameters)
+                    if (string.Equals(parameter.name, item.ParameterName, StringComparison.Ordinal)) parameterInFx = true;
+                if (!parameterInFx) return null;
+                owner = item.ParameterName;
+            }
+            return owner;
         }
 
         private static bool SingleFxContainsClip(RuntimeAnimatorController controller, AnimationClip clip, string clipPath, string parameterName)

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using FaceMotion.Editor.VRChat.Integration;
 using NUnit.Framework;
@@ -13,6 +15,8 @@ namespace FaceMotion.Editor.Tests
     public sealed class DirectVRChatIntegrationTests
     {
         private const string Folder = "Assets/__FaceMotionTests_G";
+        private const string BatchManifestScript = "Packages/com.facemotion.editor/Editor/VRChat/Integration/DirectBatchIntegrationManifest.cs";
+        private const string ShippedBatchManifestGuid = "2324bd352b7a99d4fbec6dbb90441dcd";
         private GameObject _root;
         private VRCAvatarDescriptor _avatar;
         private AnimatorController _fx;
@@ -45,6 +49,112 @@ namespace FaceMotion.Editor.Tests
         {
             for (int i = 0; i < plan.Diagnostics.Count; i++) if (plan.Diagnostics[i].Code == code) return true;
             return false;
+        }
+
+        [Test]
+        public void DirectBatchManifest_ScriptGuid_RemainsCompatibleWithShippedAssets()
+        {
+            Assert.That(AssetDatabase.AssetPathToGUID(BatchManifestScript), Is.EqualTo(ShippedBatchManifestGuid));
+            var script = AssetDatabase.LoadAssetAtPath<MonoScript>(BatchManifestScript);
+            Assert.That(script, Is.Not.Null);
+            Assert.That(script.GetClass(), Is.EqualTo(typeof(DirectBatchIntegrationManifest)));
+        }
+
+        [Test]
+        public void DirectBatchManifest_SerializedFields_MatchShippedContract()
+        {
+            var type = typeof(DirectBatchIntegrationManifest);
+            Assert.That(type.FullName, Is.EqualTo("FaceMotion.Editor.VRChat.Integration.DirectBatchIntegrationManifest"));
+            Assert.That(type.BaseType, Is.EqualTo(typeof(ScriptableObject)));
+            AssertPublicFields(type, new Dictionary<string, System.Type>
+            {
+                { "Avatar", typeof(VRCAvatarDescriptor) },
+                { "AvatarGlobalId", typeof(string) },
+                { "OriginalFx", typeof(RuntimeAnimatorController) },
+                { "OriginalParameters", typeof(VRCExpressionParameters) },
+                { "OriginalMenu", typeof(VRCExpressionsMenu) },
+                { "GeneratedFx", typeof(AnimatorController) },
+                { "GeneratedParameters", typeof(VRCExpressionParameters) },
+                { "GeneratedMenu", typeof(VRCExpressionsMenu) },
+                { "GeneratedSubMenu", typeof(VRCExpressionsMenu) },
+                { "Items", typeof(DirectBatchIntegrationManifest.Item[]) },
+                { "OwnedAssetPaths", typeof(string[]) }
+            });
+            Assert.That(System.Attribute.IsDefined(typeof(DirectBatchIntegrationManifest.Item), typeof(System.SerializableAttribute)), Is.True);
+            AssertPublicFields(typeof(DirectBatchIntegrationManifest.Item), new Dictionary<string, System.Type>
+            {
+                { "ClipPath", typeof(string) },
+                { "DisplayName", typeof(string) },
+                { "ParameterName", typeof(string) },
+                { "LayerName", typeof(string) }
+            });
+        }
+
+        private static void AssertPublicFields(System.Type type, Dictionary<string, System.Type> expected)
+        {
+            FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+            Assert.That(fields.Length, Is.EqualTo(expected.Count), type.FullName);
+            foreach (FieldInfo field in fields)
+            {
+                Assert.That(expected.TryGetValue(field.Name, out System.Type fieldType), Is.True, type.FullName + "." + field.Name);
+                Assert.That(field.FieldType, Is.EqualTo(fieldType), type.FullName + "." + field.Name);
+            }
+        }
+
+        [Test]
+        public void DirectBatchManifest_AssetRoundTrip_PreservesShippedFieldsAndReferences()
+        {
+            var prefab = PrefabUtility.SaveAsPrefabAsset(_root, Folder + "/avatar.prefab");
+            var originalParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
+            AssetDatabase.CreateAsset(originalParameters, Folder + "/original-params.asset");
+            var originalMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            AssetDatabase.CreateAsset(originalMenu, Folder + "/original-menu.asset");
+            var generatedFx = AnimatorController.CreateAnimatorControllerAtPath(Folder + "/generated.controller");
+            var generatedParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
+            AssetDatabase.CreateAsset(generatedParameters, Folder + "/generated-params.asset");
+            var generatedMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            AssetDatabase.CreateAsset(generatedMenu, Folder + "/generated-menu.asset");
+            var generatedSubMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            AssetDatabase.CreateAsset(generatedSubMenu, Folder + "/generated-submenu.asset");
+
+            var manifest = ScriptableObject.CreateInstance<DirectBatchIntegrationManifest>();
+            manifest.Avatar = prefab.GetComponent<VRCAvatarDescriptor>();
+            manifest.AvatarGlobalId = "stored-avatar-id";
+            manifest.OriginalFx = _fx;
+            manifest.OriginalParameters = originalParameters;
+            manifest.OriginalMenu = originalMenu;
+            manifest.GeneratedFx = generatedFx;
+            manifest.GeneratedParameters = generatedParameters;
+            manifest.GeneratedMenu = generatedMenu;
+            manifest.GeneratedSubMenu = generatedSubMenu;
+            manifest.Items = new[] { new DirectBatchIntegrationManifest.Item
+            {
+                ClipPath = Folder + "/motion.anim", DisplayName = "Smile",
+                ParameterName = "FaceMotion_Smile", LayerName = "FaceMotion Smile"
+            } };
+            manifest.OwnedAssetPaths = new[] { Folder + "/generated.controller", Folder + "/generated-menu.asset" };
+            const string fileName = "/serialized-batch.asset";
+            AssetDatabase.CreateAsset(manifest, Folder + fileName);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(Folder + fileName, ImportAssetOptions.ForceUpdate);
+
+            var loaded = AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(Folder + fileName);
+            Assert.That(loaded, Is.Not.Null);
+            Assert.That(AssetDatabase.GetAssetPath(loaded.Avatar), Is.EqualTo(Folder + "/avatar.prefab"));
+            Assert.That(loaded.AvatarGlobalId, Is.EqualTo("stored-avatar-id"));
+            Assert.That(loaded.OriginalFx, Is.SameAs(_fx));
+            Assert.That(loaded.OriginalParameters, Is.SameAs(originalParameters));
+            Assert.That(loaded.OriginalMenu, Is.SameAs(originalMenu));
+            Assert.That(loaded.GeneratedFx, Is.SameAs(generatedFx));
+            Assert.That(loaded.GeneratedParameters, Is.SameAs(generatedParameters));
+            Assert.That(loaded.GeneratedMenu, Is.SameAs(generatedMenu));
+            Assert.That(loaded.GeneratedSubMenu, Is.SameAs(generatedSubMenu));
+            Assert.That(loaded.Items, Has.Length.EqualTo(1));
+            Assert.That(loaded.Items[0].ClipPath, Is.EqualTo(Folder + "/motion.anim"));
+            Assert.That(loaded.Items[0].DisplayName, Is.EqualTo("Smile"));
+            Assert.That(loaded.Items[0].ParameterName, Is.EqualTo("FaceMotion_Smile"));
+            Assert.That(loaded.Items[0].LayerName, Is.EqualTo("FaceMotion Smile"));
+            Assert.That(loaded.OwnedAssetPaths, Is.EqualTo(new[] { Folder + "/generated.controller", Folder + "/generated-menu.asset" }));
         }
 
         [Test]
@@ -453,9 +563,136 @@ namespace FaceMotion.Editor.Tests
             Assert.That(first.Manifest.GeneratedMenu.controls, Has.Count.EqualTo(1));
             Assert.That(second.Succeeded, Is.True);
             Assert.That(second.Manifest, Is.SameAs(first.Manifest));
-            Assert.That(AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(Folder + "/FaceMotion_Batch/BatchManifest.asset"), Is.SameAs(first.Manifest));
-            Assert.That(DirectVRChatIntegration.RollbackBatch(first.Manifest, out _), Is.True);
+            string manifestPath = Folder + "/FaceMotion_Batch/BatchManifest.asset";
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(manifestPath, ImportAssetOptions.ForceUpdate);
+            var persisted = AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(manifestPath);
+            Assert.That(persisted, Is.Not.Null);
+            Assert.That(DirectVRChatIntegration.RollbackBatch(persisted, out _), Is.True);
             Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(_fx));
+            Assert.That(_avatar.expressionParameters, Is.Null);
+            Assert.That(_avatar.expressionsMenu, Is.Null);
+            Assert.That(AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(manifestPath), Is.Null);
+        }
+
+        [Test]
+        public void DirectBatchManifest_PersistedOwnership_ResolvesClipForCurrentMaBackend()
+        {
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile")
+            }, Folder);
+            var result = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+            Assert.That(result.Succeeded, Is.True);
+            string manifestPath = Folder + "/FaceMotion_Batch/BatchManifest.asset";
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(manifestPath, ImportAssetOptions.ForceUpdate);
+            Assert.That(AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(manifestPath), Is.Not.Null);
+
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, _clip),
+                Is.EqualTo("FaceMotion_Smile"));
+        }
+
+        [Test]
+        public void DirectBatchManifest_GeneratedResetClips_MapToTheirOwnItemsAfterReload()
+        {
+            var secondClip = new AnimationClip();
+            AssetDatabase.CreateAsset(secondClip, Folder + "/frown.anim");
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile"),
+                new DirectIntegrationBatchItemRequest(secondClip, "Frown")
+            }, Folder);
+            var applied = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+            Assert.That(applied.Succeeded, Is.True);
+            string manifestPath = Folder + "/FaceMotion_Batch/BatchManifest.asset";
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(manifestPath, ImportAssetOptions.ForceUpdate);
+            var persisted = AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(manifestPath);
+            Assert.That(persisted, Is.Not.Null);
+
+            foreach (var item in persisted.Items)
+            {
+                AnimationClip reset = ResetFor(persisted, item);
+                Assert.That(persisted.OwnedAssetPaths, Does.Contain(AssetDatabase.GetAssetPath(reset)));
+                Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, reset),
+                    Is.EqualTo(item.ParameterName));
+            }
+        }
+
+        [Test]
+        public void DirectBatchManifest_DifferentAvatarCannotClaimGeneratedResetClip()
+        {
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile")
+            }, Folder);
+            var applied = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+            Assert.That(applied.Succeeded, Is.True);
+            var reset = ResetFor(applied.Manifest, applied.Manifest.Items[0]);
+            var otherRoot = new GameObject("DifferentAvatar");
+            try
+            {
+                var otherAvatar = otherRoot.AddComponent<VRCAvatarDescriptor>();
+                otherAvatar.baseAnimationLayers = new[]
+                {
+                    new VRCAvatarDescriptor.CustomAnimLayer
+                    {
+                        type = VRCAvatarDescriptor.AnimLayerType.FX,
+                        isDefault = false,
+                        animatorController = applied.Manifest.GeneratedFx
+                    }
+                };
+                Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(otherAvatar, reset), Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(otherRoot);
+            }
+        }
+
+        [Test]
+        public void DirectBatchManifest_AmbiguousItemLayerName_DoesNotGuessResetOwner()
+        {
+            var request = new DirectIntegrationBatchRequest(_avatar, new[]
+            {
+                new DirectIntegrationBatchItemRequest(_clip, "Smile")
+            }, Folder);
+            var applied = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(request));
+            Assert.That(applied.Succeeded, Is.True);
+            var manifest = applied.Manifest;
+            var reset = ResetFor(manifest, manifest.Items[0]);
+            // PlanBatch rejects duplicate generated parameter/layer names. A saved manifest can
+            // still be edited, so ownership must fail closed if two items claim one layer.
+            manifest.Items = new[]
+            {
+                manifest.Items[0],
+                new DirectBatchIntegrationManifest.Item
+                {
+                    ClipPath = manifest.Items[0].ClipPath,
+                    DisplayName = "Other",
+                    ParameterName = "FaceMotion_Other",
+                    LayerName = manifest.Items[0].LayerName
+                }
+            };
+            EditorUtility.SetDirty(manifest);
+            AssetDatabase.SaveAssets();
+            string manifestPath = Folder + "/FaceMotion_Batch/BatchManifest.asset";
+            AssetDatabase.ImportAsset(manifestPath, ImportAssetOptions.ForceUpdate);
+
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, reset), Is.Null);
+        }
+
+        private static AnimationClip ResetFor(DirectBatchIntegrationManifest manifest, DirectBatchIntegrationManifest.Item item)
+        {
+            foreach (var layer in manifest.GeneratedFx.layers)
+            {
+                if (layer.name != item.LayerName || layer.stateMachine == null) continue;
+                foreach (var state in layer.stateMachine.states)
+                    if (state.state != null && state.state.name == "Off"
+                        && state.state.motion is AnimationClip reset) return reset;
+            }
+            throw new AssertionException("No reset clip in the manifest-owned FX layer.");
         }
 
         [Test]

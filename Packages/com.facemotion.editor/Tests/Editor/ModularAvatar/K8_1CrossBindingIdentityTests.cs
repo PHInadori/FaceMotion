@@ -95,6 +95,145 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
+        public void LegacyDirectBatchOwnedClip_RemainsRecognizedByCurrentMaPlanner()
+        {
+            var persisted = ApplyLegacyDirectBatch(out var owned, out var candidate);
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, owned), Is.EqualTo("FaceMotion_Owned"));
+            AnimatorControllerLayer ownedLayer = null;
+            foreach (var layer in persisted.GeneratedFx.layers)
+                if (layer.name == persisted.Items[0].LayerName) ownedLayer = layer;
+            Assert.That(ownedLayer, Is.Not.Null);
+            AnimationClip reset = null;
+            foreach (var state in ownedLayer.stateMachine.states)
+                if (state.state.name == "Off") reset = state.state.motion as AnimationClip;
+            Assert.That(reset, Is.Not.Null);
+            Assert.That(persisted.OwnedAssetPaths, Does.Contain(AssetDatabase.GetAssetPath(reset)));
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, reset),
+                Is.EqualTo("FaceMotion_Owned"));
+
+            var plan = new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, candidate, Folder, "Candidate"));
+
+            Assert.That(plan.IsValid, Is.True, DiagnosticsOf(plan));
+            Assert.That(plan.PartnerParameters, Does.Contain("FaceMotion_Owned"));
+            Assert.That(plan.SharedBindings.Count, Is.GreaterThan(0));
+            Assert.That(HasCode(plan.Diagnostics, "FM-H-MA-SHARED-BINDING"), Is.True);
+            Assert.That(HasCode(plan.Diagnostics, "FM-H-MA-CROSS-BINDING-CONFLICT"), Is.False);
+        }
+
+        [Test]
+        public void LegacyBatch_SameNameForeignClip_RemainsBlockingForMa()
+        {
+            var persisted = ApplyLegacyDirectBatch(out _, out var candidate);
+            var reset = ResetFrom(persisted);
+            var foreign = AddForeignFxClip(persisted, Folder + "/foreign.anim", reset.name);
+            Assert.That(foreign.name, Is.EqualTo(reset.name));
+            Assert.That(persisted.GeneratedFx.animationClips, Does.Contain(foreign));
+            Assert.That(AnimationUtility.GetCurveBindings(foreign), Is.EquivalentTo(AnimationUtility.GetCurveBindings(candidate)));
+            Assert.That(_avatar.baseAnimationLayers[0].animatorController, Is.SameAs(persisted.GeneratedFx));
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, foreign), Is.Null);
+
+            var plan = new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, candidate, Folder, "Candidate"));
+
+            Assert.That(HasCode(plan.Diagnostics, "FM-H-MA-CROSS-BINDING-CONFLICT"), Is.True, DiagnosticsOf(plan));
+            Assert.That(plan.IsValid, Is.False);
+        }
+
+        [Test]
+        public void LegacyBatch_ListedClipInNonOwnedLayer_RemainsForeign()
+        {
+            var persisted = ApplyLegacyDirectBatch(out _, out var candidate);
+            string foreignPath = Folder + "/FaceMotion_Batch/foreign.anim";
+            var foreign = AddForeignFxClip(persisted, foreignPath, "Reset_Owned");
+            var paths = new List<string>(persisted.OwnedAssetPaths) { foreignPath };
+            persisted.OwnedAssetPaths = paths.ToArray();
+            EditorUtility.SetDirty(persisted);
+            AssetDatabase.SaveAssets();
+            Assert.That(DirectVRChatIntegration.FindOwningParameterForClip(_avatar, foreign), Is.Null,
+                "Even a listed clip in the generated folder is not owned without a matching manifest item layer.");
+
+            var plan = new ModularAvatarIntegrationBackend().Plan(
+                new ModularAvatarIntegrationRequest(_avatar, candidate, Folder, "Candidate"));
+            Assert.That(plan.IsValid, Is.False);
+            Assert.That(HasCode(plan.Diagnostics, "FM-H-MA-CROSS-BINDING-CONFLICT"), Is.True);
+        }
+
+        private DirectBatchIntegrationManifest ApplyLegacyDirectBatch(out AnimationClip owned, out AnimationClip candidate)
+        {
+            var originalFx = AnimatorController.CreateAnimatorControllerAtPath(Folder + "/original.controller");
+            _avatar.baseAnimationLayers = new[]
+            {
+                new VRCAvatarDescriptor.CustomAnimLayer
+                {
+                    type = VRCAvatarDescriptor.AnimLayerType.FX,
+                    isDefault = false,
+                    animatorController = originalFx
+                }
+            };
+            owned = new AnimationClip();
+            AssetDatabase.CreateAsset(owned, Folder + "/owned.anim");
+            AnimationUtility.SetEditorCurve(owned,
+                EditorCurveBinding.FloatCurve("Body", typeof(Transform), "m_LocalPosition.x"),
+                AnimationCurve.Constant(0f, 1f, 1f));
+            candidate = new AnimationClip();
+            AssetDatabase.CreateAsset(candidate, Folder + "/candidate.anim");
+            AnimationUtility.SetEditorCurve(candidate,
+                EditorCurveBinding.FloatCurve("Body", typeof(Transform), "m_LocalPosition.x"),
+                AnimationCurve.Constant(0f, 1f, 2f));
+            EditorUtility.SetDirty(owned);
+            EditorUtility.SetDirty(candidate);
+            AssetDatabase.SaveAssets();
+
+            var direct = DirectVRChatIntegration.ApplyBatch(DirectVRChatIntegration.PlanBatch(
+                new DirectIntegrationBatchRequest(_avatar, new[]
+                {
+                    new DirectIntegrationBatchItemRequest(owned, "Owned")
+                }, Folder)));
+            Assert.That(direct.Succeeded, Is.True);
+            string manifestPath = Folder + "/FaceMotion_Batch/BatchManifest.asset";
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(manifestPath, ImportAssetOptions.ForceUpdate);
+            var persisted = AssetDatabase.LoadAssetAtPath<DirectBatchIntegrationManifest>(manifestPath);
+            Assert.That(persisted, Is.Not.Null);
+            return persisted;
+        }
+
+        private static AnimationClip ResetFrom(DirectBatchIntegrationManifest manifest)
+        {
+            foreach (var layer in manifest.GeneratedFx.layers)
+            {
+                if (layer.name != manifest.Items[0].LayerName) continue;
+                foreach (var state in layer.stateMachine.states)
+                    if (state.state.name == "Off") return state.state.motion as AnimationClip;
+            }
+            throw new AssertionException("No generated reset in the item-owned layer.");
+        }
+
+        private static AnimationClip AddForeignFxClip(DirectBatchIntegrationManifest manifest, string path, string displayName)
+        {
+            var foreign = new AnimationClip();
+            AssetDatabase.CreateAsset(foreign, path);
+            foreign.name = displayName;
+            EditorUtility.SetDirty(foreign);
+            AnimationUtility.SetEditorCurve(foreign,
+                EditorCurveBinding.FloatCurve("Body", typeof(Transform), "m_LocalPosition.x"),
+                AnimationCurve.Constant(0f, 1f, 3f));
+            var machine = new AnimatorStateMachine { name = "User FX machine" };
+            AssetDatabase.AddObjectToAsset(machine, manifest.GeneratedFx);
+            machine.AddState("Off").motion = foreign;
+            manifest.GeneratedFx.AddLayer(new AnimatorControllerLayer
+            {
+                name = "User FX layer",
+                defaultWeight = 1f,
+                stateMachine = machine
+            });
+            EditorUtility.SetDirty(manifest.GeneratedFx);
+            AssetDatabase.SaveAssets();
+            return foreign;
+        }
+
+        [Test]
         public void TwoFaceMotionAnimationsOnDifferentRendererPaths_AreIndependent()
         {
             var body = CreateBlendShapeClip("first-body.anim", "Body");
