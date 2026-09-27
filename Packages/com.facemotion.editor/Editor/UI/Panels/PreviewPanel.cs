@@ -16,6 +16,12 @@ namespace FaceMotion.Editor.UI.Panels
         public const float Padding = 4f;
         internal const float ControlHeight = 20f;
         internal const float ControlSpacing = 4f;
+        internal const float HeaderHelpButtonWidth = 24f;
+        internal const float HeaderSpacing = 4f;
+
+        /// <summary>Deterministic per-character metrics used when editor styles are unavailable.</summary>
+        internal const float HeaderLatinGlyphWidth = 7f;
+        internal const float HeaderWideGlyphWidth = 12f;
         private readonly FaceMotionEditorSession _session;
         private readonly PreviewSession _preview;
         private readonly SceneApplySession _sceneApply;
@@ -38,9 +44,10 @@ namespace FaceMotion.Editor.UI.Panels
         public void OnGUI(Rect assignedRect, bool textControlOwnsKeyboard = false)
         {
             var layout = CalculateLayout(assignedRect, _helpOpen);
-            GUI.Label(layout.HeaderRect, FaceMotionUiText.Get("preview"), EditorStyles.boldLabel);
-            GUI.Label(new Rect(layout.HeaderRect.x + 65f, layout.HeaderRect.y, Mathf.Max(0f, layout.HeaderRect.width - 93f), HeaderHeight), FaceMotionUiText.Get("previewIsolation"), EditorStyles.miniLabel);
-            Rect helpButton = new Rect(layout.HeaderRect.xMax - 24f, layout.HeaderRect.y, 24f, HeaderHeight);
+            PreviewHeaderLayout header = CalculateHeaderLayout(layout.HeaderRect);
+            GUI.Label(header.TitleRect, FaceMotionUiText.Get("preview"), EditorStyles.boldLabel);
+            GUI.Label(header.IsolationRect, FaceMotionUiText.Get("previewIsolation"), EditorStyles.miniLabel);
+            Rect helpButton = header.HelpRect;
             if (GUI.Button(helpButton, new GUIContent("?", FaceMotionUiText.Get("contextHelpTooltip")), EditorStyles.miniButton))
             {
                 _helpOpen = ContextHelp.Toggle(_helpOpen);
@@ -183,6 +190,72 @@ namespace FaceMotion.Editor.UI.Panels
             return StartPlayback();
         }
 
+        /// <summary>
+        /// Header geometry from measured title width: the isolation note starts after the
+        /// title plus spacing, ends before the fixed-width help button, and clamps to zero
+        /// width instead of producing a negative rect. Pure helper: no session/preview state.
+        /// </summary>
+        internal static PreviewHeaderLayout CalculateHeaderLayout(Rect headerRect,
+            SystemLanguage language = SystemLanguage.Japanese)
+        {
+            string title = FaceMotionUiText.Get("preview", language);
+            GUIStyle titleStyle = Event.current != null ? EditorStyles.boldLabel : null;
+            float titleWidth = MeasureHeaderTextWidth(title, titleStyle);
+            var titleRect = new Rect(headerRect.x, headerRect.y, titleWidth, headerRect.height);
+
+            var helpRect = new Rect(
+                headerRect.xMax - HeaderHelpButtonWidth,
+                headerRect.y,
+                HeaderHelpButtonWidth,
+                headerRect.height);
+
+            float isolationX = titleRect.xMax + HeaderSpacing;
+            float isolationMax = helpRect.x - HeaderSpacing;
+            float isolationWidth = Mathf.Max(0f, isolationMax - isolationX);
+            var isolationRect = new Rect(isolationX, headerRect.y, isolationWidth, headerRect.height);
+            return new PreviewHeaderLayout(titleRect, isolationRect, helpRect);
+        }
+
+        /// <summary>
+        /// Measures text with the given style inside OnGUI; falls back to a deterministic
+        /// character-metric estimate whenever styles (or finite metrics) are unavailable.
+        /// </summary>
+        internal static float MeasureHeaderTextWidth(string text, GUIStyle style)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0f;
+            }
+
+            if (style != null && Event.current != null)
+            {
+                float measured = style.CalcSize(new GUIContent(text)).x;
+                if (measured > 0f && !float.IsNaN(measured) && !float.IsInfinity(measured))
+                {
+                    return measured;
+                }
+            }
+
+            return EstimateHeaderTextWidth(text);
+        }
+
+        /// <summary>String-length dependent estimate: Latin glyphs 7px, wide glyphs 12px.</summary>
+        internal static float EstimateHeaderTextWidth(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0f;
+            }
+
+            float width = 0f;
+            foreach (char c in text)
+            {
+                width += c < 128 ? HeaderLatinGlyphWidth : HeaderWideGlyphWidth;
+            }
+
+            return width;
+        }
+
         public static PreviewPanelLayout CalculateLayout(Rect assignedRect, bool showHelp = false,
             SystemLanguage language = SystemLanguage.Japanese)
         {
@@ -237,6 +310,21 @@ namespace FaceMotion.Editor.UI.Panels
         public Rect HeaderRect { get; }
         public Rect ControlsRect { get; }
         public Rect RenderRect { get; }
+    }
+
+    /// <summary>Measured header geometry: title, isolation note, and fixed help button without overlap.</summary>
+    internal readonly struct PreviewHeaderLayout
+    {
+        public PreviewHeaderLayout(Rect titleRect, Rect isolationRect, Rect helpRect)
+        {
+            TitleRect = titleRect;
+            IsolationRect = isolationRect;
+            HelpRect = helpRect;
+        }
+
+        public Rect TitleRect { get; }
+        public Rect IsolationRect { get; }
+        public Rect HelpRect { get; }
     }
 
     internal struct PreviewControlsLayout

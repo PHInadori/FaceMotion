@@ -119,7 +119,11 @@ namespace FaceMotion.Editor.Tests
             PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(layout.ControlsRect);
             Assert.That(layout.ControlsRect.y, Is.GreaterThanOrEqualTo(
                 layout.HeaderRect.yMax + PreviewPanel.Padding + PreviewPanel.HelpHeight(layout.HeaderRect.width, language)));
-            Assert.That(layout.HeaderRect.xMax - 24f, Is.GreaterThanOrEqualTo(layout.HeaderRect.x + 65f));
+            PreviewHeaderLayout header = PreviewPanel.CalculateHeaderLayout(layout.HeaderRect, language);
+            Assert.That(header.TitleRect.xMax, Is.LessThanOrEqualTo(header.IsolationRect.x + 0.001f));
+            Assert.That(header.IsolationRect.width, Is.GreaterThanOrEqualTo(0f));
+            Assert.That(header.IsolationRect.xMax, Is.LessThanOrEqualTo(header.HelpRect.x + 0.001f));
+            Assert.That(header.HelpRect.xMax, Is.EqualTo(layout.HeaderRect.xMax).Within(0.001f));
             foreach (Rect rect in new[] { controls.Play, controls.PlaybackStop, controls.Fit, controls.Reset })
             {
                 Assert.That(rect.xMax, Is.LessThanOrEqualTo(layout.ControlsRect.xMax));
