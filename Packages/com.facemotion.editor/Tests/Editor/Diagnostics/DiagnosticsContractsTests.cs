@@ -58,7 +58,7 @@ namespace FaceMotion.Editor.Tests
         }
 
         [Test]
-                public void Localization_JapaneseAndEnglishEachMatchExpectedCount_NoDivergence()
+        public void Localization_JapaneseAndEnglishEachMatchExpectedCount_NoDivergence()
         {
             IReadOnlyDictionary<string, DiagnosticLocalizedText> ja = FaceMotionDiagnosticLocalizationCatalog.JapaneseEntries;
             IReadOnlyDictionary<string, DiagnosticLocalizedText> en = FaceMotionDiagnosticLocalizationCatalog.EnglishEntries;
@@ -75,6 +75,59 @@ namespace FaceMotion.Editor.Tests
                 "Japanese and English catalogs must cover the same codes.");
             Assert.That(registryKeys.SetEquals(jaKeys),
                 "Registry and localization must cover the same codes.");
+        }
+
+        [Test]
+        public void Localization_EveryKnownDiagnostic_HasResolvedPresentationWithFieldParity()
+        {
+            foreach (string code in FaceMotionDiagnosticDefinitionRegistry.All.Keys)
+            {
+                Assert.That(FaceMotionDiagnosticLocalizationCatalog.TryGet(code, FaceMotionDiagnosticLanguage.Japanese, out var ja), Is.True, code);
+                Assert.That(FaceMotionDiagnosticLocalizationCatalog.TryGet(code, FaceMotionDiagnosticLanguage.English, out var en), Is.True, code);
+                Assert.That(ja, Is.Not.Null, code);
+                Assert.That(en, Is.Not.Null, code);
+
+                Assert.That(ja.Title, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(en.Title, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(ja.Summary, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(en.Summary, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(ja.Resolution, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(en.Resolution, Is.Not.Null.And.Not.Empty, code);
+                Assert.That(ja.Title, Is.Not.EqualTo(code), code);
+                Assert.That(en.Title, Is.Not.EqualTo(code), code);
+                Assert.That(ja.Summary, Is.Not.EqualTo(code), code);
+                Assert.That(en.Summary, Is.Not.EqualTo(code), code);
+
+                // Cause, impact and caution are optional, but their presence is symmetric.
+                Assert.That(string.IsNullOrEmpty(ja.Cause), Is.EqualTo(string.IsNullOrEmpty(en.Cause)), code);
+                Assert.That(string.IsNullOrEmpty(ja.Impact), Is.EqualTo(string.IsNullOrEmpty(en.Impact)), code);
+                Assert.That(string.IsNullOrEmpty(ja.Caution), Is.EqualTo(string.IsNullOrEmpty(en.Caution)), code);
+
+                var diagnostic = new FaceMotionDiagnostic(code, FaceMotionDiagnosticSeverity.Error,
+                    "Raw diagnostic", string.Empty, true, "Raw suggested fix");
+                var japanese = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.Japanese);
+                var english = new FaceMotionDiagnosticPresentation(diagnostic, FaceMotionDiagnosticLanguage.English);
+                Assert.That(japanese.IsKnown, Is.True, code);
+                Assert.That(english.IsKnown, Is.True, code);
+                Assert.That(japanese.Code, Is.EqualTo(code));
+                Assert.That(english.Code, Is.EqualTo(code));
+                Assert.That(japanese.Title, Is.EqualTo(ja.Title), code);
+                Assert.That(english.Title, Is.EqualTo(en.Title), code);
+                Assert.That(japanese.Summary, Is.EqualTo(ja.Summary), code);
+                Assert.That(english.Summary, Is.EqualTo(en.Summary), code);
+                Assert.That(japanese.Resolution, Is.EqualTo(ja.Resolution), code);
+                Assert.That(english.Resolution, Is.EqualTo(en.Resolution), code);
+                Assert.That(japanese.Cause, Is.EqualTo(ja.Cause), code);
+                Assert.That(english.Cause, Is.EqualTo(en.Cause), code);
+                Assert.That(japanese.Impact, Is.EqualTo(ja.Impact), code);
+                Assert.That(english.Impact, Is.EqualTo(en.Impact), code);
+                Assert.That(japanese.Caution, Is.EqualTo(ja.Caution), code);
+                Assert.That(english.Caution, Is.EqualTo(en.Caution), code);
+                Assert.That(japanese.Severity, Is.EqualTo(diagnostic.Severity), code);
+                Assert.That(english.Severity, Is.EqualTo(diagnostic.Severity), code);
+                Assert.That(japanese.SeverityText, Is.Not.EqualTo("severityError"), code);
+                Assert.That(english.SeverityText, Is.Not.EqualTo("severityError"), code);
+            }
         }
 
         [Test]

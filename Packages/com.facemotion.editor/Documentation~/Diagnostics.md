@@ -217,7 +217,7 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-G-MANIFEST` | Recommended | integration-direct |
 | `FM-G-PLAN-UNEXPECTED` | Recommended | integration-direct |
 
-### Integration Modular Avatar（FM-H-MA）– 21 code
+### Integration Modular Avatar（FM-H-MA）– 23 code
 
 | Code | 既定レベル | 分類 |
 | --- | --- | --- |
@@ -238,9 +238,11 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-H-MA-APPLY` | Recommended | integration-modular-avatar |
 | `FM-H-MA-OWNERSHIP` | Recommended | integration-modular-avatar |
 | `FM-H-MA-REMOVED` | Info | integration-modular-avatar |
+| `FM-H-MA-NOTHING-TO-REMOVE` | Info | integration-modular-avatar |
 | `FM-H-MA-PARAMETER-CONFLICT` | Recommended | integration-modular-avatar |
 | `FM-H-MA-BINDING-CONFLICT` | Recommended | integration-modular-avatar |
 | `FM-H-MA-CROSS-BINDING-CONFLICT` | Recommended | integration-modular-avatar |
+| `FM-H-MA-SHARED-BINDING` | Recommended | integration-modular-avatar |
 | `FM-H-MA-PLAN-UNEXPECTED` | Recommended | integration-modular-avatar |
 
 ### Integration One-Click（FM-J4）– 10 code
@@ -260,7 +262,17 @@ FaceMotion は顔オブジェクトを hierarchy path（例: `Body/Face`）で�
 | `FM-J4-APPLY-STOPPED` | Recommended | integration-one-click |
 | `FM-J4-NO-PARTIAL-STATE` | Info | integration-one-click |
 
-計 **147** code。全 code の `CanAutoFix` は `false` です。自動修復は行わず、常に safety を優先します。
+### Integration Batch（FM-K2）– 5 code
+
+| Code | 既定レベル | 分類 |
+| --- | --- | --- |
+| `FM-K2-NO-SELECTION` | Recommended | integration-batch |
+| `FM-K2-DUPLICATE-EXPORT-PATH` | Recommended | integration-batch |
+| `FM-K2-PREFLIGHT-FAILED` | Recommended | integration-batch |
+| `FM-K2-BATCH-ROLLBACK` | Recommended | integration-batch |
+| `FM-K2-PARTIAL-APPLY` | Recommended | integration-batch |
+
+計 **154** code。全 code の `CanAutoFix` は `false` です。自動修復は行わず、常に safety を優先します。
 
 ## 関連ドキュメント
 

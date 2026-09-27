@@ -1,6 +1,9 @@
 using FaceMotion.Animation;
 using FaceMotion.Data;
 using FaceMotion.Editor.Export;
+using FaceMotion.Editor.UI.Localization;
+using FaceMotion.Editor.UI.Panels;
+using FaceMotion.Diagnostics;
 using FaceMotion.Timeline;
 using NUnit.Framework;
 using UnityEditor;
@@ -23,6 +26,57 @@ namespace FaceMotion.Editor.Tests
         {
             AssetDatabase.DeleteAsset(Folder);
             AssetDatabase.Refresh();
+        }
+
+        [Test]
+        public void ExportPanel_ValidationDiagnostics_UseSharedPresentationInBothLanguages()
+        {
+            var animation = FaceMotionAnimationData.Create("Invalid export");
+            animation.Timeline.Duration = 0f;
+            var validation = AnimationClipExporter.Validate(animation, "Packages/invalid.txt");
+            Assert.That(validation.Diagnostics.Count, Is.GreaterThan(0));
+
+            foreach (FaceMotionDiagnostic diagnostic in validation.Diagnostics)
+            {
+                Assert.That(diagnostic.Severity, Is.EqualTo(FaceMotionDiagnosticSeverity.Error));
+                foreach (FaceMotionDiagnosticLanguage language in new[]
+                {
+                    FaceMotionDiagnosticLanguage.Japanese,
+                    FaceMotionDiagnosticLanguage.English
+                })
+                {
+                    Assert.That(FaceMotionDiagnosticLocalizationCatalog.TryGet(diagnostic.Code, language, out var text), Is.True);
+                    string rendered = ExportPanel.FormatDiagnostic(diagnostic, language);
+                    Assert.That(rendered, Does.Contain("[" + diagnostic.Code + "]"), diagnostic.Code);
+                    Assert.That(rendered, Does.Contain(text.Title), diagnostic.Code);
+                    Assert.That(rendered, Does.Contain(text.Summary), diagnostic.Code);
+                    if (!string.IsNullOrEmpty(text.Cause)) Assert.That(rendered, Does.Contain(text.Cause), diagnostic.Code);
+                    if (!string.IsNullOrEmpty(text.Impact)) Assert.That(rendered, Does.Contain(text.Impact), diagnostic.Code);
+                    if (!string.IsNullOrEmpty(text.Resolution)) Assert.That(rendered, Does.Contain(text.Resolution), diagnostic.Code);
+                    Assert.That(DirectVRChatIntegrationPanel.DiagnosticMessageType(diagnostic), Is.EqualTo(MessageType.Error));
+                }
+            }
+        }
+
+        [Test]
+        public void ExportPanel_UnknownDiagnostic_KeepsRawMessageAndSuggestedFix()
+        {
+            var diagnostic = new FaceMotionDiagnostic(
+                "FM-EXPORT-UNKNOWN", FaceMotionDiagnosticSeverity.Warning,
+                "The raw export error", string.Empty, false, "Try a different export path");
+
+            foreach (FaceMotionDiagnosticLanguage language in new[]
+            {
+                FaceMotionDiagnosticLanguage.Japanese,
+                FaceMotionDiagnosticLanguage.English
+            })
+            {
+                string rendered = ExportPanel.FormatDiagnostic(diagnostic, language);
+                Assert.That(rendered, Does.Contain("[FM-EXPORT-UNKNOWN]"));
+                Assert.That(rendered, Does.Contain("The raw export error"));
+                Assert.That(rendered, Does.Contain("Try a different export path"));
+                Assert.That(DirectVRChatIntegrationPanel.DiagnosticMessageType(diagnostic), Is.EqualTo(MessageType.Warning));
+            }
         }
 
         [Test]

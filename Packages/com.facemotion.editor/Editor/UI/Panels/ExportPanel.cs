@@ -1,6 +1,8 @@
 using FaceMotion.Editor.Export;
 using FaceMotion.Editor.UI.Session;
 using FaceMotion.Editor.UI.Localization;
+using FaceMotion.Editor.UI.Diagnostics;
+using FaceMotion.Diagnostics;
 using FaceMotion.Editor.VRChat.Integration;
 using UnityEditor;
 using UnityEngine;
@@ -45,7 +47,7 @@ namespace FaceMotion.Editor.UI.Panels
             for (int i = 0; i < validation.Diagnostics.Count; i++)
             {
                 var diagnostic = validation.Diagnostics[i];
-                string message = FaceMotionUiText.FormatDiagnostic(diagnostic.Code, diagnostic.Message, diagnostic.SuggestedFix);
+                string message = FormatDiagnostic(diagnostic);
                 EditorGUILayout.HelpBox(message, DirectVRChatIntegrationPanel.DiagnosticMessageType(diagnostic));
             }
             using (new EditorGUI.DisabledScope(!validation.IsValid))
@@ -60,6 +62,13 @@ namespace FaceMotion.Editor.UI.Panels
                     if (result.Succeeded) Selection.activeObject = result.Clip;
                 }
             }
+        }
+
+        internal static string FormatDiagnostic(
+            FaceMotionDiagnostic diagnostic,
+            FaceMotionDiagnosticLanguage? language = null)
+        {
+            return DirectVRChatIntegrationPanel.FormatDiagnostic(diagnostic, language);
         }
     }
 }
