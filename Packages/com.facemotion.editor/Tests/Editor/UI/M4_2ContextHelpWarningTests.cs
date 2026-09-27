@@ -116,7 +116,7 @@ namespace FaceMotion.Editor.Tests
         {
             var panel = new Rect(0f, 0f, 180f, 400f);
             PreviewPanelLayout layout = PreviewPanel.CalculateLayout(panel, true, language);
-            PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(layout.ControlsRect);
+            PreviewControlsLayout controls = PreviewPanel.CalculateControlsLayout(layout.ControlsRect, true, language);
             Assert.That(layout.ControlsRect.y, Is.GreaterThanOrEqualTo(
                 layout.HeaderRect.yMax + PreviewPanel.Padding + PreviewPanel.HelpHeight(layout.HeaderRect.width, language)));
             PreviewHeaderLayout header = PreviewPanel.CalculateHeaderLayout(layout.HeaderRect, language);

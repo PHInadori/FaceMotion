@@ -12,12 +12,20 @@ namespace FaceMotion.Editor.UI.Panels
     public sealed class PreviewPanel
     {
         public const float HeaderHeight = 20f;
+
+        /// <summary>
+        /// Legacy two-row reference height. Kept for existing test contracts; the layout no
+        /// longer enforces it as a minimum — controls height comes from the visible rows.
+        /// </summary>
         public const float ControlsHeight = 48f;
         public const float Padding = 4f;
         internal const float ControlHeight = 20f;
         internal const float ControlSpacing = 4f;
         internal const float HeaderHelpButtonWidth = 24f;
         internal const float HeaderSpacing = 4f;
+
+        /// <summary>Minimum residual width on the playback row before the hint label is shown.</summary>
+        internal const float PreviewHintMinimumWidth = 80f;
 
         /// <summary>Deterministic per-character metrics used when editor styles are unavailable.</summary>
         internal const float HeaderLatinGlyphWidth = 7f;
@@ -43,7 +51,9 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void OnGUI(Rect assignedRect, bool textControlOwnsKeyboard = false)
         {
-            var layout = CalculateLayout(assignedRect, _helpOpen);
+            var layout = CalculateLayout(assignedRect, _helpOpen,
+                previewActive: _preview.IsActive,
+                hasAvatar: _session.ActiveAvatarRoot != null);
             PreviewHeaderLayout header = CalculateHeaderLayout(layout.HeaderRect);
             GUI.Label(header.TitleRect, FaceMotionUiText.Get("preview"), EditorStyles.boldLabel);
             GUI.Label(header.IsolationRect, FaceMotionUiText.Get("previewIsolation"), EditorStyles.miniLabel);
@@ -65,7 +75,7 @@ namespace FaceMotion.Editor.UI.Panels
                 return;
             }
 
-            PreviewControlsLayout controls = CalculateControlsLayout(layout.ControlsRect);
+            PreviewControlsLayout controls = CalculateControlsLayout(layout.ControlsRect, _preview.IsActive);
             if (GUI.Button(controls.Start, _preview.IsActive ? FaceMotionUiText.Get("rebuildPreview") : FaceMotionUiText.Get("startPreview"), EditorStyles.miniButton))
             {
                 _ensureAvatarIndex?.Invoke();
@@ -256,14 +266,33 @@ namespace FaceMotion.Editor.UI.Panels
             return width;
         }
 
+        /// <summary>
+        /// Pure panel layout. Controls height is derived from the rows of the actually
+        /// visible controls, driven by two independent explicit state flags:
+        /// <paramref name="hasAvatar"/> false means no control at all is drawn (the empty-state
+        /// help box takes the render area), so the reserved height is zero;
+        /// with an avatar, <paramref name="previewActive"/> false reserves only the action row
+        /// (Start/Rebuild, Stop Preview, Scene Apply) while true also accounts the playback row
+        /// (Play/Pause, Playback Stop, Fit, Reset, Hint).
+        /// Defaults preserve the existing contract (selected avatar, active preview);
+        /// production passes the live state explicitly.
+        /// </summary>
         public static PreviewPanelLayout CalculateLayout(Rect assignedRect, bool showHelp = false,
-            SystemLanguage language = SystemLanguage.Japanese)
+            SystemLanguage language = SystemLanguage.Japanese, bool previewActive = true,
+            bool hasAvatar = true)
         {
             float width = Mathf.Max(0f, assignedRect.width - Padding * 2f);
             var header = new Rect(assignedRect.x + Padding, assignedRect.y + Padding, width, HeaderHeight);
             float controlsY = header.yMax + Padding + (showHelp ? HelpHeight(width, language) + Padding : 0f);
-            PreviewControlsLayout controlLayout = CalculateControlsLayout(new Rect(header.x, controlsY, width, 0f));
-            var controls = new Rect(header.x, controlsY, width, Mathf.Max(ControlsHeight, controlLayout.Height));
+            float controlsHeight = 0f;
+            if (hasAvatar)
+            {
+                PreviewControlsLayout controlLayout = CalculateControlsLayout(
+                    new Rect(header.x, controlsY, width, 0f), previewActive, language);
+                controlsHeight = controlLayout.Height;
+            }
+
+            var controls = new Rect(header.x, controlsY, width, controlsHeight);
             var render = new Rect(controls.x, controls.yMax + Padding, width, Mathf.Max(0f, assignedRect.yMax - (controls.yMax + Padding)));
             return new PreviewPanelLayout(header, controls, render);
         }
@@ -274,26 +303,37 @@ namespace FaceMotion.Editor.UI.Panels
             return Mathf.Ceil(Mathf.Max(1f, text.Length) / Mathf.Max(1f, (width - 32f) / 16f)) * 16f + 16f;
         }
 
-        internal static PreviewControlsLayout CalculateControlsLayout(Rect controlsRect)
+        /// <summary>
+        /// Flow layout for the visible controls. With <paramref name="includePlayback"/> false
+        /// only the always-visible action row (Start/Rebuild, Stop Preview, Scene Apply) is
+        /// placed, so the resulting <see cref="PreviewControlsLayout.Height"/> accounts a
+        /// single row at normal width instead of the full active grid.
+        /// </summary>
+        internal static PreviewControlsLayout CalculateControlsLayout(Rect controlsRect,
+            bool includePlayback = true, SystemLanguage language = SystemLanguage.Japanese)
         {
-            var layout = new PreviewControlsLayout(controlsRect);
-            float startWidth = Mathf.Max(ButtonWidth("startPreview"), ButtonWidth("rebuildPreview"));
-            float sceneWidth = Mathf.Max(ButtonWidth("applyToScene"), ButtonWidth("stopSceneApply"));
+            var layout = new PreviewControlsLayout(controlsRect, includePlayback);
+            float startWidth = Mathf.Max(ButtonWidth("startPreview", language), ButtonWidth("rebuildPreview", language));
+            float sceneWidth = Mathf.Max(ButtonWidth("applyToScene", language), ButtonWidth("stopSceneApply", language));
             layout.AddAction(startWidth);
-            layout.AddAction(ButtonWidth("stopPreview"));
+            layout.AddAction(ButtonWidth("stopPreview", language));
             layout.AddAction(sceneWidth);
-            layout.BeginPlaybackRow();
-            layout.AddPlayback(Mathf.Max(ButtonWidth("previewPlay"), ButtonWidth("previewPause")));
-            layout.AddPlayback(ButtonWidth("previewStop"));
-            layout.AddPlayback(ButtonWidth("fitAvatar"));
-            layout.AddPlayback(ButtonWidth("resetView"));
+            if (includePlayback)
+            {
+                layout.BeginPlaybackRow();
+                layout.AddPlayback(Mathf.Max(ButtonWidth("previewPlay", language), ButtonWidth("previewPause", language)));
+                layout.AddPlayback(ButtonWidth("previewStop", language));
+                layout.AddPlayback(ButtonWidth("fitAvatar", language));
+                layout.AddPlayback(ButtonWidth("resetView", language));
+            }
+
             layout.Finish();
             return layout;
         }
 
-        private static float ButtonWidth(string localizationKey)
+        private static float ButtonWidth(string localizationKey, SystemLanguage language = SystemLanguage.Japanese)
         {
-            string label = FaceMotionUiText.Get(localizationKey);
+            string label = FaceMotionUiText.Get(localizationKey, language);
             if (Event.current == null)
             {
                 // Layout tests and non-GUI callers do not have an editor skin; reserve a conservative text width.
@@ -330,13 +370,15 @@ namespace FaceMotion.Editor.UI.Panels
     internal struct PreviewControlsLayout
     {
         private readonly Rect _bounds;
+        private readonly bool _includePlayback;
         private float _x;
         private float _y;
         private bool _hasRow;
 
-        public PreviewControlsLayout(Rect bounds)
+        public PreviewControlsLayout(Rect bounds, bool includePlayback = true)
         {
             _bounds = bounds;
+            _includePlayback = includePlayback;
             _x = bounds.x;
             _y = bounds.y;
             _hasRow = false;
@@ -388,13 +430,20 @@ namespace FaceMotion.Editor.UI.Panels
 
         public void Finish()
         {
-            float hintWidth = _bounds.xMax - _x;
-            if (hintWidth >= 80f)
+            if (_includePlayback)
             {
-                Hint = new Rect(_x, _y, hintWidth, PreviewPanel.ControlHeight);
+                float hintWidth = _bounds.xMax - _x;
+                if (hintWidth >= PreviewPanel.PreviewHintMinimumWidth)
+                {
+                    Hint = new Rect(_x, _y, hintWidth, PreviewPanel.ControlHeight);
+                }
             }
 
-            Height = _hasRow ? _y + PreviewPanel.ControlHeight - _bounds.y : 0f;
+            // Required height: bottom-most placed control yMax relative to the bounds top,
+            // plus one spacing of bottom padding. No fixed two-row assumption.
+            Height = _hasRow
+                ? _y + PreviewPanel.ControlHeight - _bounds.y + PreviewPanel.ControlSpacing
+                : 0f;
         }
 
         private Rect Add(float requestedWidth)
