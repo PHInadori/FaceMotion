@@ -25,13 +25,13 @@ Development evidence already exists for the current candidate (focused / affecte
 ## Before Release
 
 - [x] Confirm artifact filename and SHA-256 from `dist/release-info.json`.
-- [ ] Create and verify tag `v0.7.0`.
-- [ ] Create the GitHub Release with the validated ZIP and `release-info.json`.
-- [ ] Update the VPM listing repository and publish its Pages build.
+- [x] Create and verify tag `v0.7.0`.
+- [x] Create the GitHub Release with the validated ZIP and `release-info.json`.
+- [x] Update the VPM listing repository and publish its Pages build.
 
 ## After Release
 
-- [ ] Install through VCC or ALCOM in a clean project (post-release install verification).
-- [ ] Run a clean install and VRChat Build & Test check.
-- [ ] Confirm documentation links and the GitHub release page.
-- [ ] Confirm VPM index visibility and package installation.
+- [x] Install through VCC or ALCOM in a clean project (post-release install verification).
+- [x] Run a clean install and VRChat Build & Test check.
+- [x] Confirm documentation links and the GitHub release page.
+- [x] Confirm VPM index visibility and package installation.
