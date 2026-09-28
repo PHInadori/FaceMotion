@@ -16,6 +16,7 @@
 - Workflow guidance follows the real authoring order (create an animation, add a track, add a key, play the preview, then update VRChat) and moves on as content is added or removed, including after undo and redo.
 - Preview playback is more predictable: Stop returns the playhead to zero, Play at the end restarts from the beginning, non-looping playback stops exactly at the animation duration, and the Space shortcut toggles playback only while the Preview is active and never while a text or numeric field is being edited. All Preview controls stay visible in narrow layouts.
 - The Preview header and controls lay out against the visible rows and localized text without clipping, and BlendShape hover preview hit-testing is reliable in both the track list and the editor window.
+- Transform key editing labels Position, Rotation, and Scale explicitly above the X/Y/Z fields, with local-space and unit hints in the section header.
 
 ### Fixed
 

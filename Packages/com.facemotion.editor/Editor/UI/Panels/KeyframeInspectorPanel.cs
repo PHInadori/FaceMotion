@@ -16,6 +16,9 @@ namespace FaceMotion.Editor.UI.Panels
         internal const float DefaultBlendShapeAuthoringValue = 100f;
         internal const float MinimumQuickKeyValueWidth = 72f;
         internal const float QuickKeyControlSpacing = 6f;
+        internal const string AxisXLabel = "X";
+        internal const string AxisYLabel = "Y";
+        internal const string AxisZLabel = "Z";
 
         private readonly FaceMotionEditorSession _session;
         private readonly KeyframeController _keys;
@@ -139,24 +142,25 @@ namespace FaceMotion.Editor.UI.Panels
                     else if (TrackKinds.IsTransform(track.Kind))
                     {
                         EditorGUILayout.LabelField(
-                            FaceMotionUiText.Get("value"));
+                            GetTransformValueHeader(track.Kind),
+                            EditorStyles.boldLabel);
 
                         EditorGUI.indentLevel++;
 
                         EditorGUI.BeginChangeCheck();
                         _vectorValue.x = DrawFloatField(
                             "x",
-                            FaceMotionUiText.Get("xLocal"),
+                            AxisXLabel,
                             _vectorValue.x);
 
                         _vectorValue.y = DrawFloatField(
                             "y",
-                            FaceMotionUiText.Get("yLocal"),
+                            AxisYLabel,
                             _vectorValue.y);
 
                         _vectorValue.z = DrawFloatField(
                             "z",
-                            FaceMotionUiText.Get("zLocal"),
+                            AxisZLabel,
                             _vectorValue.z);
 
                         EditorGUI.indentLevel--;
@@ -438,6 +442,43 @@ namespace FaceMotion.Editor.UI.Panels
             _inspectedKeyId = created;
             LoadFields(created);
             return true;
+        }
+
+        /// <summary>
+        /// Section header shown above the X/Y/Z fields of a Transform key.
+        /// Local-space and unit information live here, not on the axis labels.
+        /// </summary>
+        internal static string GetTransformValueHeader(TrackKind kind)
+        {
+            string key = GetTransformHeaderKey(kind);
+            return key == null
+                ? FaceMotionUiText.Get("value")
+                : FaceMotionUiText.Get(key);
+        }
+
+        internal static string GetTransformValueHeader(
+            TrackKind kind,
+            SystemLanguage language)
+        {
+            string key = GetTransformHeaderKey(kind);
+            return key == null
+                ? FaceMotionUiText.Get("value", language)
+                : FaceMotionUiText.Get(key, language);
+        }
+
+        private static string GetTransformHeaderKey(TrackKind kind)
+        {
+            switch (kind)
+            {
+                case TrackKind.TransformPosition:
+                    return "transformPositionHeader";
+                case TrackKind.TransformRotation:
+                    return "transformRotationHeader";
+                case TrackKind.TransformScale:
+                    return "transformScaleHeader";
+                default:
+                    return null;
+            }
         }
 
         internal static string GetTrackDisplayName(FaceTrackData track)
