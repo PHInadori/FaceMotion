@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.7.0] - 2026-09-28
+
+### Added
+
+- A "?" help button in panel headers opens a short inline explanation of what the panel does. The text is localized like the rest of the editor UI and never changes project or editor state.
+- Preview review step: playing the current animation marks it as reviewed, editing the animation clears that review, and the VRChat update guidance waits until the preview has actually been played. The review state is per animation and survives switching animations.
+- New projects start with one ready-to-edit animation ("Animation 1") that is selected immediately, so the Timeline is usable without any setup. Deleting the last animation is respected and is not silently recreated.
+
+### Improved
+
+- Timeline input reliability: scrubbing and key dragging no longer leak gesture state into each other, a click selects the nearest key inside the hit area, a key cannot be grabbed through another track's row, frame snapping is consistent at every frame rate, and a mouse gesture interrupted by a lost control recovers on the very next click.
+- Timeline key selection is preserved when the FaceMotion window starts up or is reopened, including in unsaved scenes and after an interrupted restore.
+- Key Inspector edits apply immediately while you type (BlendShape value, position, rotation, scale, interpolation), clamp to valid ranges, and collapse into a single undo step per edit session. Moving a key in time snaps to frames, keeps the selected key identity, and does nothing when nothing would change.
+- Workflow guidance follows the real authoring order (create an animation, add a track, add a key, play the preview, then update VRChat) and moves on as content is added or removed, including after undo and redo.
+- Preview playback is more predictable: Stop returns the playhead to zero, Play at the end restarts from the beginning, non-looping playback stops exactly at the animation duration, and the Space shortcut toggles playback only while the Preview is active and never while a text or numeric field is being edited. All Preview controls stay visible in narrow layouts.
+- The Preview header and controls lay out against the visible rows and localized text without clipping, and BlendShape hover preview hit-testing is reliable in both the track list and the editor window.
+
+### Fixed
+
+- Export diagnostics are presented consistently wherever they appear, with the matching documentation.
+- An unsafe editor benchmark hook is no longer exposed in the normal menu.
+- Legacy Direct Batch generated ownership is recognized again, so an existing Direct Batch integration is no longer treated as unowned or foreign.
+
+### Compatibility
+
+- Projects saved with v0.6.0 are upgraded automatically the first time they are opened or saved; there is no manual upgrade step.
+- The project schema is now 2. Existing key IDs, values, timing, interpolation, and origins are preserved exactly: migration never guesses that an existing key was a Baseline key and never rewrites an existing origin. Newly authored tracks can record Baseline provenance.
+- Migration preserves the project asset's Unity object name, so upgrading a project never blanks or renames its asset.
+- Legacy schema 0 projects upgrade through schema 1 to schema 2 in one pass, the same input always produces the same output, running the upgrade again is a no-op, and an upgrade that cannot be validated is not written to the asset.
+- Old Direct Batch manifests and the original Direct Batch API remain readable and compatible; no manifest or backend version change is required.
+
+### Documentation
+
+- Reconciled the VRChat integration workflow documentation (Getting Started, User Guide, Modular Avatar, VRChat Integration, Compatibility, README) with the current one-button update workflow.
+- Clarified Direct Batch diagnostic compatibility in the diagnostics documentation.
+
 ## [0.6.0] - 2026-09-26
 
 ### Added
