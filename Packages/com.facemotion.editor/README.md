@@ -2,9 +2,7 @@
 
 FaceMotion は、VRChat アバター向けの表情・Transform アニメーションを Unity 上で作成する Editor package です。タイムライン編集、分離プレビュー、AnimationClip export、VRChat への Direct Integration、任意の Modular Avatar Integration を提供します。
 
-<!-- Screenshot will be added before public release. Do not add mock or generated UI images. -->
-
-正式な screenshot はまだありません。実画面を正確に示せるまで、mock image や壊れた image link は掲載しません。
+![FaceMotion editor window showing avatar preview, timeline, and transform key inspector](Documentation~/Images/FaceMotion-0.7.0-overview.png)
 
 ## 主な機能
 
