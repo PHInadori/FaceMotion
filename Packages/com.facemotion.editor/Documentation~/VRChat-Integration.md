@@ -1,35 +1,30 @@
 # VRChat Integration
 
-VRChat 統合は `VRChat 統合` panel で行います。通常は **VRChatへ追加** のワンクリックフローを使います。詳細な手動 workflow では、必ず **統合を計画して検証** を実行し、blocking diagnostic がないことを確認してから Apply してください。
+VRChat 統合は `VRChat 統合` panel で行います。通常の複数 Animation 更新は Modular Avatar を使用し、checkbox の選択状態を **VRChatへ反映** で同期します。単一 Animation のワンクリック統合や Direct Integration は `詳細設定` にあります。手動 workflow では、必ず **統合を計画して検証** を実行し、blocking diagnostic がないことを確認してから Apply してください。
 
 | | Direct Integration | Modular Avatar Integration |
 | --- | --- | --- |
 | Dependency | VRChat SDK のみ | Modular Avatar が任意で必要 |
 | Descriptor | FX / menu / parameters 参照を copy-on-write で更新 | Descriptor 参照を直接変更しない |
 | 生成物 | FX、menu、parameters、reset clip、manifest | integration root、Merge Animator、Parameters、Menu Installer、generated assets、manifest |
-| Remove | current UI に専用 button はない。managed reapply は既存 integration を rollback して再作成 | Remove button が hierarchy を detach し、assets / manifest は保持 |
+| Remove | current UI に専用 button はない。managed reapply は既存 integration を rollback して再作成 | checkbox から外して **VRChatへ反映**、または明示的な Remove で proven-owned hierarchy / assets / manifest を削除。hierarchy だけを手動で取り外した場合の detached manifest は再適用時に再認識 |
 
-## One-click workflow
+## 選択状態を VRChat 側へ同期（Modular Avatar）
 
-1. scene Avatar と FaceMotion Animation を選択します。
-2. **VRChatへ追加** を押します。Modular Avatar が導入済みなら MA backend が既定で選ばれます。project 単位の明示選択は優先されます。
-3. FaceMotion は Export → Plan → Validate → Apply を順に実行し、progress と diagnostic を表示します。
-4. blocking diagnostic が出た場合は Apply せず停止します。FaceMotion 所有でない AnimationClip は上書きされません。
-5. 成功時は backend と animation 名を確認し、scene を保存して Build & Test します。
+1. Modular Avatar を導入し、scene Avatar と FaceMotion Project を選択します。複数 checkbox の更新には MA backend の選択が必要です（Direct を選んでいた場合は `詳細設定` で切り替えます）。
+2. `VRChat 統合` の Animation checkbox で反映したい Animation を選びます。チェック済みは保持または追加、以前に統合してチェックを外した FaceMotion 管理対象は削除の候補です。すべて外すと proven-owned の統合を削除できます。
+3. **VRChatへ反映** を押します。FaceMotion は選択状態と管理済みの統合を照合し、追加・削除・維持を計画して検証してから適用します。必要な clip の export と diagnostic もこの操作で処理します。
+4. blocking diagnostic がある場合は変更を止めます。FaceMotion 所有でない AnimationClip は上書きされません。成功したら scene を保存し、VRChat SDK の Build & Test で確認します。
 
-再実行は owned AnimationClip の GUID と既存 managed integration を再利用します。Direct と MA を切り替える場合は cross-backend warning を確認してください。`詳細設定` foldout には manual export path、AnimationClip、backend、Plan/Validate、Apply の workflow が残されています。
+### Modular Avatar の管理単位
 
-## Batch Integration
+MA は Animation ごとに FaceMotion-owned integration root と `ModularAvatarIntegrationManifest` を持ちます。再実行時は一致する管理済み対象を維持し、必要な変更だけを適用します。未導入時や Direct backend 選択時には複数 checkbox の **VRChatへ反映** は使用できません。
 
-複数の Animation をまとめて一括統合できます。Animation list で複数 Animation の checkbox を選択し、`VRChat 統合` panel から batch 統合を実行します。
+## 詳細設定の単一 Animation workflow
 
-- Batch Export: 選択した Animation をそれぞれ output path へ export します。複数 Animation が同じ export path に解決される場合は block します。
-- Batch Plan / Apply: 選択した Animation ごとに Direct または MA の integration を適用します。
-- Direct batch は copy-on-write の asset set を 1 組作成し、失敗時は全体を rollback します。
-- MA batch は Animation ごとに manifest を持つ integration root を作成し、再実行は既存の matching item に idempotent に再適用します。
-- 各 Animation の結果 summary と、部分失敗時の diagnostic を表示します。parameter 名は Animation 名から生成されるため、一意で 256 文字以下である必要があります。
+`詳細設定` の **VRChatへ追加** は現在選択中の単一 Animation のワンクリックフローです（Export → Plan → Validate → Apply）。backend を Direct または MA から選ぶ個別操作、manual export path、AnimationClip、Plan/Validate、Apply も利用できます。複数 checkbox の MA 選択状態同期とは別の入口です。Direct と MA を切り替える場合は cross-backend warning を確認してください。
 
-## Direct workflow
+## Direct workflow（詳細設定）
 
 1. scene Avatar、AnimationClip、`Assets` 配下の output folder を選択します。
 2. backend を `直接統合 (Direct)` にします。
@@ -42,6 +37,10 @@ Direct は FX、Expression Parameters、Expressions Menu を clone して生成�
 ### Write Defaults
 
 既存 FX の state に Write Defaults ON が一つでもあると `FM-G-WRITE-DEFAULTS` で Direct Apply を block します。FaceMotion は original FX を強制変更しません。Write Defaults を OFF にする影響を理解できない場合は、copy/controller または検証用 avatar で先に確認してください。
+
+## 旧 Direct Batch 互換性
+
+0.3.0 以降の旧 Direct Batch 公開 API（`DirectVRChatIntegration.PlanBatch` / `ApplyBatch` / `RollbackBatch`）と `DirectBatchIntegrationManifest` は互換性のため保持しています。旧 ApplyBatch を使った project には `<outputFolder>/FaceMotion_Batch/BatchManifest.asset` が存在する場合があります。保存済み manifest の読み込み、FaceMotion-owned clip / reset clip の所有判定、明示的な rollback を引き続きサポートします。現行 MA backend も旧 Direct Batch の所有情報を参照して binding conflict を判断します。これは現在の初心者向け checkbox workflow ではなく、通常の利用者が旧 API や manifest を手動で作成する必要はありません。
 
 ## Reset と rollback
 

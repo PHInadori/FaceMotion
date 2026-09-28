@@ -12,9 +12,9 @@ FaceMotion は、VRChat アバター向けの表情・Transform アニメーシ�
 - 分離された Preview、再生コントロール、scene-style camera、明示操作による可逆的な Scene Apply
 - BlendShape browser（カテゴリ分類ボタン、検索、VRChat / MA conflict の事前表示）
 - 編集可能な Animation 名（VRChat menu label にもそのまま使用）
-- 複数 Animation の一括選択と Batch Integration
+- 複数 Animation を checkbox で選び、Modular Avatar の **VRChatへ反映** で選択状態を同期
 - AnimationClip export
-- VRChat へのワンクリック統合（Export → Plan → Validate → Apply）、Direct Integration、任意の Modular Avatar Integration
+- VRChat への統合（Modular Avatar の選択状態同期、詳細設定からの単一 Animation のワンクリック統合と Direct Integration）
 - 次の操作を示す workflow guidance、empty state、tooltip、shortcut help
 - Quick Key、Copy / Paste / Duplicate / Nudge による key 作成・編集の高速化
 
@@ -39,7 +39,7 @@ VCC / ALCOM では `https://phinadori.github.io/PHInadori-VPM/index.json` を cu
 2. scene 内の VRChat avatar を選択し、FaceMotion Project と Animation を作成します。Animation 名は編集でき、VRChat の menu label にそのまま使われます。
 3. BlendShape または Transform Track を追加し、Keyframe を編集します。BlendShape Track 追加時は現在のアバターの BlendShape 値を 0 秒の初期 key として自動生成します。
 4. Preview の再生コントロールと camera 操作で確認し、必要なら AnimationClip を export します。
-5. VRChat 統合では **VRChatへ追加** のワンクリックフローを使うか、複数 Animation をまとめて一括統合（Batch Integration）できます。Plan の diagnostic を確認してから Direct または Modular Avatar backend を Apply します。
+5. Modular Avatar を使用する場合は Animation の checkbox で反映対象を選び、**VRChatへ反映** で選択状態を VRChat 側へ同期します。MA を使わない場合は `詳細設定` の Direct Integration で **統合を計画して検証** してから Apply します。
 6. scene を保存し、VRChat SDK の Build & Test で動作を確認します。
 
 詳細: [Getting Started](Documentation~/Getting-Started.md)
@@ -59,7 +59,7 @@ VCC / ALCOM では `https://phinadori.github.io/PHInadori-VPM/index.json` を cu
 | Direct Integration | MA を使わない構成 | FX / menu / parameters を copy-on-write で生成し、Descriptor 参照を更新 |
 | Modular Avatar Integration | MA を使う構成 | Descriptor 参照を直接変更せず、avatar root 配下の MA integration root を生成 |
 
-Direct は既存 FX の Write Defaults が ON の場合、安全のため block します。MA は任意依存であり、未導入でも Direct workflow は使用できます。MA 導入時は MA backend が既定で優先され、project 単位で変更できます。
+Direct は既存 FX の Write Defaults が ON の場合、安全のため block します。MA は任意依存であり、未導入でも `詳細設定` の Direct workflow は使用できます。複数 checkbox の **VRChatへ反映** には MA backend が必要です。
 
 詳細: [VRChat Integration](Documentation~/VRChat-Integration.md) / [Modular Avatar](Documentation~/Modular-Avatar.md)
 

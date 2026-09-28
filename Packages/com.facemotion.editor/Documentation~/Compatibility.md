@@ -1,6 +1,6 @@
 # FaceMotion Persisted Data Compatibility
 
-This document describes the compatibility contract for every FaceMotion-persisted asset. It is written for users, reviewers, and release staff: what the tool reads, what it upgrades automatically, what it refuses, and what to expect when older data is opened.
+This document describes the compatibility contract for FaceMotion's versioned persisted assets and the historical Direct Batch manifest. It is written for users, reviewers, and release staff: what the tool reads, what it upgrades automatically, what it refuses, and what to expect when older data is opened.
 
 The developer-oriented technical counterpart is [Schema-Migration.md](Schema-Migration.md).
 
@@ -14,12 +14,13 @@ The tool persists the following ScriptableObject assets:
 | `AvatarMappingProfile` | Avatar-specific binding table (blend shape / transform bindings), separately stored from projects. |
 | `DirectIntegrationManifest` | Ownership and rollback data for a direct (copy-on-write) VRChat integration. |
 | `ModularAvatarIntegrationManifest` | Ownership and rollback data for a Modular Avatar integration. |
+| `DirectBatchIntegrationManifest` | Historical Direct Batch ownership and rollback data; present only in projects that used the legacy Direct Batch integration. |
 
-Legacy preset data and fingerprints use their own version fields; this document covers the four assets above. Preset and random-generation authoring have been removed from the current UI; their serialized data remains supported for migration and compatibility.
+The first four assets above are versioned. `DirectBatchIntegrationManifest` has no schema version field and is retained as a separate compatibility record. Legacy preset data and fingerprints use their own version fields. Preset and random-generation authoring have been removed from the current UI; their serialized data remains supported for migration and compatibility.
 
 ## Current schema version
 
-Every persisted asset carries an integer schema version:
+The four versioned assets carry an integer schema version; the historical Direct Batch manifest does not:
 
 | Asset | Current schema version |
 |---|---|
@@ -32,13 +33,13 @@ These versions are the ones this tool understands. A schema number changes only 
 
 ## Minimum supported schema version
 
-The minimum supported schema version is **0** (legacy). Version 0 is the equivalent of "the version field was not present," i.e. data written before schema versioning existed. The tool recognizes version 0 automatically and upgrades it in place.
+For the versioned assets, the minimum supported schema version is **0** (legacy). Version 0 is the equivalent of "the version field was not present," i.e. data written before schema versioning existed. The tool recognizes version 0 automatically and upgrades it in place. The unversioned `DirectBatchIntegrationManifest` is not assigned an invented schema version.
 
 A project whose version is **uninitialized (a negative number)** is not the same as legacy data and is refused (see "Read-only / blocking policy" below).
 
 ## Future-schema behavior
 
-Data stamped with a schema **greater than current** was written by a newer version of the tool. The tool does not understand it and must not guess.
+Versioned data stamped with a schema **greater than current** was written by a newer version of the tool. The tool does not understand it and must not guess.
 
 - The asset is **blocked** (read-only for migration purposes).
 - It is **never modified, rewritten, normalized, or repaired**.
@@ -58,6 +59,8 @@ Migration runs automatically at explicit, well-defined boundaries:
 | Direct integration Apply / Rollback | `DirectIntegrationManifest` upgraded, then used. |
 | Modular Avatar Apply / Remove | `ModularAvatarIntegrationManifest` upgraded, then used. |
 | Mapping profile load/use | `AvatarMappingProfile` upgraded, then committed to the asset. |
+
+`DirectBatchIntegrationManifest` has no schema version and does not go through these migration steps. Its original script identity and serialized fields remain readable for compatibility.
 
 Rules that always hold:
 
@@ -93,7 +96,7 @@ A load or use is refused (nothing is written) when:
 
 | Condition | Diagnostic |
 |---|---|
-| Future schema (> current) for any asset | `FM-MIG-FUTURE-VERSION` |
+| Future schema (> current) for versioned assets | `FM-MIG-FUTURE-VERSION` |
 | Uninitialized (negative) project or profile schema | `FM-MIG-0002` / `FM-MAP-0004` |
 | A required migration step is missing | `FM-MIG-0003` |
 | The object is null / missing | `FM-MIG-0004` / `FM-G-MANIFEST` / `FM-H-MA-MANIFEST` |
@@ -113,6 +116,12 @@ A `DirectIntegrationManifest` records the original and generated FX controller, 
 - Rollback restores the original FX/parameters/menu and deletes only FaceMotion-generated files inside the manifest folder. Foreign content in the generated folder is retained and reported.
 - A manifest whose avatar reference cannot be resolved is blocked (`FM-MIG-INTEGRATION-AMBIGUOUS`).
 
+### Historical Direct Batch manifest
+
+`DirectBatchIntegrationManifest` was shipped starting in 0.3.0. Only a project that used the historical Direct Batch workflow or public API can contain `<outputFolder>/FaceMotion_Batch/BatchManifest.asset`. Its script GUID (`2324bd352b7a99d4fbec6dbb90441dcd`) and serialized fields remain stable so an existing asset loads without Missing Script. It has no `SchemaVersion` and is not converted into `DirectIntegrationManifest`.
+
+The retained `DirectVRChatIntegration.RollbackBatch` API can restore the recorded original descriptor references and remove only safely identified FaceMotion-owned outputs. Current Modular Avatar integration also reads an existing Direct Batch manifest to recognize its FaceMotion-owned source and generated reset clips during binding-conflict checks. This is compatibility for saved user assets, not the current beginner checkbox workflow; users do not need to create a legacy batch manifest.
+
 ## Modular Avatar Attached / Detached compatibility
 
 The MA integration state is recorded on the manifest as `Attached` or `Detached`:
@@ -121,7 +130,7 @@ The MA integration state is recorded on the manifest as `Attached` or `Detached`
 - **Detached**: the generated assets and manifest are retained, but the integration object is gone (for example the user removed the generated hierarchy).
 - **Unknown** is the legacy default and is resolved lazily by the migration services from the live hierarchy.
 
-A **recorded state is never recomputed** from the live hierarchy just because a migration ran; runtime ownership resolution governs each operation. The MA backend recognizes and manages **both** attached and detached manifests: a detached integration is reconnected on the next apply, reusing its retained generated folder and assets (`FM-H-MA-DETACHED`), while a remove or apply on a manifest whose owned object is missing blocks rather than deleting.
+A **recorded state is never recomputed** from the live hierarchy just because a migration ran; runtime ownership resolution governs each operation. The MA backend recognizes and manages **both** attached and detached manifests: a detached integration can be reconnected on the next apply, reusing retained assets (`FM-H-MA-DETACHED`). An explicit Remove deletes proven-owned hierarchy, assets, and manifest; ambiguous or foreign ownership blocks instead of guessing.
 
 ## Legacy MA Detached recognition
 
@@ -143,7 +152,8 @@ Migration is built to be safe to run repeatedly:
 
 ## Serialization roundtrip expectations
 
-- Persisted data survives a serialize/deserialize round trip with all IDs, provenance, and content intact (the services round-trip through `EditorJsonUtility`).
+- Versioned persisted data survives a serialize/deserialize round trip with all IDs, provenance, and content intact (the services round-trip through `EditorJsonUtility`).
+- The unversioned Direct Batch manifest retains its fields and references across `AssetDatabase` save/import/load without a schema migration.
 - A success commit is written through Undo + `SetDirty` + `SaveAssets` at the explicit boundary only.
 - After a legacy project is migrated and committed, a subsequent load is a no-op with identical content — the migrated data is stable across sessions.
 

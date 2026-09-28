@@ -4,7 +4,7 @@
 
 FaceMotion window は **Tools/FaceMotion/FaceMotion ウィンドウを開く** から開きます。上部の workflow guidance は、avatar → animation → track → key → preview/integrate の次の操作を示します。`FaceMotion Project` は animation、track、keyframe を保存する asset です。`アニメーション` の **+ 新規アニメーション** で編集対象を作り、timeline settings の `長さ`、`フレームレート`、`ループ` を設定します。左下の shortcut help では timeline、preview camera、key 操作を確認できます。
 
-選択中の Animation には `アニメーション名` フィールドがあります。ここで編集した名前は VRChat の menu label と parameter 名にそのまま使われ、空文字は設定できません。Animation list の各項目の checkbox で複数選択でき、Batch Integration（一括統合）の対象にできます。
+選択中の Animation には `アニメーション名` フィールドがあります。ここで編集した名前は VRChat の menu label と parameter 名にそのまま使われ、空文字は設定できません。Animation list の各項目の checkbox で複数選択し、Modular Avatar の **VRChatへ反映** で選択状態を VRChat 側へ同期できます。
 
 ## Avatar と Track
 
@@ -46,9 +46,9 @@ BlendShape、Position、Scale は補間値を評価します。Rotation は Eule
 
 ## VRChat 統合
 
-通常は `VRChat 統合` の **VRChatへ追加** を使います。選択 animation の owned `.anim` を必要に応じて export し、Export → Plan → Validate → Apply を順に実行します。FaceMotion 所有でない clip は上書きせず、再実行は owned clip の GUID と managed integration を再利用します。詳細な手動設定は `詳細設定` foldout から使用できます。詳細は [VRChat Integration](VRChat-Integration.md) を参照してください。
+通常の複数 Animation の統合では Modular Avatar を使い、`VRChat 統合` の checkbox と **VRChatへ反映** で現在の選択状態を同期します。FaceMotion 所有でない clip は上書きしません。`詳細設定` foldout には選択中の単一 Animation の **VRChatへ追加**（Export → Plan → Validate → Apply）と、個別の手動 Plan / Apply が残っています。詳細は [VRChat Integration](VRChat-Integration.md) を参照してください。
 
-メニューに表示される label は Animation の `アニメーション名` です。複数 Animation をまとめて統合する場合は、Animation list で checkbox を選択して Batch Integration を実行します（詳細は [VRChat Integration](VRChat-Integration.md)）。
+メニューに表示される label は Animation の `アニメーション名` です。MA の選択状態同期では、チェック済みの Animation を保持または追加し、チェックを外した以前の FaceMotion 管理対象は削除します。Direct Integration は別の `詳細設定` の個別 workflow です。過去の Direct Batch 公開 API と保存済み manifest は互換性のため保持していますが、現在の初心者向け checkbox 更新とは別です。
 
 ## Undo
 
