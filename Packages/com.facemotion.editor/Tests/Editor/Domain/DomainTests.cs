@@ -100,6 +100,7 @@ namespace FaceMotion.Editor.Tests
             Assert.That((int)OriginKind.Blink, Is.EqualTo(2));
             Assert.That((int)OriginKind.Random, Is.EqualTo(3));
             Assert.That((int)OriginKind.Imported, Is.EqualTo(4));
+            Assert.That((int)OriginKind.Baseline, Is.EqualTo(5));
 
             Assert.That((int)GeneratorType.Preset, Is.EqualTo(0));
             Assert.That((int)GeneratorType.Blink, Is.EqualTo(1));

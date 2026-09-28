@@ -42,7 +42,10 @@ namespace FaceMotion.Editor.Tests
 
         private static ProjectMigrationResult Migrate(FaceMotionProject source)
         {
-            return new ProjectMigrationPipeline(new IProjectMigrator<FaceMotionProject>[] { new ProjectLegacyMigrator() }).Migrate(source);
+            return new ProjectMigrationPipeline(new IProjectMigrator<FaceMotionProject>[]
+            {
+                new ProjectLegacyMigrator(), new ProjectV1ToV2Migrator()
+            }).Migrate(source);
         }
 
         private static FaceMotionProject CreateLegacyProject()
@@ -57,6 +60,177 @@ namespace FaceMotion.Editor.Tests
             var track = FaceTrackData.CreateBlendShape(rendererPath, blendShapeName);
             track.BlendShape.AddKey(FloatKeyframeData.Create(0f, 0f));
             return track;
+        }
+
+        [Test]
+        public void NewProject_UsesCurrentSchemaV2()
+        {
+            var project = FaceMotionProject.CreateNew();
+            var track = FaceTrackData.CreateBlendShape("Face", "Smile");
+            track.BlendShape.AddKey(FloatKeyframeData.Create(0f, 20f, InterpolationType.Linear, KeyOrigin.Baseline));
+            Assert.That(track.BlendShape.Keys[0].Origin.IsBaseline, Is.True);
+            Assert.That(project.SchemaVersion, Is.EqualTo(2), "A project able to persist Baseline=5 must identify its new schema.");
+        }
+
+        [Test]
+        public void Schema1Project_MigratesToV2WithoutChangingExistingKeys()
+        {
+            var project = FaceMotionProject.CreateNew();
+            ReflectionUtil.SetField(project, "_schemaVersion", 1);
+            var animation = FaceMotionAnimationData.Create("Published v1");
+            var blend = FaceTrackData.CreateBlendShape("Face", "Smile");
+            var position = FaceTrackData.CreateTransform(TrackKind.TransformPosition, "Jaw");
+            for (int kind = 0; kind <= 4; kind++)
+            {
+                var origin = KeyOrigin.Manual;
+                if (kind > 0)
+                {
+                    var record = GenerationRecord.Create(animation.AnimationId,
+                        (GeneratorType)(kind - 1), "preset", 1, "hash");
+                    project.AddGenerationRecord(record);
+                    origin = new KeyOrigin((OriginKind)kind, record.GenerationId);
+                }
+
+                float time = kind * 0.2f;
+                blend.BlendShape.AddKey(FloatKeyframeData.Create(time, 10f + kind * 5f,
+                    InterpolationType.EaseIn, origin));
+                position.Transform.AddKey(Vector3KeyframeData.Create(time,
+                    new Vector3(kind, kind + 1, kind + 2), InterpolationType.Hold, origin));
+            }
+            animation.Timeline.AddTrack(blend);
+            animation.Timeline.AddTrack(position);
+            project.AddAnimation(animation);
+            string path = Folder + "/schema-v1.asset";
+            AssetDatabase.CreateAsset(project, path);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            // Compare the saved v1 asset, not an unsaved in-memory key whose null generation
+            // ID Unity normalizes to an empty string during ordinary serialization.
+            var before = FaceMotionProject.CreateClone(AssetDatabase.LoadAssetAtPath<FaceMotionProject>(path));
+            try
+            {
+                var result = ProjectMigrationService.TryMigrateOnLoad(AssetDatabase.LoadAssetAtPath<FaceMotionProject>(path));
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+                var loaded = AssetDatabase.LoadAssetAtPath<FaceMotionProject>(path);
+
+                Assert.That(result.Status, Is.EqualTo(ProjectMigrationStatus.Migrated));
+                Assert.That(loaded.SchemaVersion, Is.EqualTo(2));
+                Assert.That(loaded.ProjectId, Is.EqualTo(before.ProjectId));
+                Assert.That(loaded.Animations[0].AnimationId, Is.EqualTo(before.Animations[0].AnimationId));
+                Assert.That(loaded.Generations.Count, Is.EqualTo(before.Generations.Count));
+                for (int trackIndex = 0; trackIndex < 2; trackIndex++)
+                    Assert.That(loaded.Animations[0].Timeline.Tracks[trackIndex].TrackId,
+                        Is.EqualTo(before.Animations[0].Timeline.Tracks[trackIndex].TrackId));
+                for (int i = 0; i < 5; i++)
+                {
+                    var oldFloat = before.Animations[0].Timeline.Tracks[0].BlendShape.Keys[i];
+                    var newFloat = loaded.Animations[0].Timeline.Tracks[0].BlendShape.Keys[i];
+                    Assert.That(newFloat.KeyId, Is.EqualTo(oldFloat.KeyId));
+                    Assert.That(newFloat.Time, Is.EqualTo(oldFloat.Time));
+                    Assert.That(newFloat.Value, Is.EqualTo(oldFloat.Value));
+                    Assert.That(newFloat.Interpolation, Is.EqualTo(oldFloat.Interpolation));
+                    Assert.That(newFloat.Origin.Kind, Is.EqualTo(oldFloat.Origin.Kind));
+                    // Unity's asset overwrite can turn an absent manual GenerationId from
+                    // null into empty. Both represent "no generation"; populated IDs must match.
+                    Assert.That(newFloat.Origin.GenerationId ?? string.Empty,
+                        Is.EqualTo(oldFloat.Origin.GenerationId ?? string.Empty));
+                    Assert.That(newFloat.Origin.IsBaseline, Is.False);
+
+                    var oldVector = before.Animations[0].Timeline.Tracks[1].Transform.Keys[i];
+                    var newVector = loaded.Animations[0].Timeline.Tracks[1].Transform.Keys[i];
+                    Assert.That(newVector.KeyId, Is.EqualTo(oldVector.KeyId));
+                    Assert.That(newVector.Time, Is.EqualTo(oldVector.Time));
+                    Assert.That(newVector.Value, Is.EqualTo(oldVector.Value));
+                    Assert.That(newVector.Interpolation, Is.EqualTo(oldVector.Interpolation));
+                    Assert.That(newVector.Origin.Kind, Is.EqualTo(oldVector.Origin.Kind));
+                    Assert.That(newVector.Origin.GenerationId ?? string.Empty,
+                        Is.EqualTo(oldVector.Origin.GenerationId ?? string.Empty));
+                    Assert.That(newVector.Origin.IsBaseline, Is.False);
+                }
+                Assert.That(loaded.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].Time, Is.Zero);
+                Assert.That(loaded.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].Origin.Kind,
+                    Is.EqualTo(OriginKind.Manual), "A v1 key at zero is not a generated baseline.");
+            }
+            finally
+            {
+                Object.DestroyImmediate(before);
+            }
+        }
+
+        [TestCase(OriginKind.Manual)]
+        [TestCase(OriginKind.Preset)]
+        public void Schema1Migration_DoesNotGuessBaseline(OriginKind oldKind)
+        {
+            var project = FaceMotionProject.CreateNew();
+            ReflectionUtil.SetField(project, "_schemaVersion", 1);
+            var animation = FaceMotionAnimationData.Create("Old zero key");
+            var track = FaceTrackData.CreateBlendShape("Face", "Smile");
+            string generationId = null;
+            if (oldKind == OriginKind.Preset)
+            {
+                var record = GenerationRecord.Create(animation.AnimationId, GeneratorType.Preset, "preset", 1, "hash");
+                project.AddGenerationRecord(record);
+                generationId = record.GenerationId;
+            }
+            var key = FloatKeyframeData.Create(0f, 37f, InterpolationType.Smooth,
+                new KeyOrigin(oldKind, generationId));
+            track.BlendShape.AddKey(key);
+            animation.Timeline.AddTrack(track);
+            project.AddAnimation(animation);
+
+            var migrated = Migrate(project);
+
+            Assert.That(migrated.Status, Is.EqualTo(ProjectMigrationStatus.Migrated));
+            var preserved = migrated.Project.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0];
+            Assert.That(preserved.KeyId, Is.EqualTo(key.KeyId));
+            Assert.That(preserved.Time, Is.Zero);
+            Assert.That(preserved.Value, Is.EqualTo(37f));
+            Assert.That(preserved.Interpolation, Is.EqualTo(InterpolationType.Smooth));
+            Assert.That(preserved.Origin.Kind, Is.EqualTo(oldKind));
+            Assert.That(preserved.Origin.GenerationId, Is.EqualTo(generationId));
+            Assert.That(preserved.Origin.IsBaseline, Is.False);
+        }
+
+        [Test]
+        public void Schema0Project_ChainsThroughLegacyAndV2()
+        {
+            var project = CreateLegacyProject();
+            var animation = FaceMotionAnimationData.Create("Legacy chain");
+            animation.Timeline.AddTrack(CreateLegacyBlendTrack());
+            project.AddAnimation(animation);
+            var legacy = new ProjectLegacyMigrator();
+            var v2 = new ProjectV1ToV2Migrator();
+
+            var migrated = Migrate(project);
+
+            Assert.That(legacy.FromVersion, Is.Zero);
+            Assert.That(legacy.ToVersion, Is.EqualTo(1));
+            Assert.That(v2.FromVersion, Is.EqualTo(legacy.ToVersion));
+            Assert.That(v2.ToVersion, Is.EqualTo(2));
+            Assert.That(migrated.Status, Is.EqualTo(ProjectMigrationStatus.Migrated));
+            Assert.That(migrated.Project.SchemaVersion, Is.EqualTo(2));
+            Assert.That(migrated.Project.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].KeyId,
+                Is.EqualTo(project.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].KeyId));
+            Assert.That(project.SchemaVersion, Is.Zero);
+        }
+
+        [Test]
+        public void MigrationToV2_IsIdempotent()
+        {
+            var project = FaceMotionProject.CreateNew();
+            ReflectionUtil.SetField(project, "_schemaVersion", 1);
+            var animation = FaceMotionAnimationData.Create("Old project");
+            animation.Timeline.AddTrack(CreateLegacyBlendTrack());
+            project.AddAnimation(animation);
+
+            var first = Migrate(project);
+            var second = Migrate(first.Project);
+
+            Assert.That(first.Status, Is.EqualTo(ProjectMigrationStatus.Migrated));
+            Assert.That(second.Status, Is.EqualTo(ProjectMigrationStatus.NoMigrationNeeded));
+            Assert.That(second.Project.SchemaVersion, Is.EqualTo(2));
+            Assert.That(JsonUtility.ToJson(second.Project), Is.EqualTo(JsonUtility.ToJson(first.Project)));
+            Assert.That(project.SchemaVersion, Is.EqualTo(1));
         }
 
         [Test]
@@ -565,6 +739,30 @@ namespace FaceMotion.Editor.Tests
             Assert.That(StableId.IsValid(reloaded.Animations[0].AnimationId), Is.True);
             Assert.That(StableId.IsValid(reloaded.Animations[0].Timeline.Tracks[0].TrackId), Is.True);
             Assert.That(StableId.IsValid(reloaded.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0].KeyId), Is.True);
+        }
+
+        [Test]
+        public void Schema1Project_MigrationPreservesAssetObjectName()
+        {
+            var project = FaceMotionProject.CreateNew();
+            ReflectionUtil.SetField(project, "_schemaVersion", 1);
+            project.AddAnimation(FaceMotionAnimationData.Create("Published v1"));
+            string path = Folder + "/NamedProject.asset";
+            AssetDatabase.CreateAsset(project, path);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+
+            var before = AssetDatabase.LoadAssetAtPath<FaceMotionProject>(path);
+            Assert.That(before.name, Is.EqualTo("NamedProject"), "Unity derives the asset object name from the filename.");
+
+            var result = ProjectMigrationService.TryMigrateOnLoad(before);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            var after = AssetDatabase.LoadAssetAtPath<FaceMotionProject>(path);
+
+            Assert.That(result.Status, Is.EqualTo(ProjectMigrationStatus.Migrated));
+            Assert.That(after.SchemaVersion, Is.EqualTo(2));
+            Assert.That(after.name, Is.EqualTo("NamedProject"),
+                "The Unity object name is outside the FaceMotion schema and must survive the migration commit.");
         }
 
         [Test]

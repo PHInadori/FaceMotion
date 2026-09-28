@@ -24,7 +24,7 @@ The four versioned assets carry an integer schema version; the historical Direct
 
 | Asset | Current schema version |
 |---|---|
-| `FaceMotionProject` | 1 |
+| `FaceMotionProject` | 2 |
 | `AvatarMappingProfile` | 1 |
 | `DirectIntegrationManifest` | 1 |
 | `ModularAvatarIntegrationManifest` | 1 |
@@ -61,6 +61,8 @@ Migration runs automatically at explicit, well-defined boundaries:
 | Mapping profile load/use | `AvatarMappingProfile` upgraded, then committed to the asset. |
 
 `DirectBatchIntegrationManifest` has no schema version and does not go through these migration steps. Its original script identity and serialized fields remain readable for compatibility.
+
+The published v0.6.0 project schema 1 migrates to schema 2 when opened or saved. Schema 2 adds `Baseline` key provenance for newly initialized tracks; migration never guesses that an existing key at time zero was a Baseline key. Existing key IDs, values, interpolation and origin values 0–4 are preserved. Legacy schema 0 advances through schema 1 before schema 2.
 
 Rules that always hold:
 

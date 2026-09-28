@@ -20,7 +20,8 @@ namespace FaceMotion.Serialization
     {
         public int FromVersion => FaceMotionVersions.LegacySchemaVersion;
 
-        public int ToVersion => FaceMotionVersions.ProjectSchemaVersion;
+        // This step produces the first public schema, regardless of the current schema.
+        public int ToVersion => 1;
 
         public bool CanMigrate(int version)
         {

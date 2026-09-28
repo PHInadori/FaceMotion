@@ -22,7 +22,11 @@ namespace FaceMotion.Editor.Serialization
                     new[] { new FaceMotionDiagnostic(FaceMotionDiagnosticCodes.NullProject, FaceMotionDiagnosticSeverity.Error, "Cannot migrate a null project.", string.Empty, true, "Load a project first.") });
             }
 
-            var pipeline = new ProjectMigrationPipeline(new IProjectMigrator<FaceMotionProject>[] { new ProjectLegacyMigrator() });
+            var pipeline = new ProjectMigrationPipeline(new IProjectMigrator<FaceMotionProject>[]
+            {
+                new ProjectLegacyMigrator(),
+                new ProjectV1ToV2Migrator()
+            });
             var result = pipeline.Migrate(asset);
             if (result.Status != ProjectMigrationStatus.Migrated || result.Project == null)
             {
@@ -30,7 +34,12 @@ namespace FaceMotion.Editor.Serialization
             }
 
             Undo.RegisterCompleteObjectUndo(asset, "Migrate FaceMotion Project Schema");
+            // The migrated clone is detached Unity object data: its m_Name is empty, and the
+            // JSON overwrite would clear the asset's filename-derived Unity object name.
+            // The name is outside the FaceMotion schema, so preserve it exactly as-is.
+            string originalAssetName = asset.name;
             EditorJsonUtility.FromJsonOverwrite(EditorJsonUtility.ToJson(result.Project), asset);
+            asset.name = originalAssetName;
             EditorUtility.SetDirty(asset);
             AssetDatabase.SaveAssets();
             return result;

@@ -117,6 +117,9 @@ namespace FaceMotion.Serialization
                 }
 
                 copy = migrated ?? copy;
+                // Each migrator sees the schema produced by the preceding step. In particular,
+                // the historical 0->1 migrator must not silently jump to today's schema.
+                copy.SetSchemaVersionForMigration(migrator.ToVersion);
             }
 
             copy.SetSchemaVersionForMigration(_targetSchemaVersion);

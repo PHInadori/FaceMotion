@@ -49,7 +49,7 @@ namespace FaceMotion.Editor.Tests
             var manifest = JsonUtility.FromJson<PackageManifest>(File.ReadAllText(manifestPath));
 
             Assert.That(FaceMotionVersions.ToolVersion, Is.EqualTo(manifest.version));
-            Assert.That(FaceMotionVersions.ProjectSchemaVersion, Is.EqualTo(1));
+            Assert.That(FaceMotionVersions.ProjectSchemaVersion, Is.EqualTo(2));
             Assert.That(FaceMotionVersions.IntegrationManifestVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.IntegrationBackendVersion, Is.EqualTo(1));
             Assert.That(FaceMotionVersions.MappingProfileSchemaVersion, Is.EqualTo(1));

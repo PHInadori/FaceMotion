@@ -138,7 +138,10 @@ namespace FaceMotion.Editor.Tests
         {
             var source = BuildValidProject();
             var pipeline = new ProjectMigrationPipeline(
-                new IProjectMigrator<FaceMotionProject>[] { new FakeMigrator(2, 3) },
+                new IProjectMigrator<FaceMotionProject>[]
+                {
+                    new FakeMigrator(FaceMotionVersions.ProjectSchemaVersion + 1, FaceMotionVersions.ProjectSchemaVersion + 2)
+                },
                 FaceMotionVersions.ProjectSchemaVersion + 2);
             var result = pipeline.Migrate(source);
 
@@ -152,7 +155,10 @@ namespace FaceMotion.Editor.Tests
         {
             var source = BuildValidProject();
             var pipeline = new ProjectMigrationPipeline(
-                new IProjectMigrator<FaceMotionProject>[] { new FakeMigrator(1, 3) },
+                new IProjectMigrator<FaceMotionProject>[]
+                {
+                    new FakeMigrator(FaceMotionVersions.ProjectSchemaVersion, FaceMotionVersions.ProjectSchemaVersion + 2)
+                },
                 FaceMotionVersions.ProjectSchemaVersion + 2);
             var result = pipeline.Migrate(source);
 
@@ -166,11 +172,15 @@ namespace FaceMotion.Editor.Tests
             FakeMigrator.ExecutionLog.Clear();
             var source = BuildValidProject();
             var pipeline = new ProjectMigrationPipeline(
-                new IProjectMigrator<FaceMotionProject>[] { new FakeMigrator(1, 2) },
+                new IProjectMigrator<FaceMotionProject>[]
+                {
+                    new FakeMigrator(FaceMotionVersions.ProjectSchemaVersion, FaceMotionVersions.ProjectSchemaVersion + 1)
+                },
                 FaceMotionVersions.ProjectSchemaVersion + 1);
             var result = pipeline.Migrate(source);
 
-            Assert.That(FakeMigrator.ExecutionLog, Is.EqualTo(new[] { 2 }), "The 1->2 migrator must run exactly once.");
+            Assert.That(FakeMigrator.ExecutionLog, Is.EqualTo(new[] { FaceMotionVersions.ProjectSchemaVersion + 1 }),
+                "The one-step migrator must run exactly once.");
             Assert.That(result.Success, Is.False, "Migrating beyond the tool's current schema must cascade into validation failure.");
             Assert.That(result.Status, Is.EqualTo(ProjectMigrationStatus.ValidationFailed));
             Assert.That(result.Project, Is.Null);
@@ -186,11 +196,17 @@ namespace FaceMotion.Editor.Tests
             FakeMigrator.ExecutionLog.Clear();
             var source = BuildValidProject();
             var pipeline = new ProjectMigrationPipeline(
-                new IProjectMigrator<FaceMotionProject>[] { new FakeMigrator(2, 3), new FakeMigrator(1, 2) },
+                new IProjectMigrator<FaceMotionProject>[]
+                {
+                    new FakeMigrator(FaceMotionVersions.ProjectSchemaVersion + 1, FaceMotionVersions.ProjectSchemaVersion + 2),
+                    new FakeMigrator(FaceMotionVersions.ProjectSchemaVersion, FaceMotionVersions.ProjectSchemaVersion + 1)
+                },
                 FaceMotionVersions.ProjectSchemaVersion + 2);
             var result = pipeline.Migrate(source);
 
-            Assert.That(FakeMigrator.ExecutionLog, Is.EqualTo(new[] { 2, 3 }), "Chained migrators must run in schema order.");
+            Assert.That(FakeMigrator.ExecutionLog,
+                Is.EqualTo(new[] { FaceMotionVersions.ProjectSchemaVersion + 1, FaceMotionVersions.ProjectSchemaVersion + 2 }),
+                "Chained migrators must run in schema order.");
             Assert.That(result.Success, Is.False, "Migrating beyond the tool's current schema must cascade into validation failure.");
             Assert.That(result.Status, Is.EqualTo(ProjectMigrationStatus.ValidationFailed));
             Assert.That(TestHelpers.FindDiagnostic(result.Diagnostics, FaceMotionDiagnosticCodes.FutureSchema), Is.Not.Null);

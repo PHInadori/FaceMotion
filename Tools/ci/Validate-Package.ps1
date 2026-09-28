@@ -51,7 +51,8 @@ Assert-True ($forbidden.Count -eq 0) "No forbidden or generated package content"
 
 $versionsPath = Join-Path $PackagePath "Editor/Core/Versioning/FaceMotionVersions.cs"
 $versions = Get-Content -LiteralPath $versionsPath -Raw
-foreach ($constant in @("ProjectSchemaVersion", "MappingProfileSchemaVersion", "IntegrationManifestVersion")) {
+Assert-True ($versions -match "public const int ProjectSchemaVersion = 2;") "Schema guard ProjectSchemaVersion is 2"
+foreach ($constant in @("MappingProfileSchemaVersion", "IntegrationManifestVersion")) {
     Assert-True ($versions -match "public const int $constant = 1;") "Schema guard $constant is 1"
 }
 Assert-True ($versions -match "public const string ToolVersion = `"$([regex]::Escape($manifest.version))`";") "ToolVersion matches package version"

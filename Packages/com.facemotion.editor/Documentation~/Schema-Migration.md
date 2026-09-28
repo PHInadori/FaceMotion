@@ -10,27 +10,24 @@ All version constants live in `FaceMotion.Core/Versioning` (`FaceMotionVersions.
 
 | Constant | Value |
 |---|---|
-| `ProjectSchemaVersion` | 1 |
-| `PresetSchemaVersion` | 1 |
+| `ProjectSchemaVersion` | 2 |
 | `IntegrationManifestVersion` | 1 |
-| `GeneratorAlgorithmVersion` | 1 |
 | `IntegrationBackendVersion` | 1 |
 | `MappingProfileSchemaVersion` | 1 |
 | `AvatarFingerprintAlgorithmVersion` | 1 |
 | `AvatarFingerprintFormatVersion` | 1 |
 | `LegacySchemaVersion` | 0 |
-| `LegacyGeneratorAlgorithmVersion` | 0 |
 
 Rules:
 
 - Version 0 is the legacy equivalent of "no version field was present" and is the minimum supported version.
 - Negative versions mean uninitialized data and are refused, never migrated.
 - Versions greater than current are future schemas and are refused, never migrated.
-- `LegacyGeneratorAlgorithmVersion` (0) is recorded provenance that predates algorithm versions; it is **never lifted** during migration.
+- A stored generation `AlgorithmVersion` of 0 is legacy provenance that predates algorithm versions; it is **never lifted** during migration.
 
 ## Persisted schema inventory
 
-Four ScriptableObject roots are persisted:
+The four versioned ScriptableObject roots are listed below. The historical, unversioned `DirectBatchIntegrationManifest` is retained separately for compatibility (see [Compatibility](Compatibility.md)):
 
 ```
 FaceMotionProject
@@ -108,7 +105,7 @@ ModularAvatarIntegrationManifest
   [SerializeField] IntegrationState   State
 ```
 
-Serialized roots are ScriptableObjects; children are inline (`[SerializeField]`, not `SerializeReference`). Presets and avatar fingerprints carry their own version/format fields and are outside the project graph (see `Architecture/ADR-002-Serialization.md`).
+Serialized roots are ScriptableObjects; children are inline (`[SerializeField]`, not `SerializeReference`). Keyframe provenance contains a serialized `KeyOrigin._kind`: values 0–4 keep their published meanings, and schema 2 allows the new `Baseline = 5` for scene-derived track initialization. Presets and avatar fingerprints carry their own version/format fields and are outside the project graph (see `Architecture/ADR-002-Serialization.md`).
 
 A list field is never null after Unity deserialization, but the migration path treats a null list defensively as an empty list (`CreateClone` guards), and `NormalizeStructure` recreates a missing list.
 
@@ -122,16 +119,17 @@ Migrate(source)
   schemaVersion < 0                   -> Uninitialized   (blocking FM-MIG-0002)
   schemaVersion > target              -> FutureSchema    (blocking FM-MIG-0001)
   schemaVersion == target             -> CompleteCurrentSchema (clone + normalize + validate)
-  otherwise                           -> build chain 0 -> 1, clone, migrate, normalize, validate, commit
+  otherwise                           -> build chain 0 -> 1 -> 2 (or 1 -> 2), clone, migrate, normalize, validate
 ```
 
 - Chain building requires exactly one migrator per `FromVersion` and each migrator must advance exactly one schema step, otherwise `VersionGap` (blocking `FM-MIG-0003`).
+- After each step the detached copy advances to that step's schema, so the next migrator sees its own input version.
 - Work always happens on a detached deep clone (`FaceMotionProject.CreateClone`), never on the source.
 - After migration the clone is normalized (`ProjectNormalizer.Normalize`) and validated (`ProjectValidator.Validate`); validation failures cancel with `ValidationFailed` (blocking `FM-MIG-0005`).
 - A `Migrated` result prepends an `FM-MIG-UPGRADED` info diagnostic.
 - The source is never mutated; a success result carries the detached migrated clone.
 
-`IProjectMigrator<TProject>` is one forward step; `ProjectLegacyMigrator` implements `0 -> 1` for `FaceMotionProject`.
+`IProjectMigrator<TProject>` is one forward step: `ProjectLegacyMigrator` remains pinned to the first public schema (`0 -> 1`), and `ProjectV1ToV2Migrator` advances the v0.6.0 project schema 1 to schema 2 without guessing new key provenance. `ProjectMigrationService` commits a validated `Migrated` result at the asset load/save boundary.
 
 ## FaceMotionProject migration
 
@@ -168,6 +166,10 @@ Per-key repair (both `FloatKeyframeData` and `Vector3KeyframeData`):
 - Float value non-finite -> `0f`; Vector3 value non-finite in any component -> `Vector3.zero`.
 
 Optional, consistency-level checks that produce warnings only (never destructive): key time beyond the timeline duration (`FM-KEY-0007`), overlapping key times (`FM-KEY-0004`), unsorted keys (stable-sorted by normalizer).
+
+### Project schema 1 -> 2
+
+Schema 2 recognizes `OriginKind.Baseline = 5`. The `1 -> 2` step changes only the project schema version; it never infers Baseline from a key's time, value, or position. Existing IDs, key values, interpolation, and origin values 0–4 survive. New BlendShape tracks may create a Baseline key at zero; editing that key promotes it to Manual. Project load/save runs the full `0 -> 1 -> 2` or `1 -> 2` chain before persisting the migrated asset.
 
 ## AvatarMappingProfile migration
 
@@ -314,7 +316,7 @@ Pre-existing pipeline codes remain: `FM-MIG-0001` (future project schema), `FM-M
 Permanent EditMode fixtures (`Tests/Editor/Migration/`):
 
 - `MigrationTests` — pipeline mechanics: uninitialized vs. legacy (0 is legacy; -1 is uninitialized and blocking), version gaps, chained steps on detached clones only, future-schema blocking, validation-failure surfacing.
-- `LegacyProjectMigrationTests` — project 0->1 migration; service-level asset transactions.
+- `LegacyProjectMigrationTests` — project 0->1->2 and 1->2 migration; Baseline provenance preservation and service-level asset transactions.
 - `MappingProfileMigrationTests` — profile migration and service boundaries.
 - `ManifestMigrationTests` — Direct and MA use-boundary migration, reapply preservation, detached reconnection, future-schema blocking, ambiguity blocking.
 

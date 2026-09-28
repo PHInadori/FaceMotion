@@ -9,6 +9,34 @@ namespace FaceMotion.Editor.Tests
     public sealed class SerializationRoundTripTests
     {
         [Test]
+        public void BaselineOrigin_RoundTripsAtSchemaV2()
+        {
+            using (var temp = new TempFaceMotionAsset())
+            {
+                var project = FaceMotionProject.CreateNew();
+                var animation = FaceMotionAnimationData.Create("New baseline");
+                var track = FaceTrackData.CreateBlendShape("Face", "Smile");
+                track.BlendShape.AddKey(FloatKeyframeData.Create(0f, 25f,
+                    InterpolationType.Linear, KeyOrigin.Baseline));
+                animation.Timeline.AddTrack(track);
+                project.AddAnimation(animation);
+                string path = temp.AssetPath("BaselineSchemaV2");
+                EditorExtensions.SetDirtyAndSave(project, path);
+
+                var loaded = EditorExtensions.ReloadCopy(path, temp.AssetPath("BaselineSchemaV2Copy"));
+
+                Assert.That(loaded.SchemaVersion, Is.EqualTo(2));
+                var key = loaded.Animations[0].Timeline.Tracks[0].BlendShape.Keys[0];
+                Assert.That(key.KeyId, Is.EqualTo(track.BlendShape.Keys[0].KeyId));
+                Assert.That(key.Time, Is.Zero);
+                Assert.That(key.Value, Is.EqualTo(25f));
+                Assert.That(key.Origin.Kind, Is.EqualTo(OriginKind.Baseline));
+                Assert.That((int)key.Origin.Kind, Is.EqualTo(5));
+                Assert.That(key.Origin.GenerationId, Is.Null.Or.Empty);
+            }
+        }
+
+        [Test]
         public void RoundTrip_PreservesFullProject()
         {
             using (var temp = new TempFaceMotionAsset())
