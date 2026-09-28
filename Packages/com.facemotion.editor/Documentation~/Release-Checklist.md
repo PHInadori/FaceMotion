@@ -9,7 +9,7 @@ Development evidence already exists for the current candidate (focused / affecte
 - [x] Final MA-installed EditMode validation after the release-preparation diff.
 - [x] Isolated no-MA EditMode validation.
 - [x] Final fresh-project FIRST/FINAL import validation.
-- [ ] v0.6.0 → v0.7.0 upgrade compatibility smoke: open a project saved by v0.6.0, confirm it upgrades to project schema 2 with data and asset name preserved.
+- [x] v0.6.0 → v0.7.0 upgrade compatibility smoke: open a project saved by v0.6.0, confirm it upgrades to project schema 2 with data and asset name preserved.
 - [x] Unity manual smoke test of the release candidate.
 - [x] VRChat SDK Build & Test.
 - [x] Resolve the README real-screenshot requirement (see below).
