@@ -16,7 +16,7 @@ Development evidence already exists for the current candidate (focused / affecte
 - [x] `Tools/ci/Validate-Package.ps1` passes.
 - [x] Generate the v0.7.0 release ZIP and run `Tools/ci/Validate-VpmArtifact.ps1`.
 - [x] Confirm documentation links, version consistency, and CHANGELOG.
-- [ ] Confirm the Git worktree is clean and GitHub CI is green on the pushed candidate.
+- [x] Confirm the Git worktree is clean and GitHub CI is green on the pushed candidate.
 
 ## README Screenshot Requirement
 
