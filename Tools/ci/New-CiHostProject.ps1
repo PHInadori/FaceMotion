@@ -6,6 +6,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$RetryMaxAttempts = 4
 if ([string]::IsNullOrEmpty($RepositoryRoot)) { $RepositoryRoot = Join-Path $PSScriptRoot "../.." }
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 if ([string]::IsNullOrEmpty($Destination)) {
@@ -28,12 +29,34 @@ function Get-VpmPackageVersion {
     return $release
 }
 
+function Invoke-WithRetry {
+    param(
+        [scriptblock]$Operation,
+        [string]$Uri,
+        [int]$MaxAttempts = $RetryMaxAttempts
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            return & $Operation
+        } catch {
+            if ($attempt -eq $MaxAttempts) { throw }
+            $delaySeconds = [int][Math]::Pow(2, $attempt)
+            Write-Warning "Request failed for $Uri (attempt $attempt/$MaxAttempts): $($_.Exception.Message). Retrying in $delaySeconds seconds."
+            Start-Sleep -Seconds $delaySeconds
+        }
+    }
+}
+
 function Install-VpmPackage {
     param([object]$Release, [string]$Target)
 
     $archive = Join-Path ([IO.Path]::GetTempPath()) ("facemotion-" + [guid]::NewGuid().ToString("N") + ".zip")
     try {
-        Invoke-WebRequest -Uri $Release.url -OutFile $archive
+        Invoke-WithRetry -Uri $Release.url -Operation {
+            if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+            Invoke-WebRequest -Uri $Release.url -OutFile $archive -ErrorAction Stop
+        }
         $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actualHash -ne $Release.zipSHA256.ToLowerInvariant()) { throw "Checksum mismatch for $($Release.name) $($Release.version)." }
         Expand-Archive -LiteralPath $archive -DestinationPath $Target -Force
@@ -61,7 +84,8 @@ $dependencies = [ordered]@{
     "com.facemotion.editor" = "file:../../../Packages/com.facemotion.editor"
 }
 
-$vrchatCatalog = Invoke-RestMethod -Uri "https://packages.vrchat.com/official"
+$vrchatCatalogUri = "https://packages.vrchat.com/official"
+$vrchatCatalog = Invoke-WithRetry -Uri $vrchatCatalogUri -Operation { Invoke-RestMethod -Uri $vrchatCatalogUri -ErrorAction Stop }
 $vrchatBase = Get-VpmPackageVersion -Catalog $vrchatCatalog -Name "com.vrchat.base" -Version "3.10.5"
 $vrchatAvatars = Get-VpmPackageVersion -Catalog $vrchatCatalog -Name "com.vrchat.avatars" -Version "3.10.5"
 Install-VpmPackage -Release $vrchatBase -Target (Join-Path $Destination "Packages/com.vrchat.base")
@@ -70,7 +94,8 @@ $dependencies["com.vrchat.base"] = "file:com.vrchat.base"
 $dependencies["com.vrchat.avatars"] = "file:com.vrchat.avatars"
 
 if ($WithModularAvatar) {
-    $catalog = Invoke-RestMethod -Uri "https://vpm.nadena.dev/vpm.json"
+    $modularAvatarCatalogUri = "https://vpm.nadena.dev/vpm.json"
+    $catalog = Invoke-WithRetry -Uri $modularAvatarCatalogUri -Operation { Invoke-RestMethod -Uri $modularAvatarCatalogUri -ErrorAction Stop }
     $ndmf = Get-VpmPackageVersion -Catalog $catalog -Name "nadena.dev.ndmf" -Version "1.14.8"
     $modularAvatar = Get-VpmPackageVersion -Catalog $catalog -Name "nadena.dev.modular-avatar" -Version "1.18.7"
     Install-VpmPackage -Release $ndmf -Target (Join-Path $Destination "Packages/nadena.dev.ndmf")
